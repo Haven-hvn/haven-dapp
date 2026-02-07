@@ -89,12 +89,12 @@ export function ConnectButton() {
     )
   }
 
-  // Use the native w3m-button when not connected
-  // This avoids the need for the useWeb3Modal hook
-  return <w3m-button />
+  // Use the native appkit-button when not connected
+  // This avoids the need for the useAppKit hook
+  return <appkit-button />
 }
 
-// Alternative component using the native w3m-button with custom size
+// Alternative component using the native appkit-button with custom size
 export function Web3ModalButton() {
   const [mounted, setMounted] = useState(false)
 
@@ -110,5 +110,5 @@ export function Web3ModalButton() {
     )
   }
 
-  return <w3m-button />
+  return <appkit-button />
 }

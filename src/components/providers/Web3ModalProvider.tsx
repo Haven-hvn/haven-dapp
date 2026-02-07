@@ -1,13 +1,13 @@
 'use client'
 
-import { createWeb3Modal } from '@web3modal/wagmi/react'
+import { createAppKit } from '@reown/appkit/react'
+import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { WagmiProvider, createConfig, http } from 'wagmi'
-import { mainnet, sepolia } from 'wagmi/chains'
-import { walletConnect, injected } from '@wagmi/connectors'
+import { WagmiProvider } from 'wagmi'
+import { mainnet, sepolia } from '@reown/appkit/networks'
 import { ReactNode, useState, useEffect } from 'react'
 
-// Metadata for WalletConnect
+// Metadata for AppKit
 const metadata = {
   name: 'Haven Player',
   description: 'Decentralized video library and playback platform',
@@ -15,48 +15,43 @@ const metadata = {
   icons: ['https://haven.video/icon.png']
 }
 
-// Create wagmi config
-function createWagmiConfig(projectId: string) {
-  const connectors = projectId ? [
-    walletConnect({
-      projectId,
-      metadata,
-      showQrModal: false, // We'll use Web3Modal UI instead
-    }),
-    injected({ target: 'metaMask' }),
-  ] : []
+// Create wagmi adapter
+function createWagmiAdapter(projectId: string) {
+  if (!projectId) {
+    console.warn('NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID is not defined. WalletConnect will not work.')
+  }
 
-  return createConfig({
-    chains: [mainnet, sepolia],
-    connectors,
-    transports: {
-      [mainnet.id]: http(),
-      [sepolia.id]: http(),
-    },
+  return new WagmiAdapter({
+    networks: [mainnet, sepolia],
+    projectId: projectId || 'placeholder',
   })
 }
 
-// Initialize Web3Modal on client side only
-function initWeb3Modal(projectId: string, config: ReturnType<typeof createWagmiConfig>) {
+// Initialize AppKit on client side only
+function initAppKit(projectId: string, wagmiAdapter: WagmiAdapter) {
   if (typeof window === 'undefined') return null
   
   if (!projectId) {
-    console.warn('NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID is not defined. WalletConnect will not work.')
     return null
   }
   
   try {
-    createWeb3Modal({
-      wagmiConfig: config,
+    createAppKit({
+      adapters: [wagmiAdapter],
+      networks: [mainnet, sepolia],
+      metadata,
       projectId,
       themeMode: 'dark',
       themeVariables: {
-        '--w3m-accent': '#3b82f6',
+        '--apkt-accent': '#3b82f6',
+      },
+      features: {
+        analytics: false,
       }
     })
     return true
   } catch (e) {
-    console.error('Failed to create Web3Modal:', e)
+    console.error('Failed to create AppKit:', e)
     return null
   }
 }
@@ -72,21 +67,21 @@ export function Web3ModalProvider({ children }: Web3ModalProviderProps) {
   // Create query client
   const [queryClient] = useState(() => new QueryClient())
   
-  // Create config
-  const [config] = useState(() => createWagmiConfig(projectId))
+  // Create wagmi adapter
+  const [wagmiAdapter] = useState(() => createWagmiAdapter(projectId))
   
-  // Initialize Web3Modal on client side
+  // Initialize AppKit on client side
   const [isInitialized, setIsInitialized] = useState(false)
   
   useEffect(() => {
     if (!isInitialized) {
-      initWeb3Modal(projectId, config)
+      initAppKit(projectId, wagmiAdapter)
       setIsInitialized(true)
     }
-  }, [projectId, config, isInitialized])
+  }, [projectId, wagmiAdapter, isInitialized])
   
   return (
-    <WagmiProvider config={config}>
+    <WagmiProvider config={wagmiAdapter.wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         {children}
       </QueryClientProvider>
