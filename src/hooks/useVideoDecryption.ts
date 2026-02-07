@@ -1,0 +1,515 @@
+/**
+ * React Hook for Video Decryption
+ * 
+ * Provides a comprehensive hook for decrypting encrypted videos using
+ * hybrid decryption (AES-256-GCM + Lit BLS-IBE). Includes progress tracking,
+ * error handling, memory management, and cancellation support.
+ * 
+ * @module hooks/useVideoDecryption
+ */
+
+'use client'
+
+import { useState, useCallback, useRef, useEffect } from 'react'
+import type { Video } from '@/types'
+import { decryptAesKey, getDecryptionErrorMessage } from '@/lib/lit-decrypt'
+import { aesDecrypt, base64ToUint8Array, toArrayBuffer, checkLargeFileSupport } from '@/lib/crypto'
+
+// ============================================================================
+// Types
+// ============================================================================
+
+/**
+ * Status of the decryption process.
+ */
+export type DecryptionStatus =
+  | 'idle'           // Not started
+  | 'checking'       // Checking video metadata
+  | 'fetching'       // Downloading encrypted data
+  | 'authenticating' // Getting auth from Lit
+  | 'decrypting-key' // Decrypting AES key
+  | 'decrypting-file' // Decrypting video file
+  | 'complete'       // Decryption complete
+  | 'error'          // Error occurred
+  | 'cancelled'      // User cancelled
+
+/**
+ * Return type for the useVideoDecryption hook.
+ */
+export interface UseVideoDecryptionReturn {
+  /** Current decryption status */
+  status: DecryptionStatus
+  
+  /** Human-readable progress message */
+  progress: string
+  
+  /** Error object if decryption failed */
+  error: Error | null
+  
+  /** Blob URL for the decrypted video (null until complete) */
+  decryptedUrl: string | null
+  
+  /** Percentage complete (0-100, approximate) */
+  percentComplete: number
+  
+  /** Whether a large file warning should be shown */
+  showLargeFileWarning: boolean
+  
+  /** Start decryption of a video */
+  decrypt: (video: Video, encryptedData: Uint8Array) => Promise<string | null>
+  
+  /** Cancel ongoing decryption */
+  cancel: () => void
+  
+  /** Reset all state */
+  reset: () => void
+}
+
+/**
+ * Options for the useVideoDecryption hook.
+ */
+export interface UseVideoDecryptionOptions {
+  /**
+   * Threshold for large file warning (in bytes).
+   * Default: 500MB
+   */
+  largeFileThreshold?: number
+  
+  /**
+   * Maximum file size to attempt decrypting (in bytes).
+   * Decryption will fail if exceeded.
+   * Default: 2GB
+   */
+  maxFileSize?: number
+  
+  /**
+   * Callback when decryption completes successfully.
+   */
+  onSuccess?: (url: string) => void
+  
+  /**
+   * Callback when decryption fails.
+   */
+  onError?: (error: Error) => void
+  
+  /**
+   * Callback for progress updates.
+   */
+  onProgress?: (status: DecryptionStatus, message: string, percent: number) => void
+}
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+const DEFAULT_LARGE_FILE_THRESHOLD = 500 * 1024 * 1024 // 500MB
+const DEFAULT_MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024 // 2GB
+
+// Progress percentages for each stage
+const PROGRESS_WEIGHTS: Record<DecryptionStatus, number> = {
+  'idle': 0,
+  'checking': 5,
+  'fetching': 10,
+  'authenticating': 30,
+  'decrypting-key': 50,
+  'decrypting-file': 70,
+  'complete': 100,
+  'error': 0,
+  'cancelled': 0,
+}
+
+// ============================================================================
+// Hook
+// ============================================================================
+
+/**
+ * React hook for decrypting encrypted videos.
+ * 
+ * This hook manages the full hybrid decryption process:
+ * 1. Decrypt the AES key using Lit Protocol (BLS-IBE)
+ * 2. Decrypt the video content using AES-256-GCM
+ * 3. Create a blob URL for playback
+ * 
+ * Features:
+ * - Progress tracking with user-friendly messages
+ * - Error handling with specific error types
+ * - Memory management (revokes blob URLs automatically)
+ * - Large file warnings (>500MB by default)
+ * - Cancellation support via AbortController
+ * - Automatic cleanup on unmount
+ * 
+ * @param options - Hook options
+ * @returns Object containing state and control functions
+ * 
+ * @example
+ * ```typescript
+ * function VideoPlayer({ video, encryptedData }) {
+ *   const { 
+ *     status, 
+ *     progress, 
+ *     error, 
+ *     decryptedUrl, 
+ *     decrypt,
+ *     cancel 
+ *   } = useVideoDecryption()
+ * 
+ *   useEffect(() => {
+ *     if (video.isEncrypted && encryptedData) {
+ *       decrypt(video, encryptedData)
+ *     }
+ *   }, [video, encryptedData])
+ * 
+ *   if (status === 'decrypting-key' || status === 'decrypting-file') {
+ *     return <Loading message={progress} />
+ *   }
+ * 
+ *   if (error) {
+ *     return <Error message={error.message} />
+ *   }
+ * 
+ *   if (decryptedUrl) {
+ *     return <video src={decryptedUrl} controls />
+ *   }
+ * 
+ *   return <div>Ready to decrypt</div>
+ * }
+ * ```
+ */
+export function useVideoDecryption(
+  options: UseVideoDecryptionOptions = {}
+): UseVideoDecryptionReturn {
+  const {
+    largeFileThreshold = DEFAULT_LARGE_FILE_THRESHOLD,
+    maxFileSize = DEFAULT_MAX_FILE_SIZE,
+    onSuccess,
+    onError,
+    onProgress,
+  } = options
+
+  // State
+  const [status, setStatus] = useState<DecryptionStatus>('idle')
+  const [progress, setProgress] = useState('')
+  const [error, setError] = useState<Error | null>(null)
+  const [decryptedUrl, setDecryptedUrl] = useState<string | null>(null)
+  const [percentComplete, setPercentComplete] = useState(0)
+  const [showLargeFileWarning, setShowLargeFileWarning] = useState(false)
+
+  // Refs for cleanup and cancellation
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const blobUrlRef = useRef<string | null>(null)
+  const isMountedRef = useRef(true)
+
+  // Check browser support for large files
+  const largeFileSupport = checkLargeFileSupport()
+
+  // Cleanup blob URL on unmount
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current)
+        blobUrlRef.current = null
+      }
+      abortControllerRef.current?.abort()
+    }
+  }, [])
+
+  /**
+   * Reset all state to initial values.
+   */
+  const reset = useCallback(() => {
+    // Cancel any ongoing operation
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
+
+    // Revoke existing blob URL
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current)
+      blobUrlRef.current = null
+    }
+
+    if (isMountedRef.current) {
+      setStatus('idle')
+      setProgress('')
+      setError(null)
+      setDecryptedUrl(null)
+      setPercentComplete(0)
+      setShowLargeFileWarning(false)
+    }
+  }, [])
+
+  /**
+   * Cancel ongoing decryption.
+   */
+  const cancel = useCallback(() => {
+    abortControllerRef.current?.abort()
+    
+    if (isMountedRef.current) {
+      setStatus('cancelled')
+      setProgress('Decryption cancelled')
+    }
+  }, [])
+
+  /**
+   * Update progress state with callback.
+   */
+  const updateProgress = useCallback((
+    newStatus: DecryptionStatus, 
+    message: string
+  ) => {
+    const percent = PROGRESS_WEIGHTS[newStatus]
+    
+    if (isMountedRef.current) {
+      setStatus(newStatus)
+      setProgress(message)
+      setPercentComplete(percent)
+    }
+    
+    onProgress?.(newStatus, message, percent)
+  }, [onProgress])
+
+  /**
+   * Decrypt a video.
+   * 
+   * @param video - The video to decrypt
+   * @param encryptedData - The encrypted video data
+   * @returns Promise resolving to the blob URL or null if failed
+   */
+  const decrypt = useCallback(async (
+    video: Video,
+    encryptedData: Uint8Array
+  ): Promise<string | null> => {
+    // Reset state first
+    reset()
+
+    // Check if component is still mounted
+    if (!isMountedRef.current) {
+      return null
+    }
+
+    // Create new abort controller for this operation
+    abortControllerRef.current = new AbortController()
+    const signal = abortControllerRef.current.signal
+
+    try {
+      // Step 0: Validate video is encrypted
+      updateProgress('checking', 'Checking video encryption...')
+
+      if (!video.isEncrypted) {
+        throw new Error('Video is not encrypted')
+      }
+
+      if (!video.litEncryptionMetadata) {
+        throw new Error('Missing encryption metadata')
+      }
+
+      // Step 1: Check file size
+      const fileSize = encryptedData.byteLength
+
+      if (fileSize > maxFileSize) {
+        throw new Error(
+          `File size (${(fileSize / 1024 / 1024).toFixed(0)}MB) exceeds maximum ` +
+          `supported size (${(maxFileSize / 1024 / 1024).toFixed(0)}MB)`
+        )
+      }
+
+      if (fileSize > largeFileThreshold) {
+        if (isMountedRef.current) {
+          setShowLargeFileWarning(true)
+        }
+        
+        // Log warnings for very large files
+        if (fileSize > largeFileSupport.maxRecommended) {
+          console.warn(
+            `[useVideoDecryption] Large file detected (${(fileSize / 1024 / 1024).toFixed(0)}MB). ` +
+            'Browser may struggle with decryption.',
+            largeFileSupport.warnings
+          )
+        }
+      }
+
+      if (signal.aborted) {
+        throw new Error('Decryption cancelled')
+      }
+
+      // Step 2: Get private key from environment or wallet
+      // TODO: Replace with proper wallet integration
+      const privateKey = process.env.NEXT_PUBLIC_TEST_PRIVATE_KEY
+      if (!privateKey) {
+        throw new Error('Private key not available for decryption')
+      }
+
+      // Step 3: Decrypt AES key using Lit
+      updateProgress('authenticating', 'Authenticating with Lit Protocol...')
+
+      const { aesKey } = await decryptAesKey({
+        metadata: video.litEncryptionMetadata,
+        privateKey,
+        onProgress: (msg) => {
+          if (msg.includes('key') || msg.includes('Key')) {
+            updateProgress('decrypting-key', msg)
+          }
+        },
+        signal,
+      })
+
+      if (signal.aborted) {
+        aesKey.fill(0) // Clear key from memory
+        throw new Error('Decryption cancelled')
+      }
+
+      // Step 4: Decrypt file using AES
+      updateProgress('decrypting-file', 'Decrypting video file...')
+
+      const iv = base64ToUint8Array(video.litEncryptionMetadata.iv)
+      const decryptedData = await aesDecrypt(encryptedData, aesKey, iv)
+
+      // Clear key from memory immediately after use
+      aesKey.fill(0)
+
+      if (signal.aborted) {
+        throw new Error('Decryption cancelled')
+      }
+
+      // Step 5: Create blob URL
+      updateProgress('decrypting-file', 'Preparing video for playback...')
+
+      const mimeType = video.litEncryptionMetadata.originalMimeType || 'video/mp4'
+      const blob = new Blob([toArrayBuffer(decryptedData)], { type: mimeType })
+      const url = URL.createObjectURL(blob)
+
+      if (signal.aborted) {
+        URL.revokeObjectURL(url)
+        throw new Error('Decryption cancelled')
+      }
+
+      // Success: Update state
+      if (isMountedRef.current) {
+        // Revoke old URL if exists
+        if (blobUrlRef.current) {
+          URL.revokeObjectURL(blobUrlRef.current)
+        }
+
+        blobUrlRef.current = url
+        setDecryptedUrl(url)
+        setStatus('complete')
+        setProgress('Decryption complete')
+        setPercentComplete(100)
+        setShowLargeFileWarning(false)
+      }
+
+      onSuccess?.(url)
+      return url
+
+    } catch (err) {
+      // Handle cancellation
+      if (err instanceof Error && err.message === 'Decryption cancelled') {
+        if (isMountedRef.current) {
+          setStatus('cancelled')
+          setProgress('Decryption cancelled')
+        }
+        return null
+      }
+
+      // Get user-friendly error message
+      const errorMessage = getDecryptionErrorMessage(err)
+
+      // Log error for debugging
+      console.error('[useVideoDecryption] Decryption failed:', err)
+
+      if (isMountedRef.current) {
+        const errorObj = new Error(errorMessage)
+        setError(errorObj)
+        setStatus('error')
+        setProgress('Decryption failed')
+      }
+
+      onError?.(err instanceof Error ? err : new Error(errorMessage))
+      return null
+    }
+  }, [
+    reset,
+    updateProgress,
+    largeFileThreshold,
+    maxFileSize,
+    largeFileSupport,
+    onSuccess,
+    onError,
+  ])
+
+  return {
+    status,
+    progress,
+    error,
+    decryptedUrl,
+    percentComplete,
+    showLargeFileWarning,
+    decrypt,
+    cancel,
+    reset,
+  }
+}
+
+/**
+ * React hook for video decryption with automatic initialization.
+ * 
+ * Similar to useVideoDecryption but automatically starts decryption
+ * when the dependencies change.
+ * 
+ * @param video - The video to decrypt
+ * @param encryptedData - The encrypted video data
+ * @param options - Hook options
+ * @returns Object containing state (without decrypt function)
+ * 
+ * @example
+ * ```typescript
+ * function VideoPlayer({ video, encryptedData }) {
+ *   const { decryptedUrl, status, error, progress } = useVideoDecryptionAuto(
+ *     video,
+ *     encryptedData,
+ *     { onSuccess: (url) => console.log('Ready:', url) }
+ *   )
+ * 
+ *   if (status === 'decrypting-file') {
+ *     return <Loading message={progress} />
+ *   }
+ * 
+ *   return decryptedUrl ? <video src={decryptedUrl} controls /> : null
+ * }
+ * ```
+ */
+export function useVideoDecryptionAuto(
+  video: Video | null | undefined,
+  encryptedData: Uint8Array | null | undefined,
+  options: UseVideoDecryptionOptions & { enabled?: boolean } = {}
+): Omit<UseVideoDecryptionReturn, 'decrypt'> {
+  const { enabled = true, ...decryptionOptions } = options
+  const {
+    status,
+    progress,
+    error,
+    decryptedUrl,
+    percentComplete,
+    showLargeFileWarning,
+    decrypt,
+    cancel,
+    reset,
+  } = useVideoDecryption(decryptionOptions)
+
+  useEffect(() => {
+    if (enabled && video && encryptedData && status === 'idle') {
+      decrypt(video, encryptedData)
+    }
+  }, [enabled, video, encryptedData, status, decrypt])
+
+  return {
+    status,
+    progress,
+    error,
+    decryptedUrl,
+    percentComplete,
+    showLargeFileWarning,
+    cancel,
+    reset,
+  }
+}
