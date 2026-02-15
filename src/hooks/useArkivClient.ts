@@ -11,7 +11,7 @@
  * @module useArkivClient
  */
 
-import { useAccount } from 'wagmi'
+import { useAppKitAccount } from '@reown/appkit/react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { type PublicArkivClient } from '@arkiv-network/sdk'
 import { type Transport, type Chain } from 'viem'
@@ -139,8 +139,8 @@ export function useArkivClient(options: UseArkivClientOptions = {}) {
     connectionCheckInterval = 30000,
   } = options
   
-  // Get wallet state from wagmi
-  const { address, isConnected } = useAccount()
+  // Get wallet state from AppKit
+  const { address, isConnected } = useAppKitAccount()
   
   // Client instance
   const [client, setClient] = useState<PublicArkivClient<Transport, Chain | undefined, undefined> | null>(null)

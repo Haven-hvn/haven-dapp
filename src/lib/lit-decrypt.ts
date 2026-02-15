@@ -5,12 +5,16 @@
  * BLS-IBE (Identity-Based Encryption) scheme. These keys are then
  * used for AES-256-GCM decryption of video content.
  * 
+ * This module uses the connected wallet for authentication instead of
+ * direct private key management.
+ * 
  * @module lib/lit-decrypt
  */
 
 import { getLitClient } from './lit'
 import { createLitAuthContext, type LitAuthContextOptions } from './lit-auth'
 import type { LitEncryptionMetadata, CidEncryptionMetadata } from '@/types'
+import type { Account, Transport, Chain } from 'viem'
 
 // ============================================================================
 // Types
@@ -33,14 +37,23 @@ export interface DecryptKeyResult {
 export type DecryptProgressCallback = (message: string) => void
 
 /**
- * Options for AES key decryption.
+ * Options for AES key decryption using wallet-based authentication.
  */
 export interface DecryptAesKeyOptions {
   /** The encryption metadata containing the encrypted key */
   metadata: LitEncryptionMetadata
   
-  /** The private key for authentication (or LitAuthContextOptions for more control) */
-  privateKey: string | LitAuthContextOptions
+  /** The viem account from the connected wallet */
+  account?: Account
+  
+  /** The wallet client transport for signing */
+  transport?: Transport
+  
+  /** The blockchain chain to use for authentication */
+  chain: Chain
+  
+  /** EIP-1193 wallet provider (alternative to account/transport) */
+  walletProvider?: any
   
   /** Optional progress callback */
   onProgress?: DecryptProgressCallback
@@ -50,14 +63,23 @@ export interface DecryptAesKeyOptions {
 }
 
 /**
- * Options for CID decryption.
+ * Options for CID decryption using wallet-based authentication.
  */
 export interface DecryptCidOptions {
   /** The CID encryption metadata */
   metadata: CidEncryptionMetadata
   
-  /** The private key for authentication */
-  privateKey: string | LitAuthContextOptions
+  /** The viem account from the connected wallet */
+  account?: Account
+  
+  /** The wallet client transport for signing */
+  transport?: Transport
+  
+  /** The blockchain chain to use for authentication */
+  chain: Chain
+  
+  /** EIP-1193 wallet provider (alternative to account/transport) */
+  walletProvider?: any
   
   /** Optional progress callback */
   onProgress?: DecryptProgressCallback
@@ -85,6 +107,7 @@ export class LitDecryptError extends Error {
       | 'CANCELLED'
       | 'NETWORK_ERROR'
       | 'INVALID_METADATA'
+      | 'WALLET_NOT_CONNECTED'
   ) {
     super(message)
     this.name = 'LitDecryptError'
@@ -96,35 +119,44 @@ export class LitDecryptError extends Error {
 // ============================================================================
 
 /**
- * Decrypt an AES key using Lit Protocol.
+ * Decrypt an AES key using Lit Protocol with wallet-based authentication.
  * 
  * This function uses Lit's BLS-IBE to decrypt the AES key that was
  * used to encrypt the video content. The decrypted key can then be
  * used with aesDecrypt() to decrypt the actual video data.
  * 
- * @param options - Decryption options
+ * The user's connected wallet will be prompted to sign a SIWE message
+ * to authenticate with Lit Protocol nodes.
+ * 
+ * @param options - Decryption options including wallet account/transport
  * @returns Promise resolving to the decrypted AES key
  * @throws LitDecryptError if decryption fails
  * 
  * @example
  * ```typescript
- * const { aesKey } = await decryptAesKey({
- *   metadata: video.litEncryptionMetadata!,
- *   privateKey: '0x1234...',
- *   onProgress: (msg) => console.log(msg)
- * })
+ * const { data: walletClient } = useWalletClient()
  * 
- * // Use the key to decrypt video content
- * const decrypted = await aesDecrypt(encryptedData, aesKey, iv)
- * 
- * // Clear the key from memory when done
- * aesKey.fill(0)
+ * if (walletClient) {
+ *   const { aesKey } = await decryptAesKey({
+ *     metadata: video.litEncryptionMetadata!,
+ *     account: walletClient.account,
+ *     transport: walletClient.transport,
+ *     chain: walletClient.chain,
+ *     onProgress: (msg) => console.log(msg)
+ *   })
+ *   
+ *   // Use the key to decrypt video content
+ *   const decrypted = await aesDecrypt(encryptedData, aesKey, iv)
+ *   
+ *   // Clear the key from memory when done
+ *   aesKey.fill(0)
+ * }
  * ```
  */
 export async function decryptAesKey(
   options: DecryptAesKeyOptions
 ): Promise<DecryptKeyResult> {
-  const { metadata, privateKey, onProgress, signal } = options
+  const { metadata, account, transport, chain, walletProvider, onProgress, signal } = options
 
   // Check for cancellation
   if (signal?.aborted) {
@@ -136,6 +168,14 @@ export async function decryptAesKey(
     throw new LitDecryptError(
       'Invalid encryption metadata: missing encryptedKey or keyHash',
       'INVALID_METADATA'
+    )
+  }
+
+  // Validate we have either walletProvider or (account and transport)
+  if (!walletProvider && !account) {
+    throw new LitDecryptError(
+      'No wallet account or provider provided. Make sure wallet is connected.',
+      'WALLET_NOT_CONNECTED'
     )
   }
 
@@ -158,16 +198,36 @@ export async function decryptAesKey(
 
   onProgress?.('Authenticating with your wallet...')
 
-  // Create auth context
+  // Create auth context using wallet-based signing
   let authContext: Awaited<ReturnType<typeof createLitAuthContext>>
   try {
-    const authOptions: LitAuthContextOptions = typeof privateKey === 'string' 
-      ? { privateKey, chain: metadata.chain }
-      : privateKey
+    let authOptions: LitAuthContextOptions
+
+    if (walletProvider) {
+      // Use walletProvider directly
+      authOptions = {
+        walletProvider,
+        chain,
+      }
+    } else {
+      // Use explicit account, transport, and chain
+      authOptions = {
+        account: account!,
+        transport: transport!,
+        chain,
+      }
+    }
 
     authContext = await createLitAuthContext(authOptions)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Authentication failed'
+    
+    if (message.includes('rejected') || message.includes('denied')) {
+      throw new LitDecryptError(
+        'Authentication signature was rejected. Please approve the signature request in your wallet.',
+        'AUTH_FAILED'
+      )
+    }
     
     if (message.includes('session') || message.includes('expired')) {
       throw new LitDecryptError(
@@ -256,31 +316,37 @@ export async function decryptAesKey(
 // ============================================================================
 
 /**
- * Decrypt an encrypted CID using Lit Protocol.
+ * Decrypt an encrypted CID using Lit Protocol with wallet-based authentication.
  * 
  * For encrypted videos, the actual Filecoin CID may be encrypted
  * separately from the content. This function decrypts that CID so
  * the video content can be fetched.
  * 
- * @param options - Decryption options
+ * @param options - Decryption options including wallet account/transport
  * @returns Promise resolving to the decrypted CID string
  * @throws LitDecryptError if decryption fails
  * 
  * @example
  * ```typescript
- * const cid = await decryptCid({
- *   metadata: video.cidEncryptionMetadata!,
- *   privateKey: '0x1234...'
- * })
+ * const { data: walletClient } = useWalletClient()
  * 
- * // Now fetch the video from Filecoin
- * const videoUrl = `https://gateway.lighthouse.storage/ipfs/${cid}`
+ * if (walletClient) {
+ *   const cid = await decryptCid({
+ *     metadata: video.cidEncryptionMetadata!,
+ *     account: walletClient.account,
+ *     transport: walletClient.transport,
+ *     chain: walletClient.chain,
+ *   })
+ *   
+ *   // Now fetch the video from Filecoin
+ *   const videoUrl = `https://gateway.lighthouse.storage/ipfs/${cid}`
+ * }
  * ```
  */
 export async function decryptCid(
   options: DecryptCidOptions
 ): Promise<string> {
-  const { metadata, privateKey, onProgress, signal } = options
+  const { metadata, account, transport, chain, walletProvider, onProgress, signal } = options
 
   if (signal?.aborted) {
     throw new LitDecryptError('Decryption cancelled', 'CANCELLED')
@@ -291,6 +357,14 @@ export async function decryptCid(
     throw new LitDecryptError(
       'Invalid CID encryption metadata: missing ciphertext or dataToEncryptHash',
       'INVALID_METADATA'
+    )
+  }
+
+  // Validate we have either walletProvider or (account and transport)
+  if (!walletProvider && !account) {
+    throw new LitDecryptError(
+      'No wallet account provided. Make sure wallet is connected.',
+      'WALLET_NOT_CONNECTED'
     )
   }
 
@@ -312,12 +386,25 @@ export async function decryptCid(
 
   onProgress?.('Authenticating for CID decryption...')
 
-  // Create auth context
+  // Create auth context using wallet-based signing
   let authContext: Awaited<ReturnType<typeof createLitAuthContext>>
   try {
-    const authOptions: LitAuthContextOptions = typeof privateKey === 'string'
-      ? { privateKey, chain: metadata.chain }
-      : privateKey
+    let authOptions: LitAuthContextOptions
+
+    if (walletProvider) {
+      // Use walletProvider directly - create auth options with provider
+      authOptions = {
+        walletProvider,
+        chain,
+      }
+    } else {
+      // Use explicit account, transport, and chain
+      authOptions = {
+        account: account!,
+        transport: transport!,
+        chain,
+      }
+    }
 
     authContext = await createLitAuthContext(authOptions)
   } catch (err) {
@@ -401,12 +488,15 @@ export async function decryptCid(
 // ============================================================================
 
 /**
- * Decrypt multiple AES keys in batch.
+ * Decrypt multiple AES keys in batch using wallet-based authentication.
  * 
  * This is useful when you need to decrypt multiple videos
  * and want to reuse the authentication context.
  * 
- * @param items - Array of metadata and private keys
+ * @param items - Array of metadata and ids
+ * @param account - The viem account from the connected wallet
+ * @param transport - The wallet client transport for signing
+ * @param chain - The blockchain chain to use for authentication
  * @param onProgress - Optional progress callback for each item
  * @returns Promise resolving to array of decryption results
  */
@@ -415,7 +505,9 @@ export async function batchDecryptAesKeys(
     metadata: LitEncryptionMetadata
     id: string
   }>,
-  privateKey: string | LitAuthContextOptions,
+  account: Account,
+  transport: Transport,
+  chain: Chain,
   onProgress?: (id: string, message: string) => void
 ): Promise<Array<{ id: string; result?: DecryptKeyResult; error?: Error }>> {
   const results: Array<{ id: string; result?: DecryptKeyResult; error?: Error }> = []
@@ -426,7 +518,9 @@ export async function batchDecryptAesKeys(
       
       const result = await decryptAesKey({
         metadata: item.metadata,
-        privateKey,
+        account,
+        transport,
+        chain,
         onProgress: (msg) => onProgress?.(item.id, msg),
       })
 
@@ -499,6 +593,10 @@ export function getDecryptionErrorMessage(error: unknown): string {
         return 'Decryption was cancelled.'
       case 'INVALID_METADATA':
         return 'Invalid encryption metadata. The video may be corrupted.'
+      case 'WALLET_NOT_CONNECTED':
+        return 'Please connect your wallet to decrypt this video.'
+      case 'AUTH_FAILED':
+        return 'Authentication failed. Please approve the signature request in your wallet.'
       default:
         return error.message
     }
@@ -513,6 +611,11 @@ export function getDecryptionErrorMessage(error: unknown): string {
     // Handle browser crypto errors
     if (error.message.includes('crypto')) {
       return 'Browser security error. Please ensure you\'re using a secure connection (HTTPS).'
+    }
+
+    // Handle user rejection
+    if (error.message.includes('rejected') || error.message.includes('denied')) {
+      return 'Signature request was rejected. Please approve the signature to decrypt the video.'
     }
 
     return error.message

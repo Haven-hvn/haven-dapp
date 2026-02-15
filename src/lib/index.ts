@@ -19,13 +19,6 @@ export {
 } from './lit'
 
 export {
-  createViemAccount,
-  validatePrivateKeyFormat,
-  getAddressFromPrivateKey,
-  ViemAdapterError,
-} from './viem-adapter'
-
-export {
   createLitAuthContext,
   createLitAuthContextWithResources,
   isAuthContextExpired,
@@ -34,6 +27,7 @@ export {
   type LitAuthContextOptions,
   type LitAuthContext,
 } from './lit-auth'
+export type { Account, Transport, Chain } from 'viem'
 
 // Arkiv exports
 export {

@@ -1,15 +1,15 @@
 'use client'
 
-import { useAccount as useWagmiAccount } from 'wagmi'
+import { useAppKitAccount } from '@reown/appkit/react'
 
 export function useAccount() {
-  const { address, isConnected, isConnecting, isDisconnected, chainId, status } = useWagmiAccount()
+  const { address, isConnected, isConnecting, chainId, status } = useAppKitAccount()
   
   return {
     address,
     isConnected,
     isConnecting,
-    isDisconnected,
+    isDisconnected: !isConnected && status === 'disconnected',
     chainId,
     status,
     // Helper to check if on correct network

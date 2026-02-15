@@ -104,7 +104,7 @@ export function LitProvider({
   autoInit = false,
   onInitSuccess,
   onInitError,
-}: LitProviderProps): JSX.Element {
+}: LitProviderProps): React.ReactElement {
   const lit = useLit()
   const [hasAttemptedInit, setHasAttemptedInit] = useState(false)
   
@@ -186,7 +186,7 @@ export function LitRequired({
   loadingComponent,
   errorComponent,
   autoInit = true,
-}: LitRequiredProps): JSX.Element {
+}: LitRequiredProps): React.ReactElement {
   const { isInitialized, isInitializing, error, reinitialize } = useLitAutoInit(autoInit)
   
   // Show loading state

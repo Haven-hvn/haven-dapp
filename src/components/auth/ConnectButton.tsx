@@ -1,21 +1,40 @@
 'use client'
 
-import { useAccount, useDisconnect, useChainId, useSwitchChain } from 'wagmi'
+import { useAppKitAccount, useAppKitProvider, useAppKit } from '@reown/appkit/react'
 import { Button } from '@/components/ui/button'
-import { mainnet, sepolia } from 'wagmi/chains'
+import { mainnet, sepolia } from '@reown/appkit/networks'
 import { useState, useEffect } from 'react'
 
 export function ConnectButton() {
-  const { address, isConnected } = useAccount()
-  const { disconnect } = useDisconnect()
-  const chainId = useChainId()
-  const { switchChain } = useSwitchChain()
+  const { address, isConnected, chainId } = useAppKitAccount()
+  const { walletProvider } = useAppKitProvider('eip155')
+  const { open } = useAppKit()
   const [mounted, setMounted] = useState(false)
 
   // Prevent hydration mismatch
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // Disconnect function using AppKit
+  const disconnect = async () => {
+    if (walletProvider) {
+      try {
+        await walletProvider.disconnect()
+      } catch (error) {
+        console.error('Failed to disconnect:', error)
+      }
+    }
+  }
+
+  // Switch chain function using AppKit
+  const switchChain = async (targetChainId: number) => {
+    try {
+      await open({ view: 'Networks' })
+    } catch (error) {
+      console.error('Failed to switch network:', error)
+    }
+  }
 
   // Check if on correct network (default to mainnet if not specified)
   const targetChainId = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 1)
@@ -65,11 +84,11 @@ export function ConnectButton() {
           </span>
         </div>
         
-        {!isCorrectNetwork && switchChain && (
+        {!isCorrectNetwork && (
           <Button
             variant="outline"
             size="sm"
-            onClick={() => switchChain({ chainId: targetChainId })}
+            onClick={() => switchChain(targetChainId)}
             className="min-h-[36px] touch-manipulation text-xs sm:text-sm px-2 sm:px-3"
           >
             <span className="hidden sm:inline">Switch</span>

@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAccount } from 'wagmi'
+import { useAppKitAccount } from '@reown/appkit/react'
 import { useHydration } from '@/hooks/useHydration'
 
 interface ProtectedRouteProps {
@@ -12,7 +12,7 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children, fallback }: ProtectedRouteProps) {
   const router = useRouter()
-  const { isConnected, isConnecting } = useAccount()
+  const { isConnected, isConnecting } = useAppKitAccount()
   const isHydrated = useHydration()
   
   useEffect(() => {

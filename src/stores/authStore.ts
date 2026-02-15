@@ -18,15 +18,32 @@ interface AuthState {
   setPreferredConnector: (connector: string) => void
 }
 
+// Initial state
+const initialState = {
+  isAuthenticated: false,
+  address: null,
+  chainId: null,
+  lastConnected: null,
+  preferredConnector: null,
+}
+
+// Safe storage adapter for SSR
+const createSafeStorage = () => {
+  if (typeof window === 'undefined') {
+    return {
+      getItem: () => Promise.resolve(null),
+      setItem: () => Promise.resolve(),
+      removeItem: () => Promise.resolve(),
+    }
+  }
+  return createJSONStorage(() => localStorage)
+}
+
+// Create the store
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
-      // Initial state
-      isAuthenticated: false,
-      address: null,
-      chainId: null,
-      lastConnected: null,
-      preferredConnector: null,
+      ...initialState,
       
       // Actions
       setAuthenticated: (address, chainId) => set({
@@ -36,13 +53,7 @@ export const useAuthStore = create<AuthState>()(
         lastConnected: Date.now(),
       }),
       
-      setDisconnected: () => set({
-        isAuthenticated: false,
-        address: null,
-        chainId: null,
-        lastConnected: null,
-        preferredConnector: null,
-      }),
+      setDisconnected: () => set(initialState),
       
       updateChainId: (chainId) => set({ chainId }),
       
@@ -52,7 +63,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'haven-auth-storage',
-      storage: createJSONStorage(() => localStorage),
+      storage: createSafeStorage(),
       partialize: (state) => ({
         address: state.address,
         preferredConnector: state.preferredConnector,

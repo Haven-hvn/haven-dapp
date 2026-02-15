@@ -14,7 +14,7 @@ import {
   useQueryClient,
   type UseQueryResult,
 } from '@tanstack/react-query'
-import { useAccount } from 'wagmi'
+import { useAppKitAccount } from '@reown/appkit/react'
 import { useCallback } from 'react'
 import { 
   fetchVideos,
@@ -86,7 +86,7 @@ export interface UseVideosReturn {
  * ```
  */
 export function useVideos(): UseVideosReturn {
-  const { address, isConnected } = useAccount()
+  const { address, isConnected } = useAppKitAccount()
 
   const query = useQuery({
     queryKey: videoKeys.list(address),
@@ -259,7 +259,7 @@ export interface UseInvalidateVideosReturn {
  */
 export function useInvalidateVideos(): UseInvalidateVideosReturn {
   const queryClient = useQueryClient()
-  const { address } = useAccount()
+  const { address } = useAppKitAccount()
 
   const invalidate = useCallback(async () => {
     await queryClient.invalidateQueries({
@@ -313,7 +313,7 @@ export function useInvalidateVideos(): UseInvalidateVideosReturn {
  */
 export function usePrefetchVideos() {
   const queryClient = useQueryClient()
-  const { address } = useAccount()
+  const { address } = useAppKitAccount()
 
   const prefetch = useCallback(() => {
     if (!address) return
@@ -384,7 +384,7 @@ export interface UseVideosWithOptionsReturn extends UseVideosReturn {
 export function useVideosWithOptions(
   maxResults: number = 50
 ): UseVideosWithOptionsReturn {
-  const { address, isConnected } = useAccount()
+  const { address, isConnected } = useAppKitAccount()
 
   const query = useQuery({
     queryKey: [...videoKeys.list(address), { maxResults }],

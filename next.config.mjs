@@ -1,3 +1,9 @@
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Image optimization configuration
@@ -29,11 +35,48 @@ const nextConfig = {
     minimumCacheTTL: 60,
   },
   
-  // Compression
-  compress: true,
   
   // Production source maps (disable for smaller builds)
   productionBrowserSourceMaps: false,
+  
+  // Turbopack configuration for Node.js polyfills (needed for Lit Protocol SDK)
+  turbopack: {
+    resolveAlias: {
+      fs: './src/mocks/node-empty.js',
+      net: './src/mocks/node-empty.js',
+      tls: './src/mocks/node-empty.js',
+      crypto: './src/mocks/node-empty.js',
+      stream: './src/mocks/node-empty.js',
+      path: './src/mocks/node-empty.js',
+      os: './src/mocks/node-empty.js',
+      url: './src/mocks/node-empty.js',
+      http: './src/mocks/node-empty.js',
+      https: './src/mocks/node-empty.js',
+      zlib: './src/mocks/node-empty.js',
+      querystring: './src/mocks/node-empty.js',
+      assert: './src/mocks/node-empty.js',
+      constants: './src/mocks/node-empty.js',
+      timers: './src/mocks/node-empty.js',
+      console: './src/mocks/node-empty.js',
+      util: './src/mocks/node-empty.js',
+      buffer: './src/mocks/node-empty.js',
+      events: './src/mocks/node-empty.js',
+      string_decoder: './src/mocks/node-empty.js',
+      punycode: './src/mocks/node-empty.js',
+      domain: './src/mocks/node-empty.js',
+      dns: './src/mocks/node-empty.js',
+      dgram: './src/mocks/node-empty.js',
+      cluster: './src/mocks/node-empty.js',
+      module: './src/mocks/node-empty.js',
+      v8: './src/mocks/node-empty.js',
+      vm: './src/mocks/node-empty.js',
+      async_hooks: './src/mocks/node-empty.js',
+      inspector: './src/mocks/node-empty.js',
+      perf_hooks: './src/mocks/node-empty.js',
+      trace_events: './src/mocks/node-empty.js',
+      worker_threads: './src/mocks/node-empty.js',
+    },
+  },
   
   // Experimental features for optimization
   experimental: {
@@ -80,6 +123,13 @@ const nextConfig = {
         perf_hooks: false,
         trace_events: false,
         worker_threads: false,
+      };
+      
+      // Mock React Native specific modules that MetaMask SDK references
+      // These are not needed for browser builds
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        '@react-native-async-storage/async-storage': join(__dirname, 'src/mocks/react-native-async-storage.js'),
       };
     }
     return config;

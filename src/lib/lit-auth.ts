@@ -2,15 +2,17 @@
  * Lit Protocol Authentication Context Helper
  * 
  * Provides utilities for creating authentication contexts for Lit Protocol
- * operations, including EOA (Externally Owned Account) based authentication.
+ * operations using the connected wallet via wagmi/AppKit instead of private keys.
+ * 
+ * This module uses SIWE (Sign-In with Ethereum) through the user's connected
+ * wallet for secure authentication with Lit Protocol nodes.
  * 
  * @module lib/lit-auth
  */
 
-import { createAuthManager } from '@lit-protocol/auth'
-import { createViemAccount } from './viem-adapter'
 import { getLitClient, getAuthManager } from './lit'
 import { LitAccessControlConditionResource } from '@lit-protocol/auth-helpers'
+import type { Account, Transport, Chain } from 'viem'
 
 /**
  * Error thrown when Lit auth operations fail.
@@ -18,7 +20,7 @@ import { LitAccessControlConditionResource } from '@lit-protocol/auth-helpers'
 export class LitAuthError extends Error {
   constructor(
     message: string,
-    public code: 'CLIENT_NOT_INITIALIZED' | 'AUTH_CONTEXT_FAILED' | 'INVALID_PRIVATE_KEY'
+    public code: 'CLIENT_NOT_INITIALIZED' | 'AUTH_CONTEXT_FAILED' | 'WALLET_NOT_CONNECTED' | 'SIGNING_FAILED'
   ) {
     super(message)
     this.name = 'LitAuthError'
@@ -29,11 +31,17 @@ export class LitAuthError extends Error {
  * Configuration options for creating a Lit authentication context.
  */
 export interface LitAuthContextOptions {
-  /** The private key for signing authentication messages */
-  privateKey: string
+  /** The viem account from wagmi/useAccount */
+  account?: Account
   
-  /** The blockchain chain to use for authentication (default: 'ethereum') */
-  chain?: string
+  /** The wallet client transport for signing */
+  transport?: Transport
+  
+  /** The blockchain chain to use for authentication */
+  chain: Chain
+  
+  /** EIP-1193 wallet provider (alternative to account/transport) */
+  walletProvider?: any
   
   /** Domain for the SIWE (Sign-In with Ethereum) message */
   domain?: string
@@ -48,8 +56,7 @@ export interface LitAuthContextOptions {
 /**
  * Default authentication context options.
  */
-const DEFAULT_AUTH_OPTIONS: Required<Omit<LitAuthContextOptions, 'privateKey'>> = {
-  chain: 'ethereum',
+const DEFAULT_AUTH_OPTIONS: Required<Omit<LitAuthContextOptions, 'account' | 'transport' | 'chain'>> = {
   domain: 'haven.video',
   statement: 'Sign this message to decrypt your video with Haven',
   expirationMs: 60 * 60 * 1000, // 1 hour
@@ -75,10 +82,12 @@ export interface LitAuthContext {
 }
 
 /**
- * Create an authentication context for Lit Protocol operations.
+ * Create an authentication context for Lit Protocol operations using the connected wallet.
  * 
- * This creates a signed authentication context using an EOA (Externally Owned Account)
- * that can be used for decryption operations with Lit Protocol nodes.
+ * This creates a signed authentication context using the user's connected wallet
+ * (via wagmi/AppKit) that can be used for decryption operations with Lit Protocol nodes.
+ * 
+ * The user's wallet will be prompted to sign a SIWE message to authenticate.
  * 
  * @param options - Configuration options for the auth context
  * @returns Promise resolving to the authentication context
@@ -86,23 +95,40 @@ export interface LitAuthContext {
  * 
  * @example
  * ```typescript
- * const authContext = await createLitAuthContext({
- *   privateKey: '0x1234567890abcdef...',
- *   chain: 'ethereum',
- * })
+ * const { address, connector } = useAccount()
+ * const { data: walletClient } = useWalletClient()
  * 
- * // Use authContext for decryption
+ * if (walletClient) {
+ *   const authContext = await createLitAuthContext({
+ *     account: walletClient.account,
+ *     transport: walletClient.transport,
+ *     chain: walletClient.chain,
+ *   })
+ *   
+ *   // Use authContext for decryption
+ * }
  * ```
  */
 export async function createLitAuthContext(
   options: LitAuthContextOptions
 ): Promise<LitAuthContext> {
   const {
-    privateKey,
+    account,
+    transport,
+    chain,
+    walletProvider,
     domain = DEFAULT_AUTH_OPTIONS.domain,
     statement = DEFAULT_AUTH_OPTIONS.statement,
     expirationMs = DEFAULT_AUTH_OPTIONS.expirationMs,
   } = options
+  
+  // Validate we have either walletProvider or (account and transport)
+  if (!walletProvider && !account) {
+    throw new LitAuthError(
+      'No wallet account or provider provided. Make sure wallet is connected.',
+      'WALLET_NOT_CONNECTED'
+    )
+  }
   
   // Get initialized client and auth manager
   let client: ReturnType<typeof getLitClient>
@@ -118,42 +144,71 @@ export async function createLitAuthContext(
     )
   }
   
-  // Create viem account from private key
-  let viemAccount: ReturnType<typeof createViemAccount>
-  try {
-    viemAccount = createViemAccount(privateKey)
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Invalid private key'
-    throw new LitAuthError(message, 'INVALID_PRIVATE_KEY')
-  }
-  
   // Calculate expiration time
   const expiration = new Date(Date.now() + expirationMs).toISOString()
   
   try {
-    // Create authentication context using EOA
-    // Use type assertion to handle viem version mismatch
-    const authContext = await (authManager as ReturnType<typeof createAuthManager>).createEoaAuthContext({
-      authConfig: {
-        domain,
-        statement,
-        resources: [
-          {
-            resource: new LitAccessControlConditionResource('*'),
-            ability: 'access-control-condition-decryption',
-          },
-        ],
-        expiration,
-      },
-      config: {
-        account: viemAccount as unknown as Parameters<typeof authManager.createEoaAuthContext>[0]['config']['account'],
-      },
-      litClient: client,
-    })
+    let authConfig: any
+    
+    if (walletProvider) {
+      // Use walletProvider directly - pass it to the auth manager
+      authConfig = {
+        authConfig: {
+          domain,
+          statement,
+          resources: [
+            {
+              resource: new LitAccessControlConditionResource('*'),
+              ability: 'access-control-condition-decryption',
+            },
+          ],
+          expiration,
+        },
+        config: {
+          provider: walletProvider,
+          chain,
+        },
+        litClient: client,
+      }
+    } else {
+      // Use explicit account, transport, and chain
+      authConfig = {
+        authConfig: {
+          domain,
+          statement,
+          resources: [
+            {
+              resource: new LitAccessControlConditionResource('*'),
+              ability: 'access-control-condition-decryption',
+            },
+          ],
+          expiration,
+        },
+        config: {
+          account,
+          transport,
+          chain,
+        },
+        litClient: client,
+      }
+    }
+    
+    // Create authentication context using EOA with wallet signing
+    // The wallet client will prompt the user to sign the SIWE message
+    const authContext = await authManager.createEoaAuthContext(authConfig)
     
     return authContext as LitAuthContext
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
+    
+    // Check if user rejected the signing
+    if (message.includes('rejected') || message.includes('denied') || message.includes('cancelled')) {
+      throw new LitAuthError(
+        'User rejected the authentication signature.',
+        'SIGNING_FAILED'
+      )
+    }
+    
     throw new LitAuthError(
       `Failed to create auth context: ${message}`,
       'AUTH_CONTEXT_FAILED'
@@ -162,7 +217,7 @@ export async function createLitAuthContext(
 }
 
 /**
- * Create authentication context with custom resources.
+ * Create authentication context with custom resources using the connected wallet.
  * 
  * This allows specifying custom access control resources for more granular
  * permissions during authentication.
@@ -174,15 +229,23 @@ export async function createLitAuthContext(
  * 
  * @example
  * ```typescript
- * const authContext = await createLitAuthContextWithResources(
- *   { privateKey: '0x1234...' },
- *   [
+ * const { data: walletClient } = useWalletClient()
+ * 
+ * if (walletClient) {
+ *   const authContext = await createLitAuthContextWithResources(
  *     {
- *       resource: new LitAccessControlConditionResource('specific-resource'),
- *       ability: 'access-control-condition-decryption',
+ *       account: walletClient.account,
+ *       transport: walletClient.transport,
+ *       chain: walletClient.chain,
  *     },
- *   ]
- * )
+ *     [
+ *       {
+ *         resource: new LitAccessControlConditionResource('specific-resource'),
+ *         ability: 'access-control-condition-decryption',
+ *       },
+ *     ]
+ *   )
+ * }
  * ```
  */
 export async function createLitAuthContextWithResources(
@@ -193,11 +256,20 @@ export async function createLitAuthContextWithResources(
   }>
 ): Promise<LitAuthContext> {
   const {
-    privateKey,
+    account,
+    transport,
+    chain,
     domain = DEFAULT_AUTH_OPTIONS.domain,
     statement = DEFAULT_AUTH_OPTIONS.statement,
     expirationMs = DEFAULT_AUTH_OPTIONS.expirationMs,
   } = options
+  
+  if (!account) {
+    throw new LitAuthError(
+      'No wallet account provided. Make sure wallet is connected.',
+      'WALLET_NOT_CONNECTED'
+    )
+  }
   
   let client: ReturnType<typeof getLitClient>
   let authManager: ReturnType<typeof getAuthManager>
@@ -212,18 +284,10 @@ export async function createLitAuthContextWithResources(
     )
   }
   
-  let viemAccount: ReturnType<typeof createViemAccount>
-  try {
-    viemAccount = createViemAccount(privateKey)
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Invalid private key'
-    throw new LitAuthError(message, 'INVALID_PRIVATE_KEY')
-  }
-  
   const expiration = new Date(Date.now() + expirationMs).toISOString()
   
   try {
-    const authContext = await (authManager as ReturnType<typeof createAuthManager>).createEoaAuthContext({
+    const authContext = await authManager.createEoaAuthContext({
       authConfig: {
         domain,
         statement,
@@ -231,7 +295,9 @@ export async function createLitAuthContextWithResources(
         expiration,
       },
       config: {
-        account: viemAccount as unknown as Parameters<typeof authManager.createEoaAuthContext>[0]['config']['account'],
+        account,
+        transport,
+        chain,
       },
       litClient: client,
     })

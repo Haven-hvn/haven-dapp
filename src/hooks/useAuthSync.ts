@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useAccount } from 'wagmi'
+import { useAppKitAccount } from '@reown/appkit/react'
 import { useAuthStore } from '@/stores/authStore'
 
 export function useAuthSync() {
-  const { address, isConnected, chainId } = useAccount()
+  const { address, isConnected, chainId } = useAppKitAccount()
   const { 
     setAuthenticated, 
     setDisconnected,
@@ -31,7 +31,7 @@ export function useAuthSync() {
     if (isConnected && chainId && chainId !== useAuthStore.getState().chainId) {
       updateChainId(chainId)
     }
-  }, [chainId, isConnected, updateChainId])
+  }, [isConnected, chainId, updateChainId])
   
   return { isSynced: true }
 }

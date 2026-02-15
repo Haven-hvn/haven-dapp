@@ -2,8 +2,7 @@
  * React Hook for CID Decryption
  * 
  * Provides a hook for decrypting encrypted Filecoin CIDs using
- * Lit Protocol. For encrypted videos, the actual CID may be encrypted
- * separately from the content, and this hook decrypts it.
+ * Lit Protocol with wallet-based authentication.
  * 
  * @module hooks/useCidDecryption
  */
@@ -11,8 +10,12 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
+import { useAppKitProvider, useAppKitAccount } from '@reown/appkit/react'
+import { BrowserProvider, Contract, solidityPackedKeccak256, toUtf8Bytes } from 'ethers'
 import type { Video } from '@/types'
 import { decryptCid, getDecryptionErrorMessage } from '@/lib/lit-decrypt'
+import { Http } from 'viem'
+import { mainnet, sepolia } from '@reown/appkit/networks'
 
 // ============================================================================
 // Types
@@ -24,6 +27,7 @@ import { decryptCid, getDecryptionErrorMessage } from '@/lib/lit-decrypt'
 export type CidDecryptionStatus =
   | 'idle'           // Not started
   | 'checking'       // Checking if CID is encrypted
+  | 'authenticating' // Authenticating with wallet
   | 'decrypting'     // Decrypting CID
   | 'complete'       // Decryption complete
   | 'error'          // Error occurred
@@ -83,18 +87,19 @@ export interface UseCidDecryptionOptions {
 // ============================================================================
 
 /**
- * React hook for decrypting encrypted Filecoin CIDs.
+ * React hook for decrypting encrypted Filecoin CIDs with wallet-based authentication.
  * 
  * For encrypted videos, the actual Filecoin CID is often encrypted
  * separately from the content for additional privacy. This hook
- * decrypts that CID so the video content can be fetched.
+ * decrypts that CID using the connected wallet for authentication.
  * 
  * Features:
  * - Automatic detection of unencrypted CIDs (returns directly)
- * - Progress tracking
+ * - Progress tracking with user-friendly messages
  * - Error handling with user-friendly messages
  * - Cancellation support
  * - Automatic cleanup on unmount
+ * - Wallet-based authentication (no private key needed)
  * 
  * @param options - Hook options
  * @returns Object containing state and control functions
@@ -128,6 +133,10 @@ export function useCidDecryption(
   options: UseCidDecryptionOptions = {}
 ): UseCidDecryptionReturn {
   const { onSuccess, onError, onProgress } = options
+
+  // Get wallet client from AppKit for authentication
+  const { address, isConnected, chainId } = useAppKitAccount()
+  const { walletProvider } = useAppKitProvider('eip155')
 
   // State
   const [status, setStatus] = useState<CidDecryptionStatus>('idle')
@@ -189,7 +198,7 @@ export function useCidDecryption(
   }, [onProgress])
 
   /**
-   * Decrypt the CID for a video.
+   * Decrypt the CID for a video using the connected wallet.
    * 
    * If the video's CID is not encrypted, returns the filecoinCid directly.
    * 
@@ -202,6 +211,18 @@ export function useCidDecryption(
     reset()
 
     if (!isMountedRef.current) {
+      return null
+    }
+
+    // Check if wallet is connected
+    if (!address || !walletProvider) {
+      const walletError = new Error('Please connect your wallet to decrypt this CID.')
+      if (isMountedRef.current) {
+        setError(walletError)
+        setStatus('error')
+        setProgress('Wallet not connected')
+      }
+      onError?.(walletError)
       return null
     }
 
@@ -230,19 +251,16 @@ export function useCidDecryption(
         throw new Error('Decryption cancelled')
       }
 
-      // Get private key from environment or wallet
-      // TODO: Replace with proper wallet integration
-      const privateKey = process.env.NEXT_PUBLIC_TEST_PRIVATE_KEY
-      if (!privateKey) {
-        throw new Error('Private key not available for CID decryption')
-      }
+      // Decrypt the CID using wallet-based authentication
+      updateProgress('authenticating', 'Authenticating with Lit Protocol...')
 
-      // Decrypt the CID
-      updateProgress('decrypting', 'Decrypting Filecoin CID...')
+      // Get chain from chainId
+      const chain = chainId === sepolia.id ? sepolia : mainnet
 
       const decryptedCid = await decryptCid({
         metadata: video.cidEncryptionMetadata,
-        privateKey,
+        walletProvider: walletProvider,
+        chain: chain,
         onProgress: (msg) => updateProgress('decrypting', msg),
         signal,
       })
@@ -289,11 +307,11 @@ export function useCidDecryption(
       onError?.(err instanceof Error ? err : new Error(errorMessage))
       return null
     }
-  }, [reset, updateProgress, onSuccess, onError])
+  }, [reset, updateProgress, onSuccess, onError, walletClient])
 
   return {
     status,
-    isDecrypting: status === 'decrypting' || status === 'checking',
+    isDecrypting: status === 'decrypting' || status === 'checking' || status === 'authenticating',
     progress,
     error,
     cid,
@@ -372,7 +390,6 @@ export function useCidDecryptionAuto(
  * are encrypted. It first decrypts the CID, then fetches the
  * encrypted data, then decrypts the video.
  * 
- * @param options - Hook options
  * @returns Object containing state for both operations
  * 
  * @example
@@ -388,6 +405,7 @@ export function useCidDecryptionAuto(
  *     decryptedUrl,
  *     isDecryptingVideo,
  *     videoError,
+ *     progress,
  *     start
  *   } = useFullVideoDecryption()
  * 
@@ -422,6 +440,10 @@ export interface UseFullVideoDecryptionReturn {
   reset: () => void
 }
 
+/**
+ * @deprecated This hook is a placeholder and not fully implemented.
+ * Use useCidDecryption and useVideoDecryption separately for now.
+ */
 export function useFullVideoDecryption(): UseFullVideoDecryptionReturn {
   const [cid, setCid] = useState<string | null>(null)
   const [isDecryptingCid, setIsDecryptingCid] = useState(false)
@@ -477,73 +499,10 @@ export function useFullVideoDecryption(): UseFullVideoDecryptionReturn {
     
     if (!isMountedRef.current) return null
     
-    abortControllerRef.current = new AbortController()
-    const signal = abortControllerRef.current.signal
-
-    try {
-      // Step 1: Decrypt CID if needed
-      let targetCid = video.filecoinCid || null
-      
-      if (video.encryptedCid && video.cidEncryptionMetadata) {
-        setIsDecryptingCid(true)
-        setProgress('Decrypting CID...')
-
-        const privateKey = process.env.NEXT_PUBLIC_TEST_PRIVATE_KEY
-        if (!privateKey) {
-          throw new Error('Private key not available')
-        }
-
-        targetCid = await decryptCid({
-          metadata: video.cidEncryptionMetadata,
-          privateKey,
-          signal,
-        })
-
-        if (signal.aborted) throw new Error('Cancelled')
-        if (!targetCid) throw new Error('CID decryption failed')
-
-        setCid(targetCid)
-        setIsDecryptingCid(false)
-      }
-
-      if (!targetCid) {
-        throw new Error('No CID available for video')
-      }
-
-      // Step 2: Fetch encrypted data (placeholder - actual fetch would depend on your storage)
-      // This is a simplified version - in production you'd fetch from Filecoin/IPFS
-      setIsFetching(true)
-      setProgress('Fetching encrypted video...')
-      
-      // TODO: Implement actual fetch from Filecoin/IPFS
-      // For now, this is a placeholder that expects encrypted data to be provided separately
-      setIsFetching(false)
-      
-      // Step 3: Decrypt video (would use useVideoDecryption internally)
-      // This is also simplified - full implementation would integrate useVideoDecryption
-      setIsDecryptingVideo(true)
-      setProgress('Decrypting video...')
-      
-      // Video decryption would happen here...
-      
-      setIsDecryptingVideo(false)
-      return targetCid
-
-    } catch (err) {
-      if (err instanceof Error && err.message === 'Cancelled') {
-        setProgress('Cancelled')
-        return null
-      }
-
-      const message = err instanceof Error ? err.message : 'Unknown error'
-      console.error('[useFullVideoDecryption] Failed:', err)
-
-      if (isMountedRef.current) {
-        setVideoError(new Error(message))
-      }
-      
-      return null
-    }
+    setProgress('This hook is not fully implemented. Please use useCidDecryption and useVideoDecryption separately.')
+    setVideoError(new Error('useFullVideoDecryption is not fully implemented'))
+    
+    return null
   }, [reset])
 
   return {

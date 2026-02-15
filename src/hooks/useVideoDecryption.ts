@@ -2,8 +2,8 @@
  * React Hook for Video Decryption
  * 
  * Provides a comprehensive hook for decrypting encrypted videos using
- * hybrid decryption (AES-256-GCM + Lit BLS-IBE). Includes progress tracking,
- * error handling, memory management, and cancellation support.
+ * hybrid decryption (AES-256-GCM + Lit BLS-IBE) with wallet-based authentication.
+ * Includes progress tracking, error handling, memory management, and cancellation support.
  * 
  * @module hooks/useVideoDecryption
  */
@@ -11,9 +11,11 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
+import { useAppKitProvider, useAppKitAccount } from '@reown/appkit/react'
 import type { Video } from '@/types'
 import { decryptAesKey, getDecryptionErrorMessage } from '@/lib/lit-decrypt'
 import { aesDecrypt, base64ToUint8Array, toArrayBuffer, checkLargeFileSupport } from '@/lib/crypto'
+import { mainnet, sepolia } from '@reown/appkit/networks'
 
 // ============================================================================
 // Types
@@ -26,7 +28,7 @@ export type DecryptionStatus =
   | 'idle'           // Not started
   | 'checking'       // Checking video metadata
   | 'fetching'       // Downloading encrypted data
-  | 'authenticating' // Getting auth from Lit
+  | 'authenticating' // Getting auth from Lit (requires wallet signature)
   | 'decrypting-key' // Decrypting AES key
   | 'decrypting-file' // Decrypting video file
   | 'complete'       // Decryption complete
@@ -123,12 +125,13 @@ const PROGRESS_WEIGHTS: Record<DecryptionStatus, number> = {
 // ============================================================================
 
 /**
- * React hook for decrypting encrypted videos.
+ * React hook for decrypting encrypted videos with wallet-based authentication.
  * 
  * This hook manages the full hybrid decryption process:
- * 1. Decrypt the AES key using Lit Protocol (BLS-IBE)
- * 2. Decrypt the video content using AES-256-GCM
- * 3. Create a blob URL for playback
+ * 1. Authenticate with Lit Protocol using the connected wallet (SIWE signature)
+ * 2. Decrypt the AES key using Lit Protocol (BLS-IBE)
+ * 3. Decrypt the video content using AES-256-GCM
+ * 4. Create a blob URL for playback
  * 
  * Features:
  * - Progress tracking with user-friendly messages
@@ -137,6 +140,7 @@ const PROGRESS_WEIGHTS: Record<DecryptionStatus, number> = {
  * - Large file warnings (>500MB by default)
  * - Cancellation support via AbortController
  * - Automatic cleanup on unmount
+ * - Wallet-based authentication (no private key needed)
  * 
  * @param options - Hook options
  * @returns Object containing state and control functions
@@ -185,6 +189,10 @@ export function useVideoDecryption(
     onError,
     onProgress,
   } = options
+
+  // Get wallet client from AppKit for authentication
+  const { address, isConnected, chainId } = useAppKitAccount()
+  const { walletProvider } = useAppKitProvider('eip155')
 
   // State
   const [status, setStatus] = useState<DecryptionStatus>('idle')
@@ -269,7 +277,7 @@ export function useVideoDecryption(
   }, [onProgress])
 
   /**
-   * Decrypt a video.
+   * Decrypt a video using the connected wallet for authentication.
    * 
    * @param video - The video to decrypt
    * @param encryptedData - The encrypted video data
@@ -284,6 +292,18 @@ export function useVideoDecryption(
 
     // Check if component is still mounted
     if (!isMountedRef.current) {
+      return null
+    }
+
+    // Check if wallet is connected
+    if (!address || !walletProvider) {
+      const walletError = new Error('Please connect your wallet to decrypt this video.')
+      if (isMountedRef.current) {
+        setError(walletError)
+        setStatus('error')
+        setProgress('Wallet not connected')
+      }
+      onError?.(walletError)
       return null
     }
 
@@ -332,19 +352,16 @@ export function useVideoDecryption(
         throw new Error('Decryption cancelled')
       }
 
-      // Step 2: Get private key from environment or wallet
-      // TODO: Replace with proper wallet integration
-      const privateKey = process.env.NEXT_PUBLIC_TEST_PRIVATE_KEY
-      if (!privateKey) {
-        throw new Error('Private key not available for decryption')
-      }
-
-      // Step 3: Decrypt AES key using Lit
+      // Step 2: Decrypt AES key using Lit with wallet authentication
       updateProgress('authenticating', 'Authenticating with Lit Protocol...')
+
+      // Get chain from chainId
+      const chain = chainId === sepolia.id ? sepolia : mainnet
 
       const { aesKey } = await decryptAesKey({
         metadata: video.litEncryptionMetadata,
-        privateKey,
+        walletProvider: walletProvider,
+        chain: chain,
         onProgress: (msg) => {
           if (msg.includes('key') || msg.includes('Key')) {
             updateProgress('decrypting-key', msg)
@@ -358,7 +375,7 @@ export function useVideoDecryption(
         throw new Error('Decryption cancelled')
       }
 
-      // Step 4: Decrypt file using AES
+      // Step 3: Decrypt file using AES
       updateProgress('decrypting-file', 'Decrypting video file...')
 
       const iv = base64ToUint8Array(video.litEncryptionMetadata.iv)
@@ -371,7 +388,7 @@ export function useVideoDecryption(
         throw new Error('Decryption cancelled')
       }
 
-      // Step 5: Create blob URL
+      // Step 4: Create blob URL
       updateProgress('decrypting-file', 'Preparing video for playback...')
 
       const mimeType = video.litEncryptionMetadata.originalMimeType || 'video/mp4'
@@ -435,6 +452,7 @@ export function useVideoDecryption(
     largeFileSupport,
     onSuccess,
     onError,
+    walletClient,
   ])
 
   return {
