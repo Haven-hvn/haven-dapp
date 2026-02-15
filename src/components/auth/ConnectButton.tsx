@@ -1,25 +1,22 @@
 'use client'
 
-import { useAppKitAccount, useAppKit } from '@reown/appkit/react'
+import { modal } from '@/context'
 import { Button } from '@/components/ui/button'
 import { useState, useEffect } from 'react'
+import { useAccount, useDisconnect } from 'wagmi'
 
 export function ConnectButton() {
   const [mounted, setMounted] = useState(false)
-  const [appKitReady, setAppKitReady] = useState(false)
+  const { address, isConnected } = useAccount()
+  const { disconnect } = useDisconnect()
 
-  // Prevent hydration mismatch and wait for AppKit
+  // Prevent hydration mismatch
   useEffect(() => {
     setMounted(true)
-    // Give AppKit time to initialize
-    const timer = setTimeout(() => {
-      setAppKitReady(true)
-    }, 100)
-    return () => clearTimeout(timer)
   }, [])
 
-  // Don't render until mounted to prevent hydration issues
-  if (!mounted || !appKitReady) {
+  // Show loading state while mounting or if modal isn't available
+  if (!mounted) {
     return (
       <Button size="lg" disabled className="min-h-[44px] touch-manipulation">
         Connect
@@ -27,17 +24,18 @@ export function ConnectButton() {
     )
   }
 
-  return <ConnectButtonInner />
-}
-
-function ConnectButtonInner() {
-  const { address, isConnected } = useAppKitAccount()
-  const { open } = useAppKit()
+  // If no project ID is configured, show disabled button
+  if (!modal) {
+    return (
+      <Button size="lg" disabled className="min-h-[44px] touch-manipulation" title="WalletConnect not configured">
+        Connect
+      </Button>
+    )
+  }
 
   if (isConnected && address) {
     return (
       <div className="flex items-center gap-2 sm:gap-3">
-        {/* Address and chain - hidden on very small screens, shows on xs+ */}
         <div className="hidden xs:flex flex-col items-end">
           <span className="text-sm font-medium text-foreground">
             {address.slice(0, 6)}...{address.slice(-4)}
@@ -47,7 +45,6 @@ function ConnectButtonInner() {
           </span>
         </div>
         
-        {/* Mobile-friendly address display */}
         <div className="flex xs:hidden items-center">
           <span className="text-sm font-medium text-foreground">
             {address.slice(0, 4)}...{address.slice(-2)}
@@ -57,36 +54,22 @@ function ConnectButtonInner() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => open()}
+          onClick={() => modal?.open()}
           className="min-h-[36px] touch-manipulation"
         >
-          <span className="hidden sm:inline">Wallet</span>
-          <span className="sm:hidden">Wallet</span>
+          <span>Wallet</span>
         </Button>
       </div>
     )
   }
 
-  // Use the native appkit-button when not connected
-  // This avoids the need for the useAppKit hook
-  return <appkit-button />
-}
-
-// Alternative component using the native appkit-button with custom size
-export function Web3ModalButton() {
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  if (!mounted) {
-    return (
-      <Button size="lg" disabled className="min-h-[44px] touch-manipulation">
-        Connect
-      </Button>
-    )
-  }
-
-  return <appkit-button />
+  return (
+    <Button
+      size="lg"
+      onClick={() => modal?.open()}
+      className="min-h-[44px] touch-manipulation"
+    >
+      Connect
+    </Button>
+  )
 }

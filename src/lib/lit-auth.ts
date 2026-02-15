@@ -56,7 +56,7 @@ export interface LitAuthContextOptions {
 /**
  * Default authentication context options.
  */
-const DEFAULT_AUTH_OPTIONS: Required<Omit<LitAuthContextOptions, 'account' | 'transport' | 'chain'>> = {
+const DEFAULT_AUTH_OPTIONS: Required<Omit<LitAuthContextOptions, 'account' | 'transport' | 'chain' | 'walletProvider'>> = {
   domain: 'haven.video',
   statement: 'Sign this message to decrypt your video with Haven',
   expirationMs: 60 * 60 * 1000, // 1 hour
@@ -295,10 +295,10 @@ export async function createLitAuthContextWithResources(
         expiration,
       },
       config: {
-        account,
-        transport,
-        chain,
-      },
+        account: account as any,
+        transport: transport as any,
+        chain: chain as any,
+      } as any,
       litClient: client,
     })
     

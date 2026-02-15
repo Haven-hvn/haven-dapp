@@ -10,12 +10,11 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { useAppKitProvider, useAppKitAccount } from '@reown/appkit/react'
-import { BrowserProvider, Contract, solidityPackedKeccak256, toUtf8Bytes } from 'ethers'
+import { useAppKitProvider } from '@reown/appkit/react'
+import { useAccount } from 'wagmi'
 import type { Video } from '@/types'
 import { decryptCid, getDecryptionErrorMessage } from '@/lib/lit-decrypt'
-import { Http } from 'viem'
-import { mainnet, sepolia } from '@reown/appkit/networks'
+import { sepolia, mainnet } from '@reown/appkit/networks'
 
 // ============================================================================
 // Types
@@ -135,7 +134,7 @@ export function useCidDecryption(
   const { onSuccess, onError, onProgress } = options
 
   // Get wallet client from AppKit for authentication
-  const { address, isConnected, chainId } = useAppKitAccount()
+  const { address, isConnected, chainId } = useAccount()
   const { walletProvider } = useAppKitProvider('eip155')
 
   // State
@@ -307,7 +306,7 @@ export function useCidDecryption(
       onError?.(err instanceof Error ? err : new Error(errorMessage))
       return null
     }
-  }, [reset, updateProgress, onSuccess, onError, walletClient])
+  }, [reset, updateProgress, onSuccess, onError, address, walletProvider, chainId])
 
   return {
     status,

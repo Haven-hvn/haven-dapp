@@ -1,9 +1,9 @@
 'use client'
 
-import { useAppKitAccount } from '@reown/appkit/react'
+import { useAccount as useWagmiAccount } from 'wagmi'
 
 export function useAccount() {
-  const { address, isConnected, isConnecting, chainId, status } = useAppKitAccount()
+  const { address, isConnected, isConnecting, chainId, status } = useWagmiAccount()
   
   return {
     address,

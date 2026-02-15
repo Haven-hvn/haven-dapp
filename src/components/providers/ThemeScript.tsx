@@ -12,7 +12,7 @@
 
 import { useEffect } from 'react'
 
-export function ThemeScript() {
+export function ThemeScript(): null {
   useEffect(() => {
     // This effect ensures we add the no-transitions class on initial load
     // to prevent transition animations during theme initialization

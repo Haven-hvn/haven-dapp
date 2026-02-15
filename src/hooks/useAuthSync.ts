@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useAppKitAccount } from '@reown/appkit/react'
+import { useAccount } from 'wagmi'
 import { useAuthStore } from '@/stores/authStore'
 
 export function useAuthSync() {
-  const { address, isConnected, chainId } = useAppKitAccount()
+  const { address, isConnected, chainId } = useAccount()
   const { 
     setAuthenticated, 
     setDisconnected,

@@ -108,7 +108,7 @@ export function createArkivClient(): PublicArkivClient<Transport, Chain | undefi
   return createPublicClient({
     chain: mendoza,
     transport,
-  })
+  }) as PublicArkivClient<Transport, Chain | undefined, undefined>
 }
 
 // ============================================================================

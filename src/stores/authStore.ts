@@ -19,7 +19,13 @@ interface AuthState {
 }
 
 // Initial state
-const initialState = {
+const initialState: {
+  isAuthenticated: boolean
+  address: string | null
+  chainId: number | null
+  lastConnected: number | null
+  preferredConnector: string | null
+} = {
   isAuthenticated: false,
   address: null,
   chainId: null,

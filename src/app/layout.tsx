@@ -1,9 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import { headers } from 'next/headers';
 import "./globals.css";
-import { Web3ModalProvider } from "@/components/providers/Web3ModalProvider";
+import ContextProvider from '@/context';
 import { AuthProvider } from "@/components/providers/AuthProvider";
-import { QueryProvider } from "@/components/providers/QueryProvider";
 import { LitProvider } from "@/components/providers/LitProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { ThemeScript } from "@/components/providers/ThemeScript";
@@ -120,11 +120,14 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const headersData = await headers();
+  const cookies = headersData.get('cookie');
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -138,17 +141,15 @@ export default function RootLayout({
       >
         <ThemeProvider defaultTheme="dark" enableSystem>
           <ThemeScript />
-          <QueryProvider>
-            <Web3ModalProvider>
-              <AuthProvider>
-                <LitProvider>
-                  <ErrorProvider>
-                    {children}
-                  </ErrorProvider>
-                </LitProvider>
-              </AuthProvider>
-            </Web3ModalProvider>
-          </QueryProvider>
+          <ContextProvider cookies={cookies}>
+            <AuthProvider>
+              <LitProvider>
+                <ErrorProvider>
+                  {children}
+                </ErrorProvider>
+              </LitProvider>
+            </AuthProvider>
+          </ContextProvider>
         </ThemeProvider>
         <VercelAnalytics />
         <WebVitals />

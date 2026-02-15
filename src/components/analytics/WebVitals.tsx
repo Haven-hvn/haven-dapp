@@ -30,7 +30,7 @@ interface LayoutShiftEntry extends PerformanceEntry {
  * Web Vitals monitoring component.
  * Reports performance metrics for monitoring and optimization.
  */
-export function WebVitals() {
+export function WebVitals(): null {
   useReportWebVitals((metric: WebVitalMetric) => {
     // Log metrics in development
     if (process.env.NODE_ENV === "development") {

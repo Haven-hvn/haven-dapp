@@ -11,11 +11,12 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { useAppKitProvider, useAppKitAccount } from '@reown/appkit/react'
+import { useAppKitProvider } from '@reown/appkit/react'
+import { useAccount } from 'wagmi'
 import type { Video } from '@/types'
 import { decryptAesKey, getDecryptionErrorMessage } from '@/lib/lit-decrypt'
 import { aesDecrypt, base64ToUint8Array, toArrayBuffer, checkLargeFileSupport } from '@/lib/crypto'
-import { mainnet, sepolia } from '@reown/appkit/networks'
+import { sepolia, mainnet } from '@reown/appkit/networks'
 
 // ============================================================================
 // Types
@@ -191,7 +192,7 @@ export function useVideoDecryption(
   } = options
 
   // Get wallet client from AppKit for authentication
-  const { address, isConnected, chainId } = useAppKitAccount()
+  const { address, isConnected, chainId } = useAccount()
   const { walletProvider } = useAppKitProvider('eip155')
 
   // State
@@ -452,7 +453,9 @@ export function useVideoDecryption(
     largeFileSupport,
     onSuccess,
     onError,
-    walletClient,
+    address,
+    walletProvider,
+    chainId,
   ])
 
   return {

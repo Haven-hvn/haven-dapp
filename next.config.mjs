@@ -41,7 +41,7 @@ const nextConfig = {
   
   // Experimental features for optimization
   experimental: {
-    // Optimize package imports
+    // Optimize package imports - exclude appkit to avoid bundling issues
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
   },
   
@@ -85,19 +85,13 @@ const nextConfig = {
         trace_events: false,
         worker_threads: false,
       };
-      
-      // Mock React Native specific modules that MetaMask SDK references
-      // These are not needed for browser builds
-      config.resolve.alias = {
-        ...config.resolve.alias,
-        '@react-native-async-storage/async-storage': join(__dirname, 'src/mocks/react-native-async-storage.js'),
-      };
-
     }
 
     // Fix for broken @lit-protocol packages missing root index.js files
+    // Also preserve the React Native mock alias
     config.resolve.alias = {
       ...config.resolve.alias,
+      '@react-native-async-storage/async-storage': join(__dirname, 'src/mocks/react-native-async-storage.js'),
       '@lit-protocol/lit-client': join(__dirname, 'node_modules/@lit-protocol/lit-client/src'),
       '@lit-protocol/auth': join(__dirname, 'node_modules/@lit-protocol/auth/src'),
     };
