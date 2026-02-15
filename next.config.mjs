@@ -39,45 +39,6 @@ const nextConfig = {
   // Production source maps (disable for smaller builds)
   productionBrowserSourceMaps: false,
   
-  // Turbopack configuration for Node.js polyfills (needed for Lit Protocol SDK)
-  turbopack: {
-    resolveAlias: {
-      fs: './src/mocks/node-empty.js',
-      net: './src/mocks/node-empty.js',
-      tls: './src/mocks/node-empty.js',
-      crypto: './src/mocks/node-empty.js',
-      stream: './src/mocks/node-empty.js',
-      path: './src/mocks/node-empty.js',
-      os: './src/mocks/node-empty.js',
-      url: './src/mocks/node-empty.js',
-      http: './src/mocks/node-empty.js',
-      https: './src/mocks/node-empty.js',
-      zlib: './src/mocks/node-empty.js',
-      querystring: './src/mocks/node-empty.js',
-      assert: './src/mocks/node-empty.js',
-      constants: './src/mocks/node-empty.js',
-      timers: './src/mocks/node-empty.js',
-      console: './src/mocks/node-empty.js',
-      util: './src/mocks/node-empty.js',
-      buffer: './src/mocks/node-empty.js',
-      events: './src/mocks/node-empty.js',
-      string_decoder: './src/mocks/node-empty.js',
-      punycode: './src/mocks/node-empty.js',
-      domain: './src/mocks/node-empty.js',
-      dns: './src/mocks/node-empty.js',
-      dgram: './src/mocks/node-empty.js',
-      cluster: './src/mocks/node-empty.js',
-      module: './src/mocks/node-empty.js',
-      v8: './src/mocks/node-empty.js',
-      vm: './src/mocks/node-empty.js',
-      async_hooks: './src/mocks/node-empty.js',
-      inspector: './src/mocks/node-empty.js',
-      perf_hooks: './src/mocks/node-empty.js',
-      trace_events: './src/mocks/node-empty.js',
-      worker_threads: './src/mocks/node-empty.js',
-    },
-  },
-  
   // Experimental features for optimization
   experimental: {
     // Optimize package imports
@@ -131,7 +92,15 @@ const nextConfig = {
         ...config.resolve.alias,
         '@react-native-async-storage/async-storage': join(__dirname, 'src/mocks/react-native-async-storage.js'),
       };
+
     }
+
+    // Fix for broken @lit-protocol packages missing root index.js files
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@lit-protocol/lit-client': join(__dirname, 'node_modules/@lit-protocol/lit-client/src'),
+      '@lit-protocol/auth': join(__dirname, 'node_modules/@lit-protocol/auth/src'),
+    };
     return config;
   },
   

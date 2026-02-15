@@ -138,8 +138,8 @@ export default function RootLayout({
       >
         <ThemeProvider defaultTheme="dark" enableSystem>
           <ThemeScript />
-          <Web3ModalProvider>
-            <QueryProvider>
+          <QueryProvider>
+            <Web3ModalProvider>
               <AuthProvider>
                 <LitProvider>
                   <ErrorProvider>
@@ -147,8 +147,8 @@ export default function RootLayout({
                   </ErrorProvider>
                 </LitProvider>
               </AuthProvider>
-            </QueryProvider>
-          </Web3ModalProvider>
+            </Web3ModalProvider>
+          </QueryProvider>
         </ThemeProvider>
         <VercelAnalytics />
         <WebVitals />
