@@ -12,7 +12,9 @@ export default function Error({
   reset: () => void
 }) {
   useEffect(() => {
-    console.error(error)
+    console.error('[Error Boundary] Caught error:', error)
+    console.error('[Error Boundary] Error stack:', error.stack)
+    console.error('[Error Boundary] Error digest:', error.digest)
   }, [error])
 
   return (
@@ -37,6 +39,13 @@ export default function Error({
           <Button variant="outline" onClick={() => window.location.href = '/'}>
             Go Home
           </Button>
+        </div>
+        
+        {/* Debug info */}
+        <div className="mt-6 p-4 bg-muted rounded text-left text-xs font-mono overflow-auto max-h-48">
+          <p className="font-semibold mb-2">Debug Info:</p>
+          <p>projectId: {process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ? 'set' : 'not set'}</p>
+          <p>Error: {error.message}</p>
         </div>
       </div>
     </div>

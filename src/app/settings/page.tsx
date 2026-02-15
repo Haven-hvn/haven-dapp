@@ -1,6 +1,9 @@
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { LibraryLayout } from '@/components/layout/LibraryLayout'
 
+// Disable static generation for this page since it uses wagmi hooks
+export const dynamic = 'force-dynamic'
+
 export default function SettingsPage() {
   return (
     <ProtectedRoute>
