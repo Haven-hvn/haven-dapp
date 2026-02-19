@@ -199,12 +199,6 @@ run_task() {
         return 1
     fi
 
-    # Verify README file exists
-    if [[ ! -f "$README_FILE" ]]; then
-        print_warning "README file not found: $README_FILE"
-        print_info "Proceeding without README context"
-    fi
-
     # Mark as in progress
     mark_in_progress "$task_num" "$sprint" "$task_file" "$description"
 
@@ -215,43 +209,34 @@ run_task() {
     echo -e "${YELLOW}-----------------------------------------------------------${NC}"
     echo ""
 
-    # Show first 20 lines of the task file as preview
-    head -n 20 "$task_path"
-    echo ""
-    echo -e "${YELLOW}  ... (see full task file for details)${NC}"
-    echo -e "${YELLOW}-----------------------------------------------------------${NC}"
-    echo ""
+    # Create a focused prompt that tells the AI exactly what to do
+    local focused_prompt
+    focused_prompt=$(cat << EOF
+You are working on the Haven DApp local cache implementation. 
 
-    # Create a combined prompt with README and task file
-    local combined_prompt=""
-    local temp_prompt_file
-    
-    if [[ -f "$README_FILE" ]]; then
-        temp_prompt_file=$(mktemp)
-        echo "# PROJECT CONTEXT (README.md)" > "$temp_prompt_file"
-        echo "==============================" >> "$temp_prompt_file"
-        cat "$README_FILE" >> "$temp_prompt_file"
-        echo "" >> "$temp_prompt_file"
-        echo "" >> "$temp_prompt_file"
-        echo "# TASK REQUIREMENTS" >> "$temp_prompt_file"
-        echo "===================" >> "$temp_prompt_file"
-        cat "$task_path" >> "$temp_prompt_file"
-        combined_prompt="$temp_prompt_file"
-    else
-        combined_prompt="$task_path"
-    fi
+YOUR CURRENT TASK: $description
+SPRINT: $sprint
+TASK FILE: $task_file
 
-    # Run kimi in yolo mode with the combined prompt
-    print_info "Starting kimi --yolo with project context and task prompt..."
+INSTRUCTIONS:
+1. Read the task requirements below
+2. Implement ONLY what is requested in this specific task
+3. Do not work on other parts of the project
+4. Follow the code examples and patterns shown in the task
+5. Make sure your implementation matches the acceptance criteria
+6. Report back with what files you created/modified
+
+TASK REQUIREMENTS:
+$(cat "$task_path")
+EOF
+)
+
+    # Run kimi with the focused prompt
+    print_info "Starting kimi with focused task instructions..."
     echo ""
 
     local exit_code=0
-    (cd "$PROJECT_DIR" && kimi --yolo --prompt "$combined_prompt") || exit_code=$?
-
-    # Clean up temp file if created
-    if [[ -n "$temp_prompt_file" && -f "$temp_prompt_file" ]]; then
-        rm "$temp_prompt_file"
-    fi
+    (cd "$PROJECT_DIR" && echo "$focused_prompt" | kimi --yolo) || exit_code=$?
 
     if [[ $exit_code -eq 0 ]]; then
         echo ""
