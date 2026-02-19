@@ -9,6 +9,9 @@
 
 import type { LitEncryptionMetadata, CidEncryptionMetadata } from './lit'
 
+// Re-export LitEncryptionMetadata for convenience
+export type { LitEncryptionMetadata } from './lit'
+
 // ============================================================================
 // Core Video Types
 // ============================================================================
@@ -117,6 +120,16 @@ export interface Video {
   
   /** Error message if loading failed */
   error?: string
+
+  // Cache-related fields (for cache integration)
+  /** Status of the video's Arkiv entity */
+  arkivStatus?: 'active' | 'expired' | 'expiring-soon' | 'cache-only' | 'unknown'
+  
+  /** Block number when the Arkiv entity expires (if applicable) */
+  expiresAtBlock?: number
+  
+  /** Status of video content in the Cache API */
+  videoCacheStatus?: 'not-cached' | 'cached' | 'stale'
 }
 
 /**
@@ -132,6 +145,9 @@ export interface SegmentMetadata {
   
   /** When this segment ended recording (undefined if still recording) */
   endTimestamp?: Date
+  
+  /** Total number of segments in this recording */
+  totalSegments: number
   
   /** Mint ID associated with this segment */
   mintId: string

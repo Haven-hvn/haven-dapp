@@ -1,89 +1,59 @@
 /**
- * React Hooks
- * 
- * Custom React hooks for Haven Web DApp.
- * 
- * @module hooks
+ * Hooks Index
+ *
+ * Central export point for all React hooks used in the application.
  */
 
-// Auth hooks
-export { useAuthSync } from './useAuthSync'
-export { useHydration } from './useHydration'
-
-// Wallet hooks
-export { useWalletError } from './useWalletError'
-
-// Arkiv hooks
-export { useArkivClient, useArkivEntities, useArkivQuery } from './useArkivClient'
-
-// Video hooks
+// Video query hooks
 export {
   useVideos,
-  useVideo,
   useVideoQuery,
   useInvalidateVideos,
-  usePrefetchVideos,
-  useVideosWithOptions,
   videoKeys,
-  getVideoErrorMessage,
-  type UseVideosReturn,
-  type UseVideoReturn,
-  type UseVideoQueryReturn,
-  type UseInvalidateVideosReturn,
+} from './useVideos'
+export type {
+  UseVideosReturn,
+  UseVideoQueryReturn,
+  UseInvalidateVideosReturn,
 } from './useVideos'
 
-export {
-  useVideoSearch,
-  useVideoTextSearch,
-  useVideoFilter,
-  useVideoSort,
-  type VideoSortField,
-  type SortOrder,
-  type UseVideoSearchOptions,
-  type UseVideoSearchReturn,
-} from './useVideoSearch'
+// Cache-aware video hooks
+export { useCachedVideos } from './useCachedVideos'
+export type { UseCachedVideosReturn } from './useCachedVideos'
 
-// Lit Protocol hooks
-export { useLit, useLitAutoInit, type UseLitReturn } from './useLit'
+// Cache initialization hook
+export { useCacheInit } from './useCacheInit'
 
-// Video Decryption hooks
+// Background sync hook
 export {
-  useVideoDecryption,
-  useVideoDecryptionAuto,
-  type DecryptionStatus,
-  type UseVideoDecryptionReturn,
-  type UseVideoDecryptionOptions,
-} from './useVideoDecryption'
+  useBackgroundSync,
+  useManualSync,
+  useSyncEngineStatus,
+} from './useBackgroundSync'
+export type {
+  UseBackgroundSyncReturn,
+  UseManualSyncReturn,
+  UseSyncEngineStatusReturn,
+} from './useBackgroundSync'
 
-// CID Decryption hooks
+// Expiration status hook
 export {
-  useCidDecryption,
-  useCidDecryptionAuto,
-  useFullVideoDecryption,
-  type CidDecryptionStatus,
-  type UseCidDecryptionReturn,
-  type UseCidDecryptionOptions,
-  type UseFullVideoDecryptionReturn,
-} from './useCidDecryption'
+  useExpirationStatus,
+  useVideoExpiration,
+  useExpirationCounts,
+} from './useExpirationStatus'
+export type {
+  UseExpirationStatusReturn,
+} from './useExpirationStatus'
 
-// IPFS Fetch hooks
+// Cache status hook (for settings page)
 export {
-  useIpfsFetch,
-  useIpfsFetchAuto,
-  useEncryptedVideoFetch,
-  type FetchProgress,
-  type UseIpfsFetchReturn,
-  type UseIpfsFetchOptions,
-  type UseIpfsFetchAutoOptions,
-  type UseEncryptedVideoFetchReturn,
-  type UseEncryptedVideoFetchOptions,
-} from './useIpfsFetch'
-
-// Video source optimization hooks
-export {
-  useOptimalVideoSource,
-  useCodecSupport,
-  type VideoSource,
-  type UseOptimalVideoSourceOptions,
-  type UseOptimalVideoSourceReturn,
-} from './useOptimalVideoSource'
+  useCacheStatus,
+  useContentCacheStatus,
+  useUnifiedCacheStats,
+} from './useCacheStatus'
+export type {
+  UseCacheStatusReturn,
+  ContentCacheStats,
+  UnifiedCacheStats,
+} from './useCacheStatus'

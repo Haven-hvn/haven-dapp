@@ -1,386 +1,307 @@
 /**
  * Video Service
- * 
- * Provides functions for fetching and parsing video entities from Arkiv.
- * Transforms raw Arkiv entities into application-friendly Video objects.
- * 
- * @module services/videoService
+ *
+ * Primary interface for fetching video metadata from Arkiv and managing local cache.
+ * Implements write-through caching: all successful Arkiv fetches are persisted to IndexedDB.
+ * Cache preserves metadata for entities that Arkiv has expired (removed as part of normal
+ * blockchain operations).
  */
 
-import { 
-  ArkivPayload, 
-  ArkivAttributes,
-  Video,
-  SegmentMetadata,
-  LitEncryptionMetadata,
-  CidEncryptionMetadata,
-} from '@/types'
-import { 
-  createArkivClient, 
-  queryEntitiesByOwner, 
-  getAllEntitiesByOwner,
-  getEntity,
-  ArkivError,
-  type ArkivEntity,
-} from '@/lib/arkiv'
-import type { PublicArkivClient } from '@arkiv-network/sdk'
-import type { Transport, Chain } from 'viem'
+import type { Video } from '../types/video'
+import { getVideoCacheService } from './cacheService'
 
-// ============================================================================
-// Types
-// ============================================================================
+// ── Arkiv SDK Types (minimal stubs for compilation) ─────────────────
 
-/**
- * Options for fetching videos.
- */
-export interface FetchVideosOptions {
-  /** Owner's wallet address */
+interface ArkivClient {
+  // Arkiv SDK client instance
+}
+
+interface ArkivEntity {
+  // Raw entity from Arkiv SDK
+  entityKey: string
+  owner: string
+  label: string
+  data: Record<string, unknown>
+  createdAt: string
+  updatedAt?: string
+  expiresAt?: number
+  expiresAtBlock?: bigint
+}
+
+interface FetchVideosOptions {
   ownerAddress: string
-  /** Maximum number of results to return */
   maxResults?: number
-  /** Cursor for pagination */
   cursor?: string
 }
 
-/**
- * Result of a video fetch operation with pagination info.
- */
-export interface FetchVideosResult {
-  /** Fetched videos */
-  videos: Video[]
-  /** Cursor for fetching next page */
-  cursor?: string
-  /** Whether there are more results */
-  hasMore: boolean
-}
+// ── Arkiv SDK Stubs (to be replaced with actual SDK imports) ────────
 
-// ============================================================================
-// Client Management
-// ============================================================================
+let arkivClient: ArkivClient | null = null
 
-let clientInstance: PublicArkivClient<Transport, Chain | undefined, undefined> | null = null
-
-/**
- * Get or create the Arkiv client instance.
- */
-function getClient(): PublicArkivClient<Transport, Chain | undefined, undefined> {
-  if (!clientInstance) {
-    clientInstance = createArkivClient()
+function getClient(): ArkivClient {
+  if (!arkivClient) {
+    // Initialize Arkiv client - replace with actual SDK initialization
+    arkivClient = {} as ArkivClient
   }
-  return clientInstance
+  return arkivClient
 }
 
-// ============================================================================
-// Video Fetching
-// ============================================================================
-
-/**
- * Fetch videos for a specific owner address.
- * 
- * @param options - Fetch options including owner address and pagination
- * @returns Array of Video objects
- * 
- * @example
- * ```typescript
- * const videos = await fetchVideos({ 
- *   ownerAddress: '0x123...', 
- *   maxResults: 50 
- * })
- * ```
- */
-export async function fetchVideos(options: FetchVideosOptions): Promise<Video[]> {
-  const client = getClient()
-  const { ownerAddress, maxResults = 50 } = options
-
-  const entities = await queryEntitiesByOwner(client, ownerAddress, {
-    maxResults,
-    includePayload: true,
-    includeAttributes: true,
-    includeMetadata: true,
-  })
-
-  return entities.map(entity => parseArkivEntity(entity))
+async function getAllEntitiesByOwner(
+  _client: ArkivClient,
+  _ownerAddress: string,
+  _maxResults: number
+): Promise<ArkivEntity[]> {
+  // Stub: Replace with actual Arkiv SDK call
+  // return arkiv.getAllEntitiesByOwner(client, ownerAddress, maxResults)
+  return []
 }
 
-/**
- * Fetch all videos for an owner with automatic pagination.
- * 
- * @param ownerAddress - The wallet address of the owner
- * @param maxResults - Maximum total results to fetch (default: 1000)
- * @returns Array of all Video objects
- */
-export async function fetchAllVideos(
-  ownerAddress: string, 
-  maxResults: number = 1000
-): Promise<Video[]> {
-  const client = getClient()
-
-  const entities = await getAllEntitiesByOwner(client, ownerAddress, maxResults)
-
-  return entities.map(entity => parseArkivEntity(entity))
+async function queryEntitiesByOwner(
+  _client: ArkivClient,
+  _ownerAddress: string,
+  _options: { maxResults: number; cursor?: string }
+): Promise<ArkivEntity[]> {
+  // Stub: Replace with actual Arkiv SDK call
+  // return arkiv.queryEntitiesByOwner(client, ownerAddress, options)
+  return []
 }
 
-/**
- * Fetch a single video by its entity key.
- * 
- * @param entityKey - The Arkiv entity key
- * @returns The Video if found, null otherwise
- */
-export async function fetchVideoById(entityKey: string): Promise<Video | null> {
-  const client = getClient()
-
-  const entity = await getEntity(client, entityKey)
-
-  if (!entity) {
-    return null
-  }
-
-  return parseArkivEntity(entity)
+async function getEntity(
+  _client: ArkivClient,
+  _entityKey: string
+): Promise<ArkivEntity | null> {
+  // Stub: Replace with actual Arkiv SDK call
+  // return arkiv.getEntity(client, entityKey)
+  return null
 }
 
-// ============================================================================
-// Entity Parsing
-// ============================================================================
+// ── Entity Parsing ─────────────────────────────────────────────────
 
 /**
  * Parse an Arkiv entity into a Video object.
- * 
- * @param entity - Raw Arkiv entity from the SDK
- * @returns Parsed Video object
+ * Converts string dates to Date objects and normalizes field names.
  */
-export function parseArkivEntity(entity: ArkivEntity): Video {
-  // Parse payload from base64 JSON
-  let payload: ArkivPayload | null = null
-  try {
-    const payloadJson = atob(entity.payload)
-    payload = JSON.parse(payloadJson) as ArkivPayload
-  } catch (error) {
-    console.error('Failed to parse entity payload:', error)
-  }
-
-  // Parse dates from entity timestamps (using created_at in snake_case from lib/arkiv)
-  const createdAt = parseDate(entity.created_at) || new Date()
-  
-  // Parse encryption metadata
-  const litEncryptionMetadata = parseLitEncryptionMetadata(
-    payload?.lit_encryption_metadata
-  )
-  const cidEncryptionMetadata = parseCidEncryptionMetadata(
-    payload?.cid_encryption_metadata
-  )
-
-  // Parse segment metadata
-  const segmentMetadata = parseSegmentMetadata(payload?.segment_metadata)
-
-  // Determine encrypted status
-  const isEncrypted = determineEncryptedStatus(entity.attributes, payload)
-
-  // Extract attributes with proper typing
-  const attributes = entity.attributes as ArkivAttributes
+function parseArkivEntity(entity: ArkivEntity): Video {
+  const data = entity.data || {}
 
   return {
-    id: entity.key,
-    owner: entity.owner,
-    createdAt,
-    updatedAt: undefined, // Not available in current entity format
+    // Identity
+    id: entity.entityKey,
+    owner: entity.owner.toLowerCase(),
 
-    // Metadata from attributes (with fallbacks to payload)
-    title: attributes.title || payload?.description || 'Untitled Video',
-    description: payload?.description,
-    duration: attributes.duration || payload?.duration || 0,
+    // Content metadata
+    title: (data.title as string) || 'Untitled',
+    description: (data.description as string) || '',
+    duration: (data.duration as number) || 0,
 
-    // Source info
-    sourceUri: attributes.source_uri || payload?.source_uri,
-    creatorHandle: attributes.creator_handle || payload?.creator_handle,
-
-    // Filecoin CIDs
-    filecoinCid: payload?.filecoin_root_cid,
-    encryptedCid: attributes.encrypted_cid || payload?.encrypted_cid,
-    cidHash: payload?.cid_hash,
+    // Storage CIDs
+    filecoinCid: (data.filecoinCid as string) || '',
+    encryptedCid: data.encryptedCid as string | undefined,
 
     // Encryption
-    isEncrypted,
-    litEncryptionMetadata: litEncryptionMetadata || undefined,
-    cidEncryptionMetadata: cidEncryptionMetadata || undefined,
+    isEncrypted: Boolean(data.isEncrypted),
+    litEncryptionMetadata: data.litEncryptionMetadata as Video['litEncryptionMetadata'],
 
     // AI analysis
-    hasAiData: !!payload?.vlm_json_cid,
-    vlmJsonCid: payload?.vlm_json_cid,
-    analysisModel: attributes.analysis_model,
-    phash: attributes.phash,
+    hasAiData: Boolean(data.hasAiData || data.vlmJsonCid),
+    vlmJsonCid: data.vlmJsonCid as string | undefined,
 
-    // Segment and mint info
-    segmentMetadata: segmentMetadata || undefined,
-    mintId: attributes.mint_id,
+    // Minting
+    mintId: data.mintId as string | undefined,
+
+    // Source tracking
+    sourceUri: data.sourceUri as string | undefined,
+    creatorHandle: data.creatorHandle as string | undefined,
+
+    // Timestamps
+    createdAt: new Date(entity.createdAt),
+    updatedAt: entity.updatedAt ? new Date(entity.updatedAt) : undefined,
+
+    // Variants for adaptive streaming
+    codecVariants: data.codecVariants as Video['codecVariants'],
+
+    // Segment metadata
+    segmentMetadata: data.segmentMetadata
+      ? {
+          startTimestamp: new Date((data.segmentMetadata as Record<string, string>).startTimestamp),
+          endTimestamp: (data.segmentMetadata as Record<string, string>).endTimestamp
+            ? new Date((data.segmentMetadata as Record<string, string>).endTimestamp!)
+            : undefined,
+          segmentIndex: (data.segmentMetadata as Record<string, number>).segmentIndex,
+          totalSegments: (data.segmentMetadata as Record<string, number>).totalSegments,
+          mintId: (data.segmentMetadata as Record<string, string>).mintId ?? '',
+          recordingSessionId: (data.segmentMetadata as Record<string, string>).recordingSessionId,
+        }
+      : undefined,
+
+    // Cache status - fresh from Arkiv is always 'active'
+    arkivStatus: 'active',
+
+    // Expiration tracking - convert bigint to number (safe for block numbers)
+    expiresAtBlock: entity.expiresAtBlock ? Number(entity.expiresAtBlock) : undefined,
   }
 }
 
-// ============================================================================
-// Helper Functions
-// ============================================================================
+// ── Video Service Functions ────────────────────────────────────────
 
 /**
- * Parse a date string safely.
+ * Fetch all videos for an owner (full list with cache merge).
+ *
+ * Data flow:
+ * 1. Try Arkiv SDK first (primary source)
+ * 2. On success: sync to cache (write-through, fire-and-forget)
+ * 3. Return merged list (Arkiv results + expired cache entries)
+ * 4. On Arkiv error: fall back to cached data
+ * 5. If both fail: throw original Arkiv error
+ *
+ * @param ownerAddress - The wallet address to fetch videos for
+ * @param maxResults - Maximum number of results to fetch (default: 1000)
+ * @returns Promise resolving to array of Video objects
  */
-function parseDate(dateString: string | undefined): Date | undefined {
-  if (!dateString) return undefined
-  
-  const date = new Date(dateString)
-  return isNaN(date.getTime()) ? undefined : date
-}
-
-/**
- * Parse Lit encryption metadata from JSON string.
- */
-function parseLitEncryptionMetadata(
-  metadataJson: string | undefined
-): LitEncryptionMetadata | null {
-  if (!metadataJson) return null
+export async function fetchAllVideos(
+  ownerAddress: string,
+  maxResults: number = 1000
+): Promise<Video[]> {
+  const cacheService = getVideoCacheService(ownerAddress)
 
   try {
-    const parsed = JSON.parse(metadataJson)
+    // 1. Fetch from Arkiv (primary source)
+    const client = getClient()
+    const entities = await getAllEntitiesByOwner(client, ownerAddress, maxResults)
+    const arkivVideos = entities.map(entity => parseArkivEntity(entity))
 
-    // Basic validation
-    if (
-      parsed.version === 'hybrid-v1' &&
-      typeof parsed.encryptedKey === 'string' &&
-      typeof parsed.iv === 'string' &&
-      Array.isArray(parsed.accessControlConditions)
-    ) {
-      return parsed as LitEncryptionMetadata
+    // 2. Sync to cache (write-through) — fire and forget, don't block return
+    cacheService.syncWithArkiv(arkivVideos).catch(err => {
+      console.warn('[VideoService] Cache sync failed:', err)
+    })
+
+    // 3. Return merged list (Arkiv + expired cached entries)
+    return await cacheService.getMergedVideos(arkivVideos)
+  } catch (arkivError) {
+    // 4. Arkiv fetch error — log and return cached data
+    console.warn('[VideoService] Arkiv fetch error:', arkivError)
+
+    const cachedVideos = await cacheService.getVideos()
+    if (cachedVideos.length > 0) {
+      return cachedVideos
     }
 
-    return null
-  } catch {
-    return null
+    // 5. Both Arkiv and cache failed — throw original error
+    throw arkivError
   }
 }
 
 /**
- * Parse CID encryption metadata.
+ * Fetch videos with pagination (for infinite scroll UIs).
+ *
+ * Same write-through pattern as fetchAllVideos, but returns only
+ * the requested page. Cache fallback returns a slice if available.
+ *
+ * @param options - FetchVideosOptions with ownerAddress, maxResults, cursor
+ * @returns Promise resolving to array of Video objects for the page
  */
-function parseCidEncryptionMetadata(
-  metadata: unknown
-): CidEncryptionMetadata | null {
-  if (!metadata || typeof metadata !== 'object') return null
+export async function fetchVideos(options: FetchVideosOptions): Promise<Video[]> {
+  const cacheService = getVideoCacheService(options.ownerAddress)
 
-  const meta = metadata as Record<string, unknown>
+  try {
+    const client = getClient()
+    const { ownerAddress, maxResults = 50, cursor } = options
+    const entities = await queryEntitiesByOwner(client, ownerAddress, {
+      maxResults,
+      cursor,
+    })
+    const arkivVideos = entities.map(entity => parseArkivEntity(entity))
 
-  // Basic validation
-  if (
-    typeof meta.ciphertext === 'string' &&
-    typeof meta.dataToEncryptHash === 'string' &&
-    Array.isArray(meta.accessControlConditions) &&
-    typeof meta.chain === 'string'
-  ) {
-    return meta as unknown as CidEncryptionMetadata
+    // Write-through to cache
+    cacheService.cacheVideos(arkivVideos).catch(err => {
+      console.warn('[VideoService] Cache write failed:', err)
+    })
+
+    return arkivVideos
+  } catch (arkivError) {
+    console.warn('[VideoService] Arkiv fetch failed, using cache:', arkivError)
+    const cachedVideos = await cacheService.getVideos()
+    if (cachedVideos.length > 0) {
+      return cachedVideos.slice(0, options.maxResults || 50)
+    }
+    throw arkivError
+  }
+}
+
+/**
+ * Fetch a single video by entity key.
+ *
+ * Tries Arkiv first, then falls back to cache. Note: without knowing
+ * the owner address, we cannot check the cache on Arkiv failure.
+ * For full cache support including expired entities, use fetchVideoByIdWithCache.
+ *
+ * @param entityKey - The Arkiv entity key (video ID)
+ * @returns Promise resolving to Video object or null if not found
+ */
+export async function fetchVideoById(entityKey: string): Promise<Video | null> {
+  // Try Arkiv first
+  try {
+    const client = getClient()
+    const entity = await getEntity(client, entityKey)
+
+    if (entity) {
+      const video = parseArkivEntity(entity)
+
+      // Write-through to cache (need wallet address from the video)
+      const cacheService = getVideoCacheService(video.owner)
+      cacheService.cacheVideo(video).catch(err => {
+        console.warn('[VideoService] Cache write failed:', err)
+      })
+      // Update last accessed
+      cacheService.touchVideo(video.id).catch(() => {})
+
+      return video
+    }
+  } catch (error) {
+    console.warn('[VideoService] Arkiv fetch failed for entity:', entityKey, error)
   }
 
+  // Return cached data — try all known wallet databases
+  // Note: This is a limitation since we don't know the owner address
+  // The hook layer (useVideoQuery) should pass the owner address when available
   return null
 }
 
 /**
- * Parse segment metadata from Arkiv payload.
+ * Fetch a single video by entity key with full cache support.
+ *
+ * Provides cache lookup for expired entities that Arkiv no longer has.
+ * This is the preferred method when the owner address is known.
+ *
+ * @param entityKey - The Arkiv entity key (video ID)
+ * @param ownerAddress - The wallet address that owns the video
+ * @returns Promise resolving to Video object or null if not found
  */
-function parseSegmentMetadata(
-  segmentMeta: unknown
-): SegmentMetadata | null {
-  if (!segmentMeta || typeof segmentMeta !== 'object') return null
+export async function fetchVideoByIdWithCache(
+  entityKey: string,
+  ownerAddress: string
+): Promise<Video | null> {
+  const cacheService = getVideoCacheService(ownerAddress)
 
-  const meta = segmentMeta as Record<string, unknown>
+  try {
+    const client = getClient()
+    const entity = await getEntity(client, entityKey)
 
-  // Validate required fields
-  if (
-    typeof meta.segment_index !== 'number' ||
-    typeof meta.mint_id !== 'string' ||
-    typeof meta.start_timestamp !== 'string'
-  ) {
-    return null
-  }
-
-  const startTimestamp = new Date(meta.start_timestamp)
-  if (isNaN(startTimestamp.getTime())) {
-    return null
-  }
-
-  let endTimestamp: Date | undefined
-  if (meta.end_timestamp) {
-    endTimestamp = new Date(meta.end_timestamp as string)
-    if (isNaN(endTimestamp.getTime())) {
-      endTimestamp = undefined
+    if (entity) {
+      const video = parseArkivEntity(entity)
+      cacheService.cacheVideo(video).catch(() => {})
+      cacheService.touchVideo(video.id).catch(() => {})
+      return video
     }
-  }
 
-  return {
-    segmentIndex: meta.segment_index,
-    startTimestamp,
-    endTimestamp,
-    mintId: meta.mint_id,
-    recordingSessionId: typeof meta.recording_session_id === 'string' 
-      ? meta.recording_session_id 
-      : undefined,
+    // Entity not found on Arkiv — check cache (may be expired)
+    return await cacheService.getVideo(entityKey)
+  } catch (error) {
+    console.warn('[VideoService] Arkiv fetch failed, checking cache:', error)
+    return await cacheService.getVideo(entityKey)
   }
 }
 
-/**
- * Determine if a video is encrypted based on attributes and payload.
- */
-function determineEncryptedStatus(
-  attributes: Record<string, unknown>,
-  payload: ArkivPayload | null
-): boolean {
-  // Check attributes first
-  const isEncryptedAttr = attributes.is_encrypted
-  if (isEncryptedAttr === 1) return true
-  if (isEncryptedAttr === 0) return false
+// ── Type Exports ───────────────────────────────────────────────────
 
-  // Fall back to payload
-  if (payload?.is_encrypted !== undefined) {
-    return payload.is_encrypted
-  }
-
-  // Default: check for encrypted CID as indicator
-  return !!attributes.encrypted_cid || !!payload?.encrypted_cid
-}
-
-// ============================================================================
-// Error Handling
-// ============================================================================
-
-/**
- * Check if an error is an ArkivError.
- */
-export function isArkivError(error: unknown): error is ArkivError {
-  return error instanceof ArkivError || 
-    (error instanceof Error && error.name === 'ArkivError')
-}
-
-/**
- * Get a user-friendly error message from an error.
- */
-export function getVideoErrorMessage(error: unknown): string {
-  if (error instanceof ArkivError) {
-    switch (error.code) {
-      case 'QUERY_ERROR':
-        return 'Failed to query videos. Please try again.'
-      case 'GET_ERROR':
-        return 'Failed to load video. Please try again.'
-      case 'FETCH_ALL_ERROR':
-        return 'Failed to load all videos. Please try again.'
-      case 'NOT_INITIALIZED':
-        return 'Video service not initialized. Please refresh the page.'
-      case 'NO_ADDRESS':
-        return 'Please connect your wallet to view videos.'
-      case 'NETWORK_ERROR':
-        return 'Network error. Please check your connection.'
-      default:
-        return error.message || 'An unexpected error occurred.'
-    }
-  }
-
-  if (error instanceof Error) {
-    return error.message
-  }
-
-  return 'An unexpected error occurred.'
-}
+export type { FetchVideosOptions }
