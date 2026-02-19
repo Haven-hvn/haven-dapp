@@ -23,6 +23,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PROGRESS_FILE="$SCRIPT_DIR/SPRINT_PROGRESS.md"
+README_FILE="$SCRIPT_DIR/README.md"
 
 # Color codes for output
 RED='\033[0;31m'
@@ -134,20 +135,24 @@ update_progress() {
     timestamp=$(date '+%Y-%m-%d %H:%M:%S')
 
     # Update overall progress counts
-    local completed_count
-    completed_count=$(grep -c "✅ Complete" "$PROGRESS_FILE" 2>/dev/null || echo "0")
+    local completed_count=0
+    if [[ -f "$PROGRESS_FILE" ]]; then
+        completed_count=$(grep -c "✅ Complete" "$PROGRESS_FILE" 2>/dev/null) || completed_count=0
+        completed_count=${completed_count:-0}
+    fi
 
     if [[ "$status" == "✅ Complete" ]]; then
         completed_count=$((completed_count + 1))
     fi
 
-    sed -i '' "s/- \*\*Current Task:\*\* .*/- **Current Task:** $task_num \/ $TOTAL_TASKS/" "$PROGRESS_FILE"
-    sed -i '' "s/- \*\*Completed:\*\* .*/- **Completed:** $completed_count \/ $TOTAL_TASKS/" "$PROGRESS_FILE"
+    # Use perl for more reliable text replacement (works on both macOS and Linux)
+    perl -i -pe "s|- \*\*Current Task:\*\* .*|- **Current Task:** $task_num / $TOTAL_TASKS|" "$PROGRESS_FILE"
+    perl -i -pe "s|- \*\*Completed:\*\* .*|- **Completed:** $completed_count / $TOTAL_TASKS|" "$PROGRESS_FILE"
 
     if [[ $completed_count -eq $TOTAL_TASKS ]]; then
-        sed -i '' "s/- \*\*Status:\*\* .*/- **Status:** 🟢 Complete/" "$PROGRESS_FILE"
+        perl -i -pe "s|- \*\*Status:\*\* .*|- **Status:** 🟢 Complete|" "$PROGRESS_FILE"
     elif [[ $completed_count -gt 0 ]]; then
-        sed -i '' "s/- \*\*Status:\*\* .*/- **Status:** 🟡 In Progress/" "$PROGRESS_FILE"
+        perl -i -pe "s|- \*\*Status:\*\* .*|- **Status:** 🟡 In Progress|" "$PROGRESS_FILE"
     fi
 
     # Truncate description for the table
@@ -155,7 +160,7 @@ update_progress() {
     local row="| $task_num | $sprint | $task_file | $short_desc | $status | $timestamp |"
 
     if grep -q "| $task_num |" "$PROGRESS_FILE"; then
-        # Update existing row — use a temp file approach for safety
+        # Update existing row
         local tmp_file
         tmp_file=$(mktemp)
         awk -v num="$task_num" -v row="$row" '
@@ -221,19 +226,34 @@ run_task() {
     echo -e "${YELLOW}-----------------------------------------------------------${NC}"
     echo ""
 
-    # Show first 20 lines of the task file as preview
-    head -n 20 "$task_path"
-    echo ""
-    echo -e "${YELLOW}  ... (see full task file for details)${NC}"
-    echo -e "${YELLOW}-----------------------------------------------------------${NC}"
-    echo ""
+    # Create a focused prompt that tells the AI exactly what to do
+    local focused_prompt
+    focused_prompt=$(cat << EOF
+You are working on the Haven DApp video cache implementation. 
 
-    # Run kimi in yolo mode with the task file as prompt
-    print_info "Starting kimi --yolo with task prompt..."
+YOUR CURRENT TASK: $description
+SPRINT: $sprint
+TASK FILE: $task_file
+
+INSTRUCTIONS:
+1. Read the task requirements below
+2. Implement ONLY what is requested in this specific task
+3. Do not work on other parts of the project
+4. Follow the code examples and patterns shown in the task
+5. Make sure your implementation matches the acceptance criteria
+6. Report back with what files you created/modified
+
+TASK REQUIREMENTS:
+$(cat "$task_path")
+EOF
+)
+
+    # Run kimi with the focused prompt
+    print_info "Starting kimi with focused task instructions..."
     echo ""
 
     local exit_code=0
-    (cd "$PROJECT_DIR" && kimi --yolo --prompt "$task_path") || exit_code=$?
+    (cd "$PROJECT_DIR" && kimi --yolo --prompt "$focused_prompt") || exit_code=$?
 
     if [[ $exit_code -eq 0 ]]; then
         echo ""
@@ -256,6 +276,7 @@ main() {
     print_info "Total Tasks: $TOTAL_TASKS"
     print_info "Progress File: $PROGRESS_FILE"
     print_info "Project Dir: $PROJECT_DIR"
+    print_info "README File: $README_FILE"
     echo ""
 
     # Check prerequisites
@@ -323,7 +344,7 @@ main() {
     print_info "Progress tracked in: $PROGRESS_FILE"
 
     # Update final status
-    sed -i '' "s/- \*\*Status:\*\* .*/- **Status:** 🟢 Complete/" "$PROGRESS_FILE"
+    perl -i -pe "s|- \*\*Status:\*\* .*|- **Status:** 🟢 Complete|" "$PROGRESS_FILE"
 }
 
 # ─── Help ──────────────────────────────────────────────────────────────
@@ -403,7 +424,7 @@ list_tasks() {
     echo ""
     print_header "Haven DApp — All Video Cache Tasks"
 
-    printf "\n%-5s %-12s %-40s %-15s\n" "Task" "Sprint" "Task File" "Status"
+    printf "\n%-5s %-12s %-45s %-15s\n" "Task" "Sprint" "Task File" "Status"
     echo "──────────────────────────────────────────────────────────────────────────────────"
 
     local i=1
@@ -428,7 +449,7 @@ list_tasks() {
             status="📁 Missing"
         fi
 
-        printf "%-5s %-12s %-40s %-15s\n" "$i" "$sprint" "$task_file" "$status"
+        printf "%-5s %-12s %-45s %-15s\n" "$i" "$sprint" "$task_file" "$status"
         ((i++))
     done
 
@@ -463,7 +484,7 @@ dry_run() {
 
         if [[ -f "$task_path" ]]; then
             echo -e "    ${GREEN}✓ File exists${NC}"
-            echo "    Command: kimi --yolo --prompt $task_path"
+            echo "    Command: kimi --yolo with focused task instructions"
         else
             echo -e "    ${RED}✗ File not found!${NC}"
         fi
@@ -473,6 +494,7 @@ dry_run() {
     done
 
     print_success "Dry run complete. $TOTAL_TASKS tasks would be executed."
+    print_info "Each task will be executed with focused instructions for better AI understanding."
 }
 
 # ─── Argument parsing ─────────────────────────────────────────────────
