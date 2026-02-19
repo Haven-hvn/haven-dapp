@@ -124,7 +124,8 @@ update_progress() {
     # Update overall progress counts
     local completed_count=0
     if [[ -f "$PROGRESS_FILE" ]]; then
-        completed_count=$(grep -c "✅ Complete" "$PROGRESS_FILE" 2>/dev/null || echo "0")
+        completed_count=$(grep -c "✅ Complete" "$PROGRESS_FILE" 2>/dev/null) || completed_count=0
+		completed_count=${completed_count:-0}
     fi
 
     if [[ "$status" == "✅ Complete" ]]; then
@@ -239,7 +240,7 @@ EOF
     echo ""
 
     local exit_code=0
-    (cd "$PROJECT_DIR" && echo "$focused_prompt" | kimi --yolo) || exit_code=$?
+    (cd "$PROJECT_DIR" && kimi --yolo --prompt "$focused_prompt") || exit_code=$?
 
     if [[ $exit_code -eq 0 ]]; then
         echo ""
