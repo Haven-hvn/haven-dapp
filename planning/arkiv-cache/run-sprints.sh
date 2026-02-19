@@ -129,13 +129,14 @@ update_progress() {
         completed_count=$((completed_count + 1))
     fi
 
-    sed -i '' "s/- \*\*Current Task:\*\* .*/- **Current Task:** $task_num \/ $TOTAL_TASKS/" "$PROGRESS_FILE"
-    sed -i '' "s/- \*\*Completed:\*\* .*/- **Completed:** $completed_count \/ $TOTAL_TASKS/" "$PROGRESS_FILE"
+    # Use Linux-compatible sed syntax
+    sed -i "s/- \*\*Current Task:\*\* .*/- **Current Task:** $task_num \/ $TOTAL_TASKS/" "$PROGRESS_FILE"
+    sed -i "s/- \*\*Completed:\*\* .*/- **Completed:** $completed_count \/ $TOTAL_TASKS/" "$PROGRESS_FILE"
 
     if [[ $completed_count -eq $TOTAL_TASKS ]]; then
-        sed -i '' "s/- \*\*Status:\*\* .*/- **Status:** 🟢 Complete/" "$PROGRESS_FILE"
+        sed -i "s/- \*\*Status:\*\* .*/- **Status:** 🟢 Complete/" "$PROGRESS_FILE"
     elif [[ $completed_count -gt 0 ]]; then
-        sed -i '' "s/- \*\*Status:\*\* .*/- **Status:** 🟡 In Progress/" "$PROGRESS_FILE"
+        sed -i "s/- \*\*Status:\*\* .*/- **Status:** 🟡 In Progress/" "$PROGRESS_FILE"
     fi
 
     # Truncate description for the table
@@ -327,7 +328,7 @@ main() {
     print_info "Progress tracked in: $PROGRESS_FILE"
 
     # Update final status
-    sed -i '' "s/- \*\*Status:\*\* .*/- **Status:** 🟢 Complete/" "$PROGRESS_FILE"
+    sed -i "s/- \*\*Status:\*\* .*/- **Status:** 🟢 Complete/" "$PROGRESS_FILE"
 }
 
 # ─── Help ──────────────────────────────────────────────────────────────
@@ -456,7 +457,7 @@ dry_run() {
 
         if [[ -f "$task_path" ]]; then
             echo -e "    ${GREEN}✓ File exists${NC}"
-            echo "    Command: kimi --yolo --prompt <README.md + $task_path>"
+            echo "    Command: kimi --yolo with focused task instructions"
         else
             echo -e "    ${RED}✗ File not found!${NC}"
         fi
@@ -466,7 +467,7 @@ dry_run() {
     done
 
     print_success "Dry run complete. $TOTAL_TASKS tasks would be executed."
-    print_info "Each task will be executed with README.md context for better AI understanding."
+    print_info "Each task will be executed with focused instructions for better AI understanding."
 }
 
 # ─── Argument parsing ─────────────────────────────────────────────────
