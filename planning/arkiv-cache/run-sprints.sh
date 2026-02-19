@@ -23,6 +23,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROGRESS_FILE="$SCRIPT_DIR/SPRINT_PROGRESS.md"
+README_FILE="$SCRIPT_DIR/README.md"
 
 # Color codes for output
 RED='\033[0;31m'
@@ -198,6 +199,12 @@ run_task() {
         return 1
     fi
 
+    # Verify README file exists
+    if [[ ! -f "$README_FILE" ]]; then
+        print_warning "README file not found: $README_FILE"
+        print_info "Proceeding without README context"
+    fi
+
     # Mark as in progress
     mark_in_progress "$task_num" "$sprint" "$task_file" "$description"
 
@@ -215,12 +222,36 @@ run_task() {
     echo -e "${YELLOW}-----------------------------------------------------------${NC}"
     echo ""
 
-    # Run kimi in yolo mode with the task file as prompt
-    print_info "Starting kimi --yolo with task prompt..."
+    # Create a combined prompt with README and task file
+    local combined_prompt=""
+    local temp_prompt_file
+    
+    if [[ -f "$README_FILE" ]]; then
+        temp_prompt_file=$(mktemp)
+        echo "# PROJECT CONTEXT (README.md)" > "$temp_prompt_file"
+        echo "==============================" >> "$temp_prompt_file"
+        cat "$README_FILE" >> "$temp_prompt_file"
+        echo "" >> "$temp_prompt_file"
+        echo "" >> "$temp_prompt_file"
+        echo "# TASK REQUIREMENTS" >> "$temp_prompt_file"
+        echo "===================" >> "$temp_prompt_file"
+        cat "$task_path" >> "$temp_prompt_file"
+        combined_prompt="$temp_prompt_file"
+    else
+        combined_prompt="$task_path"
+    fi
+
+    # Run kimi in yolo mode with the combined prompt
+    print_info "Starting kimi --yolo with project context and task prompt..."
     echo ""
 
     local exit_code=0
-    (cd "$PROJECT_DIR" && kimi --yolo --prompt "$task_path") || exit_code=$?
+    (cd "$PROJECT_DIR" && kimi --yolo --prompt "$combined_prompt") || exit_code=$?
+
+    # Clean up temp file if created
+    if [[ -n "$temp_prompt_file" && -f "$temp_prompt_file" ]]; then
+        rm "$temp_prompt_file"
+    fi
 
     if [[ $exit_code -eq 0 ]]; then
         echo ""
@@ -243,6 +274,7 @@ main() {
     print_info "Total Tasks: $TOTAL_TASKS"
     print_info "Progress File: $PROGRESS_FILE"
     print_info "Project Dir: $PROJECT_DIR"
+    print_info "README File: $README_FILE"
     echo ""
 
     # Check prerequisites
@@ -439,7 +471,7 @@ dry_run() {
 
         if [[ -f "$task_path" ]]; then
             echo -e "    ${GREEN}✓ File exists${NC}"
-            echo "    Command: kimi --yolo --prompt $task_path"
+            echo "    Command: kimi --yolo --prompt <README.md + $task_path>"
         else
             echo -e "    ${RED}✗ File not found!${NC}"
         fi
@@ -449,6 +481,7 @@ dry_run() {
     done
 
     print_success "Dry run complete. $TOTAL_TASKS tasks would be executed."
+    print_info "Each task will be executed with README.md context for better AI understanding."
 }
 
 # ─── Argument parsing ─────────────────────────────────────────────────
