@@ -122,21 +122,23 @@ update_progress() {
     timestamp=$(date '+%Y-%m-%d %H:%M:%S')
 
     # Update overall progress counts
-    local completed_count
-    completed_count=$(grep -c "✅ Complete" "$PROGRESS_FILE" 2>/dev/null || echo "0")
+    local completed_count=0
+    if [[ -f "$PROGRESS_FILE" ]]; then
+        completed_count=$(grep -c "✅ Complete" "$PROGRESS_FILE" 2>/dev/null || echo "0")
+    fi
 
     if [[ "$status" == "✅ Complete" ]]; then
         completed_count=$((completed_count + 1))
     fi
 
-    # Use different delimiter for sed to avoid conflicts with forward slashes
-    sed -i "s|- \*\*Current Task:\*\* .*|- **Current Task:** $task_num / $TOTAL_TASKS|" "$PROGRESS_FILE"
-    sed -i "s|- \*\*Completed:\*\* .*|- **Completed:** $completed_count / $TOTAL_TASKS|" "$PROGRESS_FILE"
+    # Use perl for more reliable text replacement
+    perl -i -pe "s|- \*\*Current Task:\*\* .*|- **Current Task:** $task_num / $TOTAL_TASKS|" "$PROGRESS_FILE"
+    perl -i -pe "s|- \*\*Completed:\*\* .*|- **Completed:** $completed_count / $TOTAL_TASKS|" "$PROGRESS_FILE"
 
     if [[ $completed_count -eq $TOTAL_TASKS ]]; then
-        sed -i "s|- \*\*Status:\*\* .*|- **Status:** 🟢 Complete|" "$PROGRESS_FILE"
+        perl -i -pe "s|- \*\*Status:\*\* .*|- **Status:** 🟢 Complete|" "$PROGRESS_FILE"
     elif [[ $completed_count -gt 0 ]]; then
-        sed -i "s|- \*\*Status:\*\* .*|- **Status:** 🟡 In Progress|" "$PROGRESS_FILE"
+        perl -i -pe "s|- \*\*Status:\*\* .*|- **Status:** 🟡 In Progress|" "$PROGRESS_FILE"
     fi
 
     # Truncate description for the table
@@ -144,7 +146,7 @@ update_progress() {
     local row="| $task_num | $sprint | $task_file | $short_desc | $status | $timestamp |"
 
     if grep -q "| $task_num |" "$PROGRESS_FILE"; then
-        # Update existing row — use a temp file approach for safety
+        # Update existing row
         local tmp_file
         tmp_file=$(mktemp)
         awk -v num="$task_num" -v row="$row" '
@@ -328,7 +330,7 @@ main() {
     print_info "Progress tracked in: $PROGRESS_FILE"
 
     # Update final status
-    sed -i "s|- \*\*Status:\*\* .*|- **Status:** 🟢 Complete|" "$PROGRESS_FILE"
+    perl -i -pe "s|- \*\*Status:\*\* .*|- **Status:** 🟢 Complete|" "$PROGRESS_FILE"
 }
 
 # ─── Help ──────────────────────────────────────────────────────────────
