@@ -4,19 +4,22 @@
  * Video List Item Component
  * 
  * Displays a video in list format with thumbnail, metadata,
- * encryption indicator, and AI analysis indicator.
+ * encryption indicator, cache status badge, and AI analysis indicator.
  * 
  * @module components/library/VideoListItem
  */
 
 import Link from 'next/link'
-import { Lock, Sparkles } from 'lucide-react'
+import { Lock, Sparkles, Cloud } from 'lucide-react'
 import type { Video } from '@/types'
 import { formatDuration, formatDate } from '@/lib/format'
 
 interface VideoListItemProps {
   /** Video data to display */
   video: Video
+
+  /** Whether the video content is cached (for encrypted videos) */
+  isCached?: boolean
 }
 
 /**
@@ -24,7 +27,7 @@ interface VideoListItemProps {
  * Displays video thumbnail with duration badge, metadata,
  * and encryption/AI indicators in a horizontal layout.
  */
-export function VideoListItem({ video }: VideoListItemProps) {
+export function VideoListItem({ video, isCached = false }: VideoListItemProps) {
   const formattedDuration = formatDuration(video.duration)
   const formattedDate = formatDate(video.createdAt)
   
@@ -62,9 +65,19 @@ export function VideoListItem({ video }: VideoListItemProps) {
               <Lock className="w-3 h-3 text-white" />
             </div>
           )}
+
+          {/* Green cloud badge - cached encrypted videos */}
+          {video.isEncrypted && isCached && (
+            <div
+              className="absolute top-1 right-1 p-1 bg-green-500/80 rounded-full touch-manipulation"
+              title="Cached — instant playback"
+            >
+              <Cloud className="w-3 h-3 text-white" />
+            </div>
+          )}
           
-          {/* AI indicator */}
-          {video.hasAiData && (
+          {/* AI indicator (shown only if not cached, or on the left side if cached) */}
+          {video.hasAiData && !(video.isEncrypted && isCached) && (
             <div 
               className="absolute top-1 right-1 p-1 bg-purple-500/80 rounded-full touch-manipulation" 
               title="AI Analysis Available"
@@ -83,12 +96,21 @@ export function VideoListItem({ video }: VideoListItemProps) {
         
         {/* Info */}
         <div className="flex-1 min-w-0 py-0.5 sm:py-1">
-          <h3 
-            className="font-medium text-sm sm:text-base line-clamp-1" 
-            title={video.title}
-          >
-            {video.title}
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 
+              className="font-medium text-sm sm:text-base line-clamp-1" 
+              title={video.title}
+            >
+              {video.title}
+            </h3>
+            {/* Cached badge inline with title on mobile */}
+            {video.isEncrypted && isCached && (
+              <span className="sm:hidden inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-500/10 text-green-600 text-xs rounded">
+                <Cloud className="w-3 h-3" />
+                Cached
+              </span>
+            )}
+          </div>
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1">
             {formattedDate}
           </p>
@@ -104,6 +126,13 @@ export function VideoListItem({ video }: VideoListItemProps) {
               <span className="hidden sm:inline-flex items-center gap-1 text-xs text-muted-foreground">
                 <Lock className="w-3 h-3" />
                 Encrypted
+              </span>
+            )}
+            {/* Cached badge in metadata row for larger screens */}
+            {video.isEncrypted && isCached && (
+              <span className="hidden sm:inline-flex items-center gap-1 text-xs text-green-600">
+                <Cloud className="w-3 h-3" />
+                Cached
               </span>
             )}
             {video.hasAiData && (

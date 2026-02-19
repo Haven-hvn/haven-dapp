@@ -1,20 +1,21 @@
 /**
  * useCacheStatus Hook
  *
- * Provides cache status information for the settings page and other cache
- * management UI. Returns both metadata cache stats and forward-compatible
- * video content cache stats.
+ * Provides cache status information for video content caching.
+ * Supports two modes:
+ * 1. No arguments: Returns global cache stats (metadata + content)
+ * 2. With videoIds: Returns per-video cache status for library grid view
  *
- * This hook is designed to accommodate the video content cache (video-cache)
- * when it is implemented. During arkiv-cache implementation, contentStats
- * returns null.
+ * @module hooks/useCacheStatus
+ * @see ../../../src/lib/video-cache.ts - Video cache API wrapper
  */
 
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import type { CacheStats } from '../types/cache'
 import { useCacheStore, useCacheHealth } from '../stores/cacheStore'
+import { hasVideo, getCacheStorageEstimate, listCachedVideos } from '../lib/video-cache'
 
 // Mock for useAppKitAccount - in real app this would come from @reown/appkit
 interface AppKitAccount {
@@ -32,7 +33,7 @@ function useAppKitAccount(): AppKitAccount {
 }
 
 // =============================================================================
-// Types
+// Types - Global Cache Status (No Arguments)
 // =============================================================================
 
 /**
@@ -62,7 +63,7 @@ export interface UnifiedCacheStats extends CacheStats {
 }
 
 /**
- * Return type for useCacheStatus hook.
+ * Return type for useCacheStatus hook (no arguments - global stats).
  * Provides both metadata and content cache information.
  */
 export interface UseCacheStatusReturn {
@@ -81,7 +82,71 @@ export interface UseCacheStatusReturn {
 }
 
 // =============================================================================
-// Hook
+// Types - Per-Video Cache Status (With videoIds)
+// =============================================================================
+
+/**
+ * Return type for useCacheStatus hook (with videoIds - per-video status).
+ * Used in library grid view to show cache badges on individual videos.
+ */
+export interface UseVideoCacheStatusReturn {
+  /** Map of videoId → isCached */
+  cacheStatus: Map<string, boolean>
+  /** Whether the cache check is still loading */
+  isLoading: boolean
+  /** Refresh cache status for all videos */
+  refresh: () => void
+  /** Total number of cached videos */
+  cachedCount: number
+  /** Total cache size (approximate) */
+  totalCacheSize: number
+}
+
+// =============================================================================
+// Hook - Per-Video Cache Status (Library Grid View)
+// =============================================================================
+
+/**
+ * Hook that checks cache status for multiple videos without reading their content.
+ * Optimized for the library grid view - checks videos in parallel for efficiency.
+ *
+ * Features:
+ * - Returns a Map of videoId → isCached for easy lookup
+ * - Checks all videos in parallel (not sequentially)
+ * - Provides refresh function to re-check cache status
+ * - Calculates cachedCount and totalCacheSize
+ * - Handles errors gracefully (returns false for failed checks)
+ *
+ * @param videoIds - Array of video IDs to check
+ * @returns UseVideoCacheStatusReturn with per-video cache status
+ *
+ * @example
+ * ```tsx
+ * function LibraryView({ videos }: { videos: Video[] }) {
+ *   const videoIds = videos.filter(v => v.isEncrypted).map(v => v.id)
+ *   const { cacheStatus, cachedCount, isLoading } = useCacheStatus(videoIds)
+ *
+ *   return (
+ *     <div>
+ *       <p>{cachedCount} videos cached</p>
+ *       <div className="grid">
+ *         {videos.map(video => (
+ *           <VideoCard
+ *             key={video.id}
+ *             video={video}
+ *             isCached={cacheStatus.get(video.id) ?? false}
+ *           />
+ *         ))}
+ *       </div>
+ *     </div>
+ *   )
+ * }
+ * ```
+ */
+export function useCacheStatus(videoIds: string[]): UseVideoCacheStatusReturn
+
+// =============================================================================
+// Hook - Global Cache Status (Settings Page)
 // =============================================================================
 
 /**
@@ -93,17 +158,7 @@ export interface UseCacheStatusReturn {
  * - Calculates combined total cache size
  * - Provides refresh function to update stats
  *
- * During arkiv-cache implementation:
- * - metadataStats: populated from cache store
- * - contentStats: always null
- * - totalCacheSize: same as metadata cache size
- *
- * When video-cache is implemented:
- * - metadataStats: populated from arkiv-cache
- * - contentStats: populated from video-cache service
- * - totalCacheSize: sum of both caches
- *
- * @returns UseCacheStatusReturn with cache status information
+ * @returns UseCacheStatusReturn with global cache status information
  *
  * @example
  * ```tsx
@@ -123,41 +178,141 @@ export interface UseCacheStatusReturn {
  * }
  * ```
  */
-export function useCacheStatus(): UseCacheStatusReturn {
+export function useCacheStatus(): UseCacheStatusReturn
+
+// =============================================================================
+// Implementation
+// =============================================================================
+
+/**
+ * Implementation of useCacheStatus that handles both signatures:
+ * - useCacheStatus() → Global cache stats for settings page
+ * - useCacheStatus(videoIds: string[]) → Per-video cache status for library grid
+ */
+export function useCacheStatus(
+  videoIds?: string[]
+): UseCacheStatusReturn | UseVideoCacheStatusReturn {
   const { address, isConnected } = useAppKitAccount()
   const { stats: storeStats } = useCacheHealth()
 
+  // ============================================================================
+  // Global Stats State (for no-argument version)
+  // ============================================================================
   const [metadataStats, setMetadataStats] = useState<CacheStats | null>(null)
   const [contentStats, setContentStats] = useState<ContentCacheStats | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingGlobal, setIsLoadingGlobal] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+
+  // ============================================================================
+  // Per-Video Status State (for videoIds argument version)
+  // ============================================================================
+  const [cacheStatus, setCacheStatus] = useState<Map<string, boolean>>(new Map())
+  const [isLoadingVideos, setIsLoadingVideos] = useState(false)
+  const [totalCacheSize, setTotalCacheSize] = useState(0)
+
+  // ============================================================================
+  // Per-Video Cache Check Logic
+  // ============================================================================
+  const checkVideoCacheStatus = useCallback(async (ids: string[]) => {
+    setIsLoadingVideos(true)
+
+    try {
+      // Check all video IDs in parallel for efficiency
+      const results = await Promise.all(
+        ids.map(async (id) => {
+          const cached = await hasVideo(id).catch(() => false)
+          return [id, cached] as [string, boolean]
+        })
+      )
+
+      setCacheStatus(new Map(results))
+
+      // Get total cache size
+      const estimate = await getCacheStorageEstimate()
+      setTotalCacheSize(estimate.usage)
+    } catch (err) {
+      console.warn('[useCacheStatus] Failed to check cache status:', err)
+      // On error, set all to false
+      setCacheStatus(new Map(ids.map(id => [id, false])))
+    } finally {
+      setIsLoadingVideos(false)
+    }
+  }, [])
+
+  // Refresh function for per-video version
+  const refreshVideos = useCallback(() => {
+    if (videoIds && videoIds.length > 0) {
+      checkVideoCacheStatus(videoIds)
+    }
+  }, [videoIds, checkVideoCacheStatus])
+
+  // Effect to check cache status when videoIds change
+  useEffect(() => {
+    if (videoIds && videoIds.length > 0) {
+      checkVideoCacheStatus(videoIds)
+    }
+  }, [videoIds?.join(','), checkVideoCacheStatus])
+
+  // Calculate cached count for per-video version
+  const cachedCount = useMemo(() => {
+    return Array.from(cacheStatus.values()).filter(Boolean).length
+  }, [cacheStatus])
+
+  // ============================================================================
+  // Global Stats Logic (for no-argument version)
+  // ============================================================================
 
   /**
    * Fetch content cache stats from the video-cache system.
-   * This is a placeholder that returns null until video-cache is implemented.
+   * Queries the Cache API for cached video content and returns statistics.
    */
   const fetchContentStats = useCallback(async (): Promise<ContentCacheStats | null> => {
-    // TODO: Implement when video-cache system is added
-    // This should:
-    // 1. Query the Cache API for cached video content
-    // 2. Get storage estimate for video content
-    // 3. Return ContentCacheStats
+    try {
+      // Get all cached video entries from Cache API
+      const entries = await listCachedVideos()
+      
+      // Get storage estimate
+      const estimate = await getCacheStorageEstimate()
+      
+      // Calculate statistics
+      const totalSize = entries.reduce((sum, entry) => sum + entry.size, 0)
+      
+      // Count stale entries (TTL expired)
+      const now = Date.now()
+      const staleCount = entries.filter(entry => {
+        if (!entry.ttl) return false
+        const expiryTime = entry.cachedAt.getTime() + entry.ttl
+        return now > expiryTime
+      }).length
+      
+      // Get most recent cache update
+      const lastUpdated = entries.length > 0
+        ? Math.max(...entries.map(e => e.cachedAt.getTime()))
+        : null
 
-    // During arkiv-cache implementation, this always returns null
-    return null
+      return {
+        cachedCount: entries.length,
+        totalSize,
+        staleCount,
+        lastUpdated,
+      }
+    } catch (error) {
+      console.warn('[useCacheStatus] Failed to fetch content stats:', error)
+      return null
+    }
   }, [])
 
   /**
    * Refresh cache stats from both metadata and content caches.
    */
-  const refresh = useCallback(async () => {
+  const refreshGlobal = useCallback(async () => {
     if (!isConnected || !address) {
       setMetadataStats(null)
       setContentStats(null)
       return
     }
 
-    setIsLoading(true)
+    setIsLoadingGlobal(true)
     setError(null)
 
     try {
@@ -175,7 +330,7 @@ export function useCacheStatus(): UseCacheStatusReturn {
       setError(error)
       console.error('[useCacheStatus] Failed to refresh cache stats:', error)
     } finally {
-      setIsLoading(false)
+      setIsLoadingGlobal(false)
     }
   }, [address, isConnected, storeStats, fetchContentStats])
 
@@ -186,24 +341,47 @@ export function useCacheStatus(): UseCacheStatusReturn {
     }
   }, [storeStats])
 
-  // Initial load
+  // Initial load for global stats
   useEffect(() => {
-    refresh()
-  }, [refresh])
+    // Only run global refresh if videoIds is undefined (no-argument version)
+    if (videoIds === undefined) {
+      refreshGlobal()
+    }
+  }, [refreshGlobal, videoIds])
 
-  // Calculate total cache size
-  const totalCacheSize =
+  // Calculate total cache size for global version
+  const totalCacheSizeGlobal =
     (metadataStats?.cacheSize ?? 0) + (contentStats?.totalSize ?? 0)
 
+  // ============================================================================
+  // Return Values Based on Call Signature
+  // ============================================================================
+
+  // If videoIds was provided, return per-video cache status
+  if (videoIds !== undefined) {
+    return {
+      cacheStatus,
+      isLoading: isLoadingVideos,
+      refresh: refreshVideos,
+      cachedCount,
+      totalCacheSize,
+    }
+  }
+
+  // Otherwise, return global cache stats
   return {
     metadataStats,
     contentStats,
-    totalCacheSize,
-    isLoading,
+    totalCacheSize: totalCacheSizeGlobal,
+    isLoading: isLoadingGlobal,
     error,
-    refresh,
+    refresh: refreshGlobal,
   }
 }
+
+// =============================================================================
+// Selector Hooks (for backward compatibility)
+// =============================================================================
 
 /**
  * Selector hook for just the content cache status.

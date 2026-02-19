@@ -4,14 +4,15 @@
  * Video Grid Component
  * 
  * Main video library component with grid/list view, search, filters,
- * and loading states. Uses lazy loading for video cards to optimize
- * initial page load performance.
+ * loading states, and cache status indicators. Uses lazy loading for 
+ * video cards to optimize initial page load performance.
  * 
  * @module components/library/VideoGrid
  */
 
-import { useState, Suspense, lazy } from "react";
+import { useState, Suspense, lazy, useMemo } from "react";
 import { useVideoSearch } from "@/hooks/useVideoSearch";
+import { useCacheStatus } from "@/hooks/useCacheStatus";
 import { VideoListItem } from "./VideoListItem";
 import { SearchBar } from "./SearchBar";
 import { FilterControls } from "./FilterControls";
@@ -19,11 +20,23 @@ import { ViewToggle } from "./ViewToggle";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ViewMode, VideoFilters } from "@/types";
 import type { VideoSortField, SortOrder } from "@/hooks/useVideoSearch";
+import { Cloud } from "lucide-react";
 
 // Lazy load VideoCard for better initial load performance
 const VideoCard = lazy(() =>
   import("./VideoCard").then((mod) => ({ default: mod.VideoCard }))
 );
+
+/**
+ * Format bytes to human-readable string
+ */
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
 
 /**
  * Video card skeleton for loading state.
@@ -39,7 +52,7 @@ function VideoCardSkeleton() {
 }
 
 /**
- * Main video grid component with search, filters, and view toggle.
+ * Main video grid component with search, filters, view toggle, and cache status.
  * 
  * Features:
  * - Responsive grid and list layouts
@@ -49,6 +62,8 @@ function VideoCardSkeleton() {
  * - Loading skeletons
  * - Empty state
  * - Lazy loaded video cards for performance
+ * - Cache status badges for encrypted videos
+ * - Cache stats in header
  */
 export function VideoGrid() {
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
@@ -70,6 +85,14 @@ export function VideoGrid() {
     sortBy,
     sortOrder,
   });
+
+  // Get encrypted video IDs for cache status check
+  const encryptedVideoIds = useMemo(() => {
+    return videos.filter((v) => v.isEncrypted).map((v) => v.id);
+  }, [videos]);
+
+  // Check cache status for encrypted videos
+  const { cacheStatus, cachedCount, totalCacheSize, isLoading: isCacheLoading } = useCacheStatus(encryptedVideoIds);
 
   // Handle loading state
   if (isLoading) {
@@ -127,12 +150,25 @@ export function VideoGrid() {
         </div>
       </div>
 
-      {/* Results count */}
-      <div className="text-sm text-muted-foreground">
-        {filteredCount === totalCount ? (
-          `${totalCount} video${totalCount !== 1 ? "s" : ""}`
-        ) : (
-          `${filteredCount} of ${totalCount} videos`
+      {/* Results count and cache stats */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+        <div className="text-sm text-muted-foreground">
+          {filteredCount === totalCount ? (
+            `${totalCount} video${totalCount !== 1 ? "s" : ""}`
+          ) : (
+            `${filteredCount} of ${totalCount} videos`
+          )}
+        </div>
+        
+        {/* Cache stats - show when videos are cached */}
+        {!isCacheLoading && cachedCount > 0 && (
+          <div className="text-sm text-green-600 dark:text-green-400 flex items-center gap-1.5">
+            <Cloud className="w-3.5 h-3.5" />
+            <span>
+              {cachedCount} video{cachedCount !== 1 ? "s" : ""} cached for instant playback
+              {totalCacheSize > 0 && ` • ${formatBytes(totalCacheSize)}`}
+            </span>
+          </div>
         )}
       </div>
 
@@ -149,14 +185,22 @@ export function VideoGrid() {
         >
           <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
             {videos.map((video) => (
-              <VideoCard key={video.id} video={video} />
+              <VideoCard 
+                key={video.id} 
+                video={video} 
+                isCached={cacheStatus.get(video.id) ?? false}
+              />
             ))}
           </div>
         </Suspense>
       ) : (
         <div className="space-y-2">
           {videos.map((video) => (
-            <VideoListItem key={video.id} video={video} />
+            <VideoListItem 
+              key={video.id} 
+              video={video} 
+              isCached={cacheStatus.get(video.id) ?? false}
+            />
           ))}
         </div>
       )}

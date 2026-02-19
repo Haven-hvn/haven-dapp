@@ -99,6 +99,42 @@ const nextConfig = {
     '@lit-protocol/access-control-conditions',
     '@lit-protocol/access-control-conditions-schemas',
   ],
+
+  // HTTP headers configuration for Service Worker support
+  async headers() {
+    return [
+      {
+        // Service Worker file headers
+        source: '/haven-sw.js',
+        headers: [
+          {
+            // Allow the service worker to control the entire origin
+            key: 'Service-Worker-Allowed',
+            value: '/',
+          },
+          {
+            // Prevent caching of the SW file to ensure updates propagate
+            // The browser checks for byte-level changes on each navigation
+            key: 'Cache-Control',
+            value: 'no-cache, no-store, must-revalidate',
+          },
+        ],
+      },
+      {
+        // Synthetic video routes served by Service Worker
+        source: '/haven/v/:path*',
+        headers: [
+          {
+            // These are synthetic routes that only exist in the Cache API
+            // They are served by the Service Worker, not the Next.js server
+            // no-store ensures the server returns a clean response if SW is not active
+            key: 'Cache-Control',
+            value: 'no-store',
+          },
+        ],
+      },
+    ];
+  },
   
 };
 

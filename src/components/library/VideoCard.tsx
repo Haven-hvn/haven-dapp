@@ -7,6 +7,7 @@
  *
  * Features:
  * - Cache status badge overlay (top-right corner)
+ * - Green cloud badge for cached encrypted videos
  * - Expiration indicator in footer
  * - Click handling for navigation
  * - Dark mode support
@@ -15,6 +16,7 @@
 'use client'
 
 import React from 'react'
+import { Cloud } from 'lucide-react'
 import type { Video } from '../../types/video'
 import { CacheStatusBadge, getArkivStatusFromVideo } from './CacheStatusBadge'
 
@@ -34,6 +36,9 @@ export interface VideoCardProps {
 
   /** Current block number for expiration calculation */
   currentBlock?: number
+
+  /** Whether the video content is cached (for encrypted videos) */
+  isCached?: boolean
 }
 
 // =============================================================================
@@ -157,6 +162,7 @@ export function VideoCard({
   onClick,
   className = '',
   currentBlock,
+  isCached = false,
 }: VideoCardProps) {
   // Determine arkiv status
   const arkivStatus = getArkivStatusFromVideo(video, currentBlock)
@@ -211,8 +217,19 @@ export function VideoCard({
           </div>
         )}
 
-        {/* Cache status badge - top-right corner */}
-        {showCacheBadge && (
+        {/* Green cloud badge - cached encrypted videos */}
+        {video.isEncrypted && isCached && (
+          <div
+            className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 bg-green-500/80 text-white rounded text-xs"
+            title="Cached — instant playback"
+          >
+            <Cloud className="w-3 h-3" />
+            <span className="sr-only">Cached</span>
+          </div>
+        )}
+
+        {/* Cache status badge - top-right corner (for non-cached videos) */}
+        {showCacheBadge && !(video.isEncrypted && isCached) && (
           <div className="absolute top-2 right-2">
             <CacheStatusBadge
               arkivStatus={arkivStatus}

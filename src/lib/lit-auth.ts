@@ -13,6 +13,10 @@
 import { getLitClient, getAuthManager } from './lit'
 import { LitAccessControlConditionResource } from '@lit-protocol/auth-helpers'
 import type { Account, Transport, Chain } from 'viem'
+import {
+  getCachedAuthContext,
+  setCachedAuthContext,
+} from './lit-session-cache'
 
 /**
  * Error thrown when Lit auth operations fail.
@@ -82,29 +86,68 @@ export interface LitAuthContext {
 }
 
 /**
+ * Extract wallet address from auth context options.
+ */
+function getAddressFromOptions(options: LitAuthContextOptions): string | null {
+  // Try to get address from account
+  if (options.account?.address) {
+    return options.account.address
+  }
+
+  // Try to get address from walletProvider
+  if (options.walletProvider) {
+    // EIP-1193 providers typically have selectedAddress or accounts[0]
+    const provider = options.walletProvider
+    if (typeof provider.selectedAddress === 'string') {
+      return provider.selectedAddress
+    }
+    if (Array.isArray(provider.accounts) && provider.accounts.length > 0) {
+      return provider.accounts[0]
+    }
+    // Some providers have a getAccounts method
+    if (typeof provider.getAccounts === 'function') {
+      try {
+        const accounts = provider.getAccounts()
+        if (Array.isArray(accounts) && accounts.length > 0) {
+          return accounts[0]
+        }
+      } catch {
+        // Ignore errors
+      }
+    }
+  }
+
+  return null
+}
+
+/**
  * Create an authentication context for Lit Protocol operations using the connected wallet.
- * 
+ *
  * This creates a signed authentication context using the user's connected wallet
  * (via wagmi/AppKit) that can be used for decryption operations with Lit Protocol nodes.
- * 
+ *
  * The user's wallet will be prompted to sign a SIWE message to authenticate.
- * 
+ *
+ * This function caches the auth context to avoid repeated wallet signatures within
+ * the same session. The cache is keyed by wallet address and expires based on the
+ * configured expiration time (default: 1 hour) with a 5-minute safety margin.
+ *
  * @param options - Configuration options for the auth context
  * @returns Promise resolving to the authentication context
  * @throws LitAuthError if client is not initialized or auth context creation fails
- * 
+ *
  * @example
  * ```typescript
  * const { address, connector } = useAccount()
  * const { data: walletClient } = useWalletClient()
- * 
+ *
  * if (walletClient) {
  *   const authContext = await createLitAuthContext({
  *     account: walletClient.account,
  *     transport: walletClient.transport,
  *     chain: walletClient.chain,
  *   })
- *   
+ *
  *   // Use authContext for decryption
  * }
  * ```
@@ -121,7 +164,7 @@ export async function createLitAuthContext(
     statement = DEFAULT_AUTH_OPTIONS.statement,
     expirationMs = DEFAULT_AUTH_OPTIONS.expirationMs,
   } = options
-  
+
   // Validate we have either walletProvider or (account and transport)
   if (!walletProvider && !account) {
     throw new LitAuthError(
@@ -129,11 +172,20 @@ export async function createLitAuthContext(
       'WALLET_NOT_CONNECTED'
     )
   }
-  
+
+  // Check cache first - avoids wallet popup if we have a valid session
+  const address = getAddressFromOptions(options)
+  if (address) {
+    const cached = getCachedAuthContext(address)
+    if (cached) {
+      return cached // No wallet popup!
+    }
+  }
+
   // Get initialized client and auth manager
   let client: ReturnType<typeof getLitClient>
   let authManager: ReturnType<typeof getAuthManager>
-  
+
   try {
     client = getLitClient()
     authManager = getAuthManager()
@@ -143,13 +195,13 @@ export async function createLitAuthContext(
       'CLIENT_NOT_INITIALIZED'
     )
   }
-  
+
   // Calculate expiration time
   const expiration = new Date(Date.now() + expirationMs).toISOString()
-  
+
   try {
     let authConfig: any
-    
+
     if (walletProvider) {
       // Use walletProvider directly - pass it to the auth manager
       authConfig = {
@@ -192,15 +244,20 @@ export async function createLitAuthContext(
         litClient: client,
       }
     }
-    
+
     // Create authentication context using EOA with wallet signing
     // The wallet client will prompt the user to sign the SIWE message
     const authContext = await authManager.createEoaAuthContext(authConfig)
-    
+
+    // Cache for reuse (triggers on cache miss)
+    if (address) {
+      setCachedAuthContext(address, authContext as LitAuthContext, expirationMs)
+    }
+
     return authContext as LitAuthContext
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
-    
+
     // Check if user rejected the signing
     if (message.includes('rejected') || message.includes('denied') || message.includes('cancelled')) {
       throw new LitAuthError(
@@ -208,7 +265,7 @@ export async function createLitAuthContext(
         'SIGNING_FAILED'
       )
     }
-    
+
     throw new LitAuthError(
       `Failed to create auth context: ${message}`,
       'AUTH_CONTEXT_FAILED'

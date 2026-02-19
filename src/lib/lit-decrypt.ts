@@ -13,6 +13,8 @@
 
 import { getLitClient } from './lit'
 import { createLitAuthContext, type LitAuthContextOptions } from './lit-auth'
+import { getCachedKey, setCachedKey, getVideoIdFromMetadata } from './aes-key-cache'
+import { base64ToUint8Array } from './crypto'
 import type { LitEncryptionMetadata, CidEncryptionMetadata } from '@/types'
 import type { Account, Transport, Chain } from 'viem'
 
@@ -171,6 +173,16 @@ export async function decryptAesKey(
     )
   }
 
+  // Check key cache first
+  const videoId = getVideoIdFromMetadata(metadata)
+  if (videoId) {
+    const cachedKey = getCachedKey(videoId)
+    if (cachedKey) {
+      onProgress?.('Using cached decryption key')
+      return { aesKey: cachedKey.key }
+    }
+  }
+
   // Validate we have either walletProvider or (account and transport)
   if (!walletProvider && !account) {
     throw new LitDecryptError(
@@ -276,6 +288,12 @@ export async function decryptAesKey(
     const aesKey = decryptResult.decryptedData instanceof Uint8Array
       ? decryptResult.decryptedData
       : new Uint8Array(decryptResult.decryptedData as ArrayBuffer)
+
+    // Cache the key for future use (skip Lit Protocol on next access)
+    if (videoId) {
+      const iv = base64ToUint8Array(metadata.iv)
+      setCachedKey(videoId, aesKey, iv)
+    }
 
     return {
       aesKey,

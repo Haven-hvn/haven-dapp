@@ -13,6 +13,17 @@ This directory contains end-to-end tests for the Haven application using [Playwr
 - **Accessibility** (`accessibility.spec.ts`): A11y compliance, keyboard nav, ARIA
 - **Performance** (`performance.spec.ts`): Load times, CLS, caching
 
+### Video Cache Tests (`video-cache.spec.ts`)
+End-to-end tests for the Sprint 1 video cache pipeline:
+- **Service Worker Registration**: Verifies `haven-sw.js` is registered and activated
+- **Request Interception**: Tests SW intercepts `/haven/v/*` and passes through others
+- **Cache API Operations**: Tests store, retrieve, and delete operations
+- **Range Request Handling**: Verifies 206 Partial Content responses for video seeking
+- **Full Pipeline Integration**: Tests cache miss → store → cache hit flow
+- **Edge Cases**: Empty data, large files, special characters, concurrent requests
+
+See [docs/MANUAL_TEST_PLAN.md](../docs/MANUAL_TEST_PLAN.md) for manual testing companion.
+
 ### Web3 Tests (`web3/`)
 - **Wallet Connection** (`wallet-connection.spec.ts`): Connect, disconnect, network switching
 - **Web3 Authentication** (`web3-auth.spec.ts`): Lit Protocol auth, signatures, protected routes
@@ -145,6 +156,11 @@ e2e/
 ├── navigation.spec.ts        # Navigation/routing tests
 ├── accessibility.spec.ts     # Accessibility tests
 ├── performance.spec.ts       # Performance tests
+├── video-cache.spec.ts       # Video cache pipeline tests
+├── cache-integration.spec.ts # Cache integration tests
+├── cache-library.spec.ts     # Cache library tests
+├── cache-settings.spec.ts    # Cache settings tests
+├── cache-watch.spec.ts       # Cache watch page tests
 └── web3/                     # Web3-specific tests
     ├── wallet-connection.spec.ts  # Wallet connection tests
     └── web3-auth.spec.ts          # Web3 authentication tests

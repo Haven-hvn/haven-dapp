@@ -186,6 +186,11 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
 - [E2E Testing Guide](e2e/README.md)
 - [Web3 E2E Testing](e2e/web3/README.md)
 - [Deployment Guide](DEPLOYMENT.md)
+- [Video Cache Documentation](docs/video-cache/README.md)
+  - [Architecture](docs/video-cache/architecture.md)
+  - [API Reference](docs/video-cache/api-reference.md)
+  - [Developer Guide](docs/video-cache/developer-guide.md)
+  - [Troubleshooting](docs/video-cache/troubleshooting.md)
 
 ## Resources
 

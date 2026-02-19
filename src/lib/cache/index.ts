@@ -84,6 +84,33 @@ export {
   initCacheResilience,
 } from './errorRecovery'
 
+// Cache error logging
+export {
+  logCacheError,
+  getCacheErrors,
+  getRecentCacheErrors,
+  clearCacheErrors,
+  getCacheErrorCounts,
+  hasCacheError,
+  isQuotaExceededError,
+  isCorruptionError,
+  classifyCacheApiError,
+} from '../cache-errors'
+export type { CacheError, CacheErrorCode } from '../cache-errors'
+
+// Cache integrity verification
+export {
+  verifyCacheEntry,
+  verifyMultipleEntries,
+  safeGetVideo,
+  getCacheHealthMetrics,
+} from '../cache-integrity'
+export type {
+  VerificationResult,
+  BatchVerificationResult,
+  CacheHealthMetrics,
+} from '../cache-integrity'
+
 // Export & Import
 export {
   exportCacheData,

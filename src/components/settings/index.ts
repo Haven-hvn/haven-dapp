@@ -12,3 +12,13 @@ export { CacheExportImport } from './CacheExportImport'
 
 // Utility functions (also available from component)
 export { formatBytes, formatRelativeTime } from './CacheManagement'
+
+// Re-export cache settings store for convenience
+export {
+  useCacheSettings,
+  useCacheTtlSettings,
+  useCacheSizeSettings,
+  usePrefetchSettings,
+  useCacheSecuritySettings,
+} from '../../stores/cacheSettingsStore'
+export type { CacheSettingsState } from '../../stores/cacheSettingsStore'

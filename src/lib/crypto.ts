@@ -67,6 +67,79 @@ export async function aesDecrypt(
   }
 }
 
+// ============================================================================
+// Direct-to-Cache Decryption
+// ============================================================================
+
+import { putVideo, VIDEO_URL_PREFIX } from './video-cache'
+
+/**
+ * Decrypt data and write directly to Cache API.
+ * 
+ * This optimized function avoids creating an intermediate blob URL.
+ * The decrypted bytes are written directly to the Cache API, eliminating
+ * one full copy of the video from JS heap memory.
+ * 
+ * @param encryptedData - The encrypted data (ciphertext + auth tag)
+ * @param key - The 256-bit AES key
+ * @param iv - The 12-byte initialization vector
+ * @param videoId - Unique identifier for the video (used as cache key)
+ * @param mimeType - MIME type of the video (default: 'video/mp4')
+ * @returns Promise resolving to the synthetic URL for the cached video
+ * @throws Error if decryption or cache write fails
+ * 
+ * @example
+ * ```typescript
+ * const url = await aesDecryptToCache(
+ *   encryptedVideoData,
+ *   aesKey,
+ *   iv,
+ *   '0x123...',
+ *   'video/mp4'
+ * )
+ * // url === '/haven/v/0x123...'
+ * ```
+ */
+export async function aesDecryptToCache(
+  encryptedData: Uint8Array,
+  key: Uint8Array,
+  iv: Uint8Array,
+  videoId: string,
+  mimeType: string = 'video/mp4'
+): Promise<string> {
+  // Import the raw AES key for use with Web Crypto API
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    key as BufferSource,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['decrypt']
+  )
+
+  try {
+    const decryptedBuffer = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: iv as BufferSource },
+      cryptoKey,
+      encryptedData as BufferSource
+    )
+
+    // Write directly to Cache API — no blob URL needed
+    const decryptedData = new Uint8Array(decryptedBuffer)
+    await putVideo(videoId, decryptedData, mimeType)
+
+    // Return the synthetic URL for the cached video
+    return `${VIDEO_URL_PREFIX}${videoId}`
+  } catch (error) {
+    if (error instanceof DOMException) {
+      throw new Error(
+        `AES decryption failed: ${error.message}. ` +
+        'The file may be corrupted or the wrong key is being used.'
+      )
+    }
+    throw error
+  }
+}
+
 /**
  * Encrypt data using AES-256-GCM.
  * 

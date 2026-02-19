@@ -15,7 +15,8 @@ import { useAppKitProvider } from '@reown/appkit/react'
 import { useAccount } from 'wagmi'
 import type { Video } from '@/types'
 import { decryptAesKey, getDecryptionErrorMessage } from '@/lib/lit-decrypt'
-import { aesDecrypt, base64ToUint8Array, toArrayBuffer, checkLargeFileSupport } from '@/lib/crypto'
+import { aesDecryptToCache, base64ToUint8Array, checkLargeFileSupport } from '@/lib/crypto'
+import { createBufferLifecycle } from '@/lib/buffer-lifecycle'
 import { sepolia, mainnet } from '@reown/appkit/networks'
 
 // ============================================================================
@@ -280,6 +281,10 @@ export function useVideoDecryption(
   /**
    * Decrypt a video using the connected wallet for authentication.
    * 
+   * Uses BufferLifecycleManager for aggressive memory cleanup to ensure
+   * intermediate buffers are released as soon as they're no longer needed,
+   * rather than waiting for JavaScript's garbage collector.
+   * 
    * @param video - The video to decrypt
    * @param encryptedData - The encrypted video data
    * @returns Promise resolving to the blob URL or null if failed
@@ -311,6 +316,9 @@ export function useVideoDecryption(
     // Create new abort controller for this operation
     abortControllerRef.current = new AbortController()
     const signal = abortControllerRef.current.signal
+
+    // Create buffer lifecycle manager for this decryption operation
+    const lifecycle = createBufferLifecycle()
 
     try {
       // Step 0: Validate video is encrypted
@@ -353,6 +361,9 @@ export function useVideoDecryption(
         throw new Error('Decryption cancelled')
       }
 
+      // Track encrypted data for lifecycle management
+      lifecycle.track('encrypted', encryptedData)
+
       // Step 2: Decrypt AES key using Lit with wallet authentication
       updateProgress('authenticating', 'Authenticating with Lit Protocol...')
 
@@ -371,44 +382,39 @@ export function useVideoDecryption(
         signal,
       })
 
+      // Track the AES key for secure cleanup
+      lifecycle.track('aesKey', aesKey)
+
       if (signal.aborted) {
-        aesKey.fill(0) // Clear key from memory
         throw new Error('Decryption cancelled')
       }
 
-      // Step 3: Decrypt file using AES
-      updateProgress('decrypting-file', 'Decrypting video file...')
+      // Step 3: Decrypt file using AES and write directly to Cache API
+      updateProgress('decrypting-file', 'Decrypting and caching video...')
 
       const iv = base64ToUint8Array(video.litEncryptionMetadata.iv)
-      const decryptedData = await aesDecrypt(encryptedData, aesKey, iv)
-
-      // Clear key from memory immediately after use
-      aesKey.fill(0)
-
-      if (signal.aborted) {
-        throw new Error('Decryption cancelled')
-      }
-
-      // Step 4: Create blob URL
-      updateProgress('decrypting-file', 'Preparing video for playback...')
-
       const mimeType = video.litEncryptionMetadata.originalMimeType || 'video/mp4'
-      const blob = new Blob([toArrayBuffer(decryptedData)], { type: mimeType })
-      const url = URL.createObjectURL(blob)
+
+      // Decrypt and write directly to Cache API (no blob URL)
+      const url = await aesDecryptToCache(
+        encryptedData,
+        aesKey,
+        iv,
+        video.id,
+        mimeType
+      )
+
+      // Encrypted data and AES key are no longer needed after decryption
+      // Release them eagerly for immediate memory reclamation
+      lifecycle.release('encrypted')
+      lifecycle.release('aesKey')
 
       if (signal.aborted) {
-        URL.revokeObjectURL(url)
         throw new Error('Decryption cancelled')
       }
 
       // Success: Update state
       if (isMountedRef.current) {
-        // Revoke old URL if exists
-        if (blobUrlRef.current) {
-          URL.revokeObjectURL(blobUrlRef.current)
-        }
-
-        blobUrlRef.current = url
         setDecryptedUrl(url)
         setStatus('complete')
         setProgress('Decryption complete')
@@ -444,6 +450,10 @@ export function useVideoDecryption(
 
       onError?.(err instanceof Error ? err : new Error(errorMessage))
       return null
+    } finally {
+      // Release all remaining tracked buffers
+      // This ensures no memory leaks on success, error, or cancellation
+      lifecycle.releaseAll()
     }
   }, [
     reset,

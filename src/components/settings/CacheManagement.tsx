@@ -15,10 +15,14 @@
 
 import React, { useState, useCallback, useEffect } from 'react'
 import { useCacheStore, useCachePreferences } from '../../stores/cacheStore'
-import { useCacheStatus, type UseCacheStatusReturn } from '../../hooks/useCacheStatus'
+import { useCacheSettings } from '../../stores/cacheSettingsStore'
+import { useCacheStatus, type UseCacheStatusReturn, type ContentCacheStats } from '../../hooks/useCacheStatus'
 import { useManualSync } from '../../hooks/useBackgroundSync'
+import { useAccount } from '../../hooks/useAccount'
 import { getVideoCacheService } from '../../services/cacheService'
 import { getAllCachedVideos, deleteCachedVideo } from '../../lib/cache/db'
+import { listCachedVideos, deleteVideo, clearAllVideos, getCacheStorageEstimate, type CacheEntry } from '../../lib/video-cache'
+import { getStorageDetails, requestPersistentStorage, type StorageDetails } from '../../lib/storage-persistence'
 
 // =============================================================================
 // Types
@@ -28,7 +32,7 @@ interface StatCardProps {
   label: string
   value: string | number
   icon: React.ReactNode
-  color?: 'default' | 'green' | 'amber' | 'blue'
+  color?: 'default' | 'green' | 'amber' | 'blue' | 'purple'
 }
 
 interface ConfirmDialogProps {
@@ -220,6 +224,44 @@ function XIcon({ className }: { className?: string }) {
   )
 }
 
+function TrashIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth={1.5}
+      stroke="currentColor"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+      />
+    </svg>
+  )
+}
+
+function ClockIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth={1.5}
+      stroke="currentColor"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
+      />
+    </svg>
+  )
+}
+
 // =============================================================================
 // Sub-components
 // =============================================================================
@@ -233,6 +275,7 @@ function StatCard({ label, value, icon, color = 'default' }: StatCardProps) {
     green: 'bg-green-50 dark:bg-green-950/30 text-green-900 dark:text-green-100',
     amber: 'bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-100',
     blue: 'bg-blue-50 dark:bg-blue-950/30 text-blue-900 dark:text-blue-100',
+    purple: 'bg-purple-50 dark:bg-purple-950/30 text-purple-900 dark:text-purple-100',
   }
 
   const iconColorClasses = {
@@ -240,6 +283,7 @@ function StatCard({ label, value, icon, color = 'default' }: StatCardProps) {
     green: 'text-green-600 dark:text-green-400',
     amber: 'text-amber-600 dark:text-amber-400',
     blue: 'text-blue-600 dark:text-blue-400',
+    purple: 'text-purple-600 dark:text-purple-400',
   }
 
   return (
@@ -411,23 +455,164 @@ function ConfirmDialog({
 }
 
 // =============================================================================
+// Persistence Status Component
+// =============================================================================
+
+/**
+ * PersistenceStatus - Displays storage persistence status and allows manual request
+ *
+ * Shows whether the browser will evict cached videos under storage pressure,
+ * and provides a button to request persistent storage protection.
+ */
+function PersistenceStatus() {
+  const [details, setDetails] = useState<StorageDetails | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const loadDetails = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const d = await getStorageDetails()
+      setDetails(d)
+    } catch (error) {
+      console.error('[PersistenceStatus] Failed to load storage details:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadDetails()
+  }, [loadDetails])
+
+  const handleRequestPersistence = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      await requestPersistentStorage()
+      await loadDetails()
+    } catch (error) {
+      console.error('[PersistenceStatus] Failed to request persistence:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [loadDetails])
+
+  if (!details) {
+    return (
+      <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
+        <div className="flex items-center gap-2">
+          <Loader2Icon className="h-4 w-4 animate-spin text-gray-400" />
+          <span className="text-sm text-gray-500 dark:text-gray-400">Loading storage info...</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Safari or browsers without Storage API support
+  if (!details.isSupported) {
+    return (
+      <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0">
+            <HardDriveIcon className="h-5 w-5 text-gray-400" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Storage Protection</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Your browser manages cache automatically. Cached videos may be removed when storage is low.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0">
+            {details.isPersisted ? (
+              <CheckCircleIcon className="h-5 w-5 text-green-500" />
+            ) : (
+              <AlertTriangleIcon className="h-5 w-5 text-amber-500" />
+            )}
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Storage Protection</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              {details.isPersisted
+                ? 'Your cached videos are protected from automatic browser cleanup'
+                : 'Cached videos may be removed by the browser when storage is low'}
+            </p>
+          </div>
+        </div>
+        <div className="flex-shrink-0">
+          {!details.isPersisted ? (
+            <button
+              onClick={handleRequestPersistence}
+              disabled={isLoading}
+              className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900/30 rounded-md hover:bg-purple-200 dark:hover:bg-purple-900/50 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isLoading ? (
+                <Loader2Icon className="h-3 w-3 animate-spin mr-1" />
+              ) : (
+                <HardDriveIcon className="h-3 w-3 mr-1" />
+              )}
+              Protect Cache
+            </button>
+          ) : (
+            <span className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/30 rounded-md">
+              <CheckCircleIcon className="h-3 w-3 mr-1" />
+              Protected
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// =============================================================================
 // Main Component
 // =============================================================================
+
+/**
+ * Enriched cache entry with metadata from arkiv-cache
+ */
+interface EnrichedCacheEntry extends CacheEntry {
+  title?: string
+  description?: string
+  thumbnailUrl?: string
+  isEncrypted?: boolean
+  arkivStatus?: string
+}
+
+/**
+ * Sort type for cached videos
+ */
+type SortBy = 'size' | 'cachedAt' | 'expiresAt'
 
 /**
  * CacheManagement - Cache management section for settings page
  *
  * Provides:
- * - Cache statistics display
+ * - Cache statistics display (metadata + content)
  * - Manual sync controls
- * - User preferences (auto-sync, show expired)
+ * - User preferences (auto-sync, show expired, cache TTL, prefetch)
+ * - Video content cache management
  * - Danger zone for clearing cache
  */
 export function CacheManagement() {
+  // Get wallet address
+  const { address: walletAddress, isConnected } = useAccount()
+
   // Get cache state from store
   const { stats, isSyncing, lastSyncedAt, lastSyncResult } = useCacheStore()
   const { showExpiredVideos, autoSyncEnabled, toggleShowExpiredVideos, toggleAutoSync } =
     useCachePreferences()
+
+  // Get cache settings
+  const cacheSettings = useCacheSettings()
 
   // Get cache status with forward-compatible interface
   const cacheStatus = useCacheStatus()
@@ -438,11 +623,20 @@ export function CacheManagement() {
   // Local state for dialogs
   const [showClearExpiredDialog, setShowClearExpiredDialog] = useState(false)
   const [showClearAllDialog, setShowClearAllDialog] = useState(false)
+  const [showClearContentDialog, setShowClearContentDialog] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
 
-  // Storage estimate state
+  // Storage estimate state (metadata)
   const [storageUsage, setStorageUsage] = useState(0)
   const [storageQuota, setStorageQuota] = useState(0)
+
+  // Content cache state
+  const [contentEntries, setContentEntries] = useState<EnrichedCacheEntry[]>([])
+  const [contentStats, setContentStats] = useState<ContentCacheStats | null>(null)
+  const [contentStorageEstimate, setContentStorageEstimate] = useState({ usage: 0, quota: 0 })
+  const [isLoadingContent, setIsLoadingContent] = useState(false)
+  const [contentSortBy, setContentSortBy] = useState<SortBy>('cachedAt')
+  const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set())
 
   // Load storage estimate on mount
   useEffect(() => {
@@ -461,14 +655,243 @@ export function CacheManagement() {
     estimateStorage()
   }, [stats])
 
+  // Load content cache data
+  const loadContentCacheData = useCallback(async () => {
+    if (!isConnected || !walletAddress) return
+    
+    setIsLoadingContent(true)
+    try {
+      // Get cache entries from Cache API
+      const entries = await listCachedVideos()
+      
+      // Get metadata from arkiv-cache for enrichment
+      const cacheService = getVideoCacheService(walletAddress)
+      const metadataVideos = await cacheService.getContentCachedVideos()
+      
+      // Enrich entries with metadata
+      const enriched: EnrichedCacheEntry[] = entries.map(entry => {
+        const metadata = metadataVideos.find(v => v.id === entry.videoId)
+        return {
+          ...entry,
+          title: metadata?.title ?? 'Unknown video',
+          description: metadata?.description,
+          thumbnailUrl: metadata?.thumbnailUrl,
+          isEncrypted: metadata?.isEncrypted ?? false,
+          arkivStatus: metadata ? 'active' : 'unknown',
+        }
+      })
+      
+      setContentEntries(enriched)
+      
+      // Calculate content stats
+      const totalSize = entries.reduce((sum, e) => sum + e.size, 0)
+      const now = Date.now()
+      const staleCount = entries.filter(entry => {
+        if (!entry.ttl) return false
+        const expiryTime = entry.cachedAt.getTime() + entry.ttl
+        return now > expiryTime
+      }).length
+      
+      setContentStats({
+        cachedCount: entries.length,
+        totalSize,
+        staleCount,
+        lastUpdated: entries.length > 0 ? Math.max(...entries.map(e => e.cachedAt.getTime())) : null,
+      })
+      
+      // Get storage estimate
+      const estimate = await getCacheStorageEstimate()
+      setContentStorageEstimate({ usage: estimate.usage, quota: estimate.quota })
+    } catch (error) {
+      console.error('[CacheManagement] Failed to load content cache data:', error)
+    } finally {
+      setIsLoadingContent(false)
+    }
+  }, [isConnected, walletAddress])
+
+  // Load content cache on mount
+  useEffect(() => {
+    loadContentCacheData()
+  }, [loadContentCacheData])
+
+  // Handle remove single video
+  const handleRemoveVideo = useCallback(async (videoId: string) => {
+    if (!walletAddress) return
+    
+    try {
+      // Remove from Cache API
+      await deleteVideo(videoId)
+      
+      // Notify arkiv-cache
+      const cacheService = getVideoCacheService(walletAddress)
+      await cacheService.updateVideoCacheStatus(videoId, 'not-cached')
+      
+      // Refresh data
+      await loadContentCacheData()
+      
+      // Remove from selection if selected
+      setSelectedVideos(prev => {
+        const next = new Set(prev)
+        next.delete(videoId)
+        return next
+      })
+    } catch (error) {
+      console.error('[CacheManagement] Failed to remove video:', error)
+    }
+  }, [walletAddress, loadContentCacheData])
+
+  // Handle bulk remove
+  const handleBulkRemove = useCallback(async () => {
+    if (!walletAddress || selectedVideos.size === 0) return
+    
+    try {
+      for (const videoId of selectedVideos) {
+        await deleteVideo(videoId)
+        
+        // Notify arkiv-cache
+        const cacheService = getVideoCacheService(walletAddress)
+        await cacheService.updateVideoCacheStatus(videoId, 'not-cached')
+      }
+      
+      // Refresh data
+      await loadContentCacheData()
+      setSelectedVideos(new Set())
+    } catch (error) {
+      console.error('[CacheManagement] Failed to bulk remove videos:', error)
+    }
+  }, [walletAddress, selectedVideos, loadContentCacheData])
+
+  // Handle clear all content
+  const handleClearAllContent = useCallback(async () => {
+    if (!walletAddress) return
+    
+    setIsClearing(true)
+    try {
+      // Get all cached video IDs before clearing
+      const entries = await listCachedVideos()
+      
+      // Clear all from Cache API
+      await clearAllVideos()
+      
+      // Notify arkiv-cache for each video
+      const cacheService = getVideoCacheService(walletAddress)
+      for (const entry of entries) {
+        await cacheService.updateVideoCacheStatus(entry.videoId, 'not-cached')
+      }
+      
+      // Refresh data
+      await loadContentCacheData()
+      setSelectedVideos(new Set())
+    } catch (error) {
+      console.error('[CacheManagement] Failed to clear all content:', error)
+    } finally {
+      setIsClearing(false)
+      setShowClearContentDialog(false)
+    }
+  }, [walletAddress, loadContentCacheData])
+
+  // Handle clear expired content
+  const handleClearExpiredContent = useCallback(async () => {
+    if (!walletAddress) return
+    
+    setIsClearing(true)
+    try {
+      const now = Date.now()
+      const expiredEntries = contentEntries.filter(entry => {
+        if (!entry.ttl) return false
+        const expiryTime = entry.cachedAt.getTime() + entry.ttl
+        return now > expiryTime
+      })
+      
+      for (const entry of expiredEntries) {
+        await deleteVideo(entry.videoId)
+        
+        // Notify arkiv-cache
+        const cacheService = getVideoCacheService(walletAddress)
+        await cacheService.updateVideoCacheStatus(entry.videoId, 'not-cached')
+      }
+      
+      // Refresh data
+      await loadContentCacheData()
+    } catch (error) {
+      console.error('[CacheManagement] Failed to clear expired content:', error)
+    } finally {
+      setIsClearing(false)
+    }
+  }, [walletAddress, contentEntries, loadContentCacheData])
+
+  // Handle export cache info
+  const handleExportCacheInfo = useCallback(() => {
+    const exportData = {
+      exportedAt: new Date().toISOString(),
+      totalVideos: contentEntries.length,
+      totalSize: contentStats?.totalSize ?? 0,
+      videos: contentEntries.map(entry => ({
+        videoId: entry.videoId,
+        title: entry.title,
+        size: entry.size,
+        mimeType: entry.mimeType,
+        cachedAt: entry.cachedAt.toISOString(),
+        ttl: entry.ttl,
+        expiresAt: entry.ttl ? new Date(entry.cachedAt.getTime() + entry.ttl).toISOString() : null,
+      })),
+    }
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `haven-cache-export-${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, [contentEntries, contentStats])
+
+  // Sort entries (must be defined before callbacks that use it)
+  const sortedEntries = React.useMemo(() => {
+    return [...contentEntries].sort((a, b) => {
+      switch (contentSortBy) {
+        case 'size':
+          return b.size - a.size
+        case 'cachedAt':
+          return b.cachedAt.getTime() - a.cachedAt.getTime()
+        case 'expiresAt':
+          const aExpiry = a.ttl ? a.cachedAt.getTime() + a.ttl : Infinity
+          const bExpiry = b.ttl ? b.cachedAt.getTime() + b.ttl : Infinity
+          return aExpiry - bExpiry
+        default:
+          return 0
+      }
+    })
+  }, [contentEntries, contentSortBy])
+
+  // Toggle video selection
+  const toggleVideoSelection = useCallback((videoId: string) => {
+    setSelectedVideos(prev => {
+      const next = new Set(prev)
+      if (next.has(videoId)) {
+        next.delete(videoId)
+      } else {
+        next.add(videoId)
+      }
+      return next
+    })
+  }, [])
+
+  // Select all videos
+  const selectAllVideos = useCallback(() => {
+    if (selectedVideos.size === sortedEntries.length) {
+      setSelectedVideos(new Set())
+    } else {
+      setSelectedVideos(new Set(sortedEntries.map(e => e.videoId)))
+    }
+  }, [sortedEntries, selectedVideos.size])
+
   // Handle clear expired entries
   const handleClearExpired = useCallback(async () => {
     setIsClearing(true)
     try {
-      // Get wallet address from store or context
-      // For now, we'll use a placeholder - in real app this would come from wallet
-      const walletAddress = '' // This should be obtained from wallet context
-
       if (walletAddress) {
         const cacheService = getVideoCacheService(walletAddress)
         const allVideos = await getAllCachedVideos(walletAddress)
@@ -491,14 +914,12 @@ export function CacheManagement() {
       setIsClearing(false)
       setShowClearExpiredDialog(false)
     }
-  }, [])
+  }, [walletAddress])
 
   // Handle clear all cache
   const handleClearAll = useCallback(async () => {
     setIsClearing(true)
     try {
-      const walletAddress = '' // This should be obtained from wallet context
-
       if (walletAddress) {
         const cacheService = getVideoCacheService(walletAddress)
         await cacheService.clearAll()
@@ -513,7 +934,7 @@ export function CacheManagement() {
       setIsClearing(false)
       setShowClearAllDialog(false)
     }
-  }, [])
+  }, [walletAddress])
 
   // Combined sync state
   const isAnySyncing = isSyncing || isManualSyncing
@@ -654,41 +1075,308 @@ export function CacheManagement() {
         </div>
       </div>
 
-      {/* Section 2: Video Content Cache (Placeholder) */}
-      <div className="space-y-4 pt-6 border-t border-gray-200 dark:border-gray-700">
+      {/* Section 2: Video Content Cache */}
+      <div className="space-y-6 pt-6 border-t border-gray-200 dark:border-gray-700">
         <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 uppercase tracking-wide">
           Video Content
         </h3>
 
-        <div className="bg-gray-50 dark:bg-gray-800/30 rounded-lg p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex-shrink-0 h-10 w-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-              <HardDriveIcon className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+        {/* Storage Overview */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <StatCard
+            label="Cached Videos"
+            value={contentStats?.cachedCount ?? 0}
+            icon={<HardDriveIcon className="h-6 w-6" />}
+            color="purple"
+          />
+          <StatCard
+            label="Content Size"
+            value={formatBytes(contentStats?.totalSize ?? 0)}
+            icon={<HardDriveIcon className="h-6 w-6" />}
+            color="purple"
+          />
+          <StatCard
+            label="Storage Used"
+            value={contentStorageEstimate.quota > 0 
+              ? `${((contentStorageEstimate.usage / contentStorageEstimate.quota) * 100).toFixed(1)}%`
+              : 'N/A'}
+            icon={<HardDriveIcon className="h-6 w-6" />}
+          />
+          <StatCard
+            label="Stale Entries"
+            value={contentStats?.staleCount ?? 0}
+            icon={<AlertTriangleIcon className="h-6 w-6" />}
+            color={contentStats && contentStats.staleCount > 0 ? 'amber' : 'default'}
+          />
+        </div>
+
+        {/* Content Storage Progress Bar */}
+        {contentStorageEstimate.quota > 0 && (
+          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
+            <div className="flex justify-between text-sm text-gray-500 dark:text-gray-400 mb-1">
+              <span>Content cache storage</span>
+              <span>
+                {formatBytes(contentStats?.totalSize ?? 0)} / {formatBytes(cacheSettings.maxCacheSizeMB * 1024 * 1024)}
+              </span>
             </div>
+            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-purple-600 dark:bg-purple-500 rounded-full transition-all"
+                style={{ width: `${Math.min(((contentStats?.totalSize ?? 0) / (cacheSettings.maxCacheSizeMB * 1024 * 1024)) * 100, 100)}%` }}
+              />
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              {contentEntries.length} video{contentEntries.length !== 1 ? 's' : ''} cached
+              {contentStats?.staleCount ? ` • ${contentStats.staleCount} stale` : ''}
+            </p>
+          </div>
+        )}
+
+        {/* Storage Persistence Status */}
+        <PersistenceStatus />
+
+        {/* Content Cache Settings */}
+        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 space-y-4">
+          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">Cache Settings</h4>
+          
+          {/* Cache TTL */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                Content caching not available
-              </p>
+              <p className="text-sm text-gray-900 dark:text-gray-100">Cache retention</p>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Video content caching is not yet implemented. This feature will allow offline
-                playback of your videos.
+                How long to keep cached videos
               </p>
+            </div>
+            <select
+              value={cacheSettings.ttlDays}
+              onChange={(e) => cacheSettings.setTtlDays(Number(e.target.value))}
+              className="rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value={1}>1 day</option>
+              <option value={3}>3 days</option>
+              <option value={7}>7 days</option>
+              <option value={14}>14 days</option>
+              <option value={30}>30 days</option>
+            </select>
+          </div>
+
+          {/* Max Cache Size */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <p className="text-sm text-gray-900 dark:text-gray-100">Max cache size</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Maximum storage for cached videos
+              </p>
+            </div>
+            <select
+              value={cacheSettings.maxCacheSizeMB}
+              onChange={(e) => cacheSettings.setMaxCacheSizeMB(Number(e.target.value))}
+              className="rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value={500}>500 MB</option>
+              <option value={1000}>1 GB</option>
+              <option value={2000}>2 GB</option>
+              <option value={5000}>5 GB</option>
+              <option value={10000}>10 GB</option>
+            </select>
+          </div>
+
+          {/* Prefetch Toggle */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-900 dark:text-gray-100">Background prefetch</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Automatically cache videos you&apos;re likely to watch
+              </p>
+            </div>
+            <Switch 
+              checked={cacheSettings.prefetchEnabled} 
+              onCheckedChange={cacheSettings.setPrefetchEnabled} 
+            />
+          </div>
+
+          {/* Clear on Disconnect Toggle */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-900 dark:text-gray-100">Clear on disconnect</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Remove cached videos when you disconnect your wallet
+              </p>
+            </div>
+            <Switch 
+              checked={cacheSettings.clearOnDisconnect} 
+              onCheckedChange={cacheSettings.setClearOnDisconnect} 
+            />
+          </div>
+        </div>
+
+        {/* Cached Videos List */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+              Cached Videos
+            </h4>
+            <div className="flex items-center gap-2">
+              {/* Refresh button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadContentCacheData}
+                disabled={isLoadingContent}
+              >
+                {isLoadingContent ? (
+                  <Loader2Icon className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCwIcon className="h-4 w-4" />
+                )}
+                <span className="ml-1">Refresh</span>
+              </Button>
+
+              {/* Sort dropdown */}
+              <select
+                value={contentSortBy}
+                onChange={(e) => setContentSortBy(e.target.value as SortBy)}
+                className="rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-xs px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="cachedAt">Sort: Date cached</option>
+                <option value="size">Sort: Size</option>
+                <option value="expiresAt">Sort: Expires</option>
+              </select>
+
+              {/* Export button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportCacheInfo}
+                disabled={contentEntries.length === 0}
+              >
+                Export
+              </Button>
             </div>
           </div>
 
-          {/* Content cache stats (placeholder - null until video-cache implemented) */}
-          {cacheStatus.contentStats && (
-            <div className="mt-4 grid grid-cols-2 gap-4">
-              <div className="bg-white dark:bg-gray-900 rounded-lg p-3">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Cached videos</p>
-                <p className="text-lg font-semibold">{cacheStatus.contentStats.cachedCount}</p>
+          {/* Bulk actions */}
+          {contentEntries.length > 0 && (
+            <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/30 rounded-lg p-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={selectedVideos.size === sortedEntries.length && sortedEntries.length > 0}
+                  onChange={selectAllVideos}
+                  className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                />
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  {selectedVideos.size} selected
+                </span>
               </div>
-              <div className="bg-white dark:bg-gray-900 rounded-lg p-3">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Content cache size</p>
-                <p className="text-lg font-semibold">
-                  {formatBytes(cacheStatus.contentStats.totalSize)}
+              {selectedVideos.size > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleBulkRemove}
+                >
+                  <TrashIcon className="h-4 w-4 mr-1" />
+                  Remove
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* Videos list */}
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {sortedEntries.length === 0 ? (
+              <div className="text-center py-8 bg-gray-50 dark:bg-gray-800/30 rounded-lg">
+                <HardDriveIcon className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  No videos cached yet.
+                </p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                  Videos will be cached automatically after first play.
                 </p>
               </div>
+            ) : (
+              sortedEntries.map((entry) => (
+                <div
+                  key={entry.videoId}
+                  className="flex items-center gap-3 p-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-purple-300 dark:hover:border-purple-700 transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedVideos.has(entry.videoId)}
+                    onChange={() => toggleVideoSelection(entry.videoId)}
+                    className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                  />
+                  
+                  {/* Thumbnail placeholder */}
+                  <div className="flex-shrink-0 h-12 w-16 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden">
+                    {entry.thumbnailUrl ? (
+                      <img
+                        src={entry.thumbnailUrl}
+                        alt={entry.title}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center">
+                        <FilmIcon className="h-6 w-6 text-gray-400" />
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Video info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                      {entry.title}
+                    </p>
+                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                      <span>{formatBytes(entry.size)}</span>
+                      <span>•</span>
+                      <span>Cached {formatRelativeTime(entry.cachedAt.getTime())}</span>
+                      {entry.ttl && (
+                        <>
+                          <span>•</span>
+                          <span>
+                            Expires {formatRelativeTime(entry.cachedAt.getTime() + entry.ttl)}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Remove button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleRemoveVideo(entry.videoId)}
+                    className="text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-950/30"
+                  >
+                    <TrashIcon className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Clear actions */}
+          {contentEntries.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleClearExpiredContent}
+                disabled={isClearing || (contentStats?.staleCount ?? 0) === 0}
+              >
+                <ClockIcon className="h-4 w-4 mr-1" />
+                Clear Expired
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setShowClearContentDialog(true)}
+                disabled={isClearing}
+              >
+                <TrashIcon className="h-4 w-4 mr-1" />
+                Clear All Content
+              </Button>
             </div>
           )}
         </div>
@@ -725,7 +1413,13 @@ export function CacheManagement() {
           <div>
             <p className="text-sm text-gray-900 dark:text-gray-100">Clear all cached data</p>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Remove all locally cached video metadata. Active videos will be re-fetched from Arkiv.
+              Remove all locally cached video metadata. 
+              {contentEntries.length > 0 && (
+                <span className="text-amber-600 dark:text-amber-400">
+                  {' '}Warning: {contentEntries.length} video(s) have cached content that will become 
+                  orphaned. Consider clearing the video content cache first.
+                </span>
+              )}
             </p>
           </div>
           <Button
@@ -763,11 +1457,35 @@ export function CacheManagement() {
             This will remove all {stats?.totalVideos ?? 0} cached video records from your browser.
             Active videos will be re-fetched from Arkiv, but expired video metadata (
             {stats?.expiredVideos ?? 0} videos) will be permanently lost.
+            {contentEntries.length > 0 && (
+              <span className="text-amber-600 dark:text-amber-400 block mt-2">
+                Warning: {contentEntries.length} video(s) have cached content that will become 
+                orphaned (no metadata to identify them). Consider clearing the video content cache first.
+              </span>
+            )}
           </>
         }
         confirmLabel="Clear All Data"
         onConfirm={handleClearAll}
         onCancel={() => setShowClearAllDialog(false)}
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        isOpen={showClearContentDialog}
+        title="Clear all cached video content?"
+        description={
+          <>
+            This will remove {contentEntries.length} cached video(s) ({formatBytes(contentStats?.totalSize ?? 0)}).
+            You will need to re-decrypt them on next play, which requires a wallet signature.
+            <span className="text-green-600 dark:text-green-400 block mt-2">
+              Your video metadata (titles, descriptions) will NOT be affected.
+            </span>
+          </>
+        }
+        confirmLabel="Clear Content"
+        onConfirm={handleClearAllContent}
+        onCancel={() => setShowClearContentDialog(false)}
         variant="destructive"
       />
     </section>

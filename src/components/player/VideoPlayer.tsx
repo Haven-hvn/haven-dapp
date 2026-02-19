@@ -4,24 +4,26 @@
  * Video Player Component
  * 
  * Main video player component that handles:
- * - Non-encrypted videos: Direct IPFS streaming
- * - Encrypted videos: Download, decrypt, and playback
- * - Loading states and progress indicators
+ * - Non-encrypted videos: Direct IPFS streaming via cache
+ * - Encrypted videos: Cache-first loading with Lit Protocol decryption
+ * - Loading states and progress indicators with cache awareness
  * - Error handling and recovery
+ * 
+ * Refactored to use useVideoCache hook for all video loading,
+ * eliminating direct Synapse fetch and useVideoDecryption usage.
  * 
  * @module components/player/VideoPlayer
  */
 
-import { useEffect, useState } from 'react'
 import { useVideo } from '@/hooks/useVideos'
-import { useVideoDecryption } from '@/hooks/useVideoDecryption'
-import { useIpfsFetch } from '@/hooks/useIpfsFetch'
-import type { Video } from '@/types'
+import { useVideoCache } from '@/hooks/useVideoCache'
 import { VideoPlayerControls } from './VideoPlayerControls'
-import { DecryptionProgress } from './DecryptionProgress'
+import { CacheAwareProgress } from './CacheAwareProgress'
+import { CacheIndicator } from './CacheIndicator'
 import { ErrorOverlay } from './ErrorOverlay'
 import { ArrowLeft, Loader2, Lock } from 'lucide-react'
 import Link from 'next/link'
+import type { Video } from '@/types'
 
 interface VideoPlayerProps {
   videoId: string
@@ -29,86 +31,20 @@ interface VideoPlayerProps {
 
 export function VideoPlayer({ videoId }: VideoPlayerProps) {
   const { video, isLoading: isVideoLoading, isFound } = useVideo(videoId)
-  const ipfsFetch = useIpfsFetch()
-  const decryption = useVideoDecryption()
   
-  const [videoUrl, setVideoUrl] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // Single hook replaces Synapse fetch + useVideoDecryption + manual URL management
+  const {
+    videoUrl,
+    isCached,
+    isLoading,
+    loadingStage,
+    progress,
+    error,
+    retry,
+    evict,
+  } = useVideoCache(video ?? null)
   
-  // Load video on mount
-  useEffect(() => {
-    if (!video) return
-    
-    loadVideo(video)
-    
-    return () => {
-      // Cleanup
-      ipfsFetch.cancel()
-      decryption.reset()
-      if (videoUrl) {
-        URL.revokeObjectURL(videoUrl)
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [video])
-  
-  const loadVideo = async (video: Video) => {
-    setError(null)
-    
-    try {
-      if (!video.isEncrypted) {
-        // Non-encrypted: retrieve via Synapse SDK (with IPFS gateway fallback)
-        const cid = video.filecoinCid
-        if (!cid) {
-          setError('Video not available')
-          return
-        }
-        
-        // Fetch via Synapse SDK (direct client-side Filecoin retrieval)
-        const data = await ipfsFetch.fetch(cid)
-        if (!data) {
-          setError('Failed to download video')
-          return
-        }
-        
-        const blob = new Blob([data as BlobPart], { type: 'video/mp4' })
-        setVideoUrl(URL.createObjectURL(blob))
-        
-      } else {
-        // Encrypted: fetch and decrypt
-        const cid = video.encryptedCid || video.filecoinCid
-        if (!cid) {
-          setError('Encrypted video not available')
-          return
-        }
-        
-        // Fetch encrypted data
-        const encryptedData = await ipfsFetch.fetch(cid)
-        if (!encryptedData) {
-          setError('Failed to download video')
-          return
-        }
-        
-        // Decrypt
-        const decryptedUrl = await decryption.decrypt(video, encryptedData)
-        if (decryptedUrl) {
-          setVideoUrl(decryptedUrl)
-        } else {
-          setError(decryption.error?.message || 'Decryption failed')
-        }
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load video')
-    }
-  }
-  
-  const handleRetry = () => {
-    if (video) {
-      loadVideo(video)
-    }
-  }
-  
-  // Loading state
+  // Loading state (fetching video metadata)
   if (isVideoLoading) {
     return <PlayerLoadingState />
   }
@@ -132,6 +68,16 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
         </Link>
         
         <div className="flex items-center gap-2">
+          {/* Cache status indicator */}
+          {video.isEncrypted && (
+            <CacheIndicator 
+              isCached={isCached} 
+              videoId={video.id} 
+              onEvict={evict}
+            />
+          )}
+          
+          {/* Encrypted badge */}
           {video.isEncrypted && (
             <div className="flex items-center gap-1 px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full text-sm">
               <Lock className="w-4 h-4" />
@@ -146,23 +92,23 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
         {/* Error overlay */}
         {error && (
           <ErrorOverlay 
-            error={error} 
-            onRetry={handleRetry}
+            error={error.message} 
+            onRetry={retry}
             isEncrypted={video.isEncrypted}
           />
         )}
         
-        {/* Decryption progress */}
-        {video.isEncrypted && decryption.status !== 'idle' && decryption.status !== 'complete' && (
-          <DecryptionProgress 
-            status={decryption.status}
-            progress={decryption.progress}
-            downloadProgress={ipfsFetch.progress}
+        {/* Loading/decryption progress */}
+        {isLoading && !error && (
+          <CacheAwareProgress 
+            stage={loadingStage}
+            progress={progress}
+            isCached={isCached}
           />
         )}
         
         {/* Video element */}
-        {videoUrl && !error && (
+        {videoUrl && !error && !isLoading && (
           <VideoPlayerControls 
             src={videoUrl}
             title={video.title}
@@ -170,8 +116,8 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
           />
         )}
         
-        {/* Initial loading */}
-        {!videoUrl && !error && !video.isEncrypted && (
+        {/* Initial loading for non-encrypted videos */}
+        {!videoUrl && !error && !isLoading && !video.isEncrypted && (
           <div className="flex items-center gap-3 text-white/60">
             <Loader2 className="w-6 h-6 animate-spin" />
             <span>Loading video...</span>
