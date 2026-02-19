@@ -129,14 +129,14 @@ update_progress() {
         completed_count=$((completed_count + 1))
     fi
 
-    # Use Linux-compatible sed syntax
-    sed -i "s/- \*\*Current Task:\*\* .*/- **Current Task:** $task_num \/ $TOTAL_TASKS/" "$PROGRESS_FILE"
-    sed -i "s/- \*\*Completed:\*\* .*/- **Completed:** $completed_count \/ $TOTAL_TASKS/" "$PROGRESS_FILE"
+    # Use different delimiter for sed to avoid conflicts with forward slashes
+    sed -i "s|- \*\*Current Task:\*\* .*|- **Current Task:** $task_num / $TOTAL_TASKS|" "$PROGRESS_FILE"
+    sed -i "s|- \*\*Completed:\*\* .*|- **Completed:** $completed_count / $TOTAL_TASKS|" "$PROGRESS_FILE"
 
     if [[ $completed_count -eq $TOTAL_TASKS ]]; then
-        sed -i "s/- \*\*Status:\*\* .*/- **Status:** 🟢 Complete/" "$PROGRESS_FILE"
+        sed -i "s|- \*\*Status:\*\* .*|- **Status:** 🟢 Complete|" "$PROGRESS_FILE"
     elif [[ $completed_count -gt 0 ]]; then
-        sed -i "s/- \*\*Status:\*\* .*/- **Status:** 🟡 In Progress/" "$PROGRESS_FILE"
+        sed -i "s|- \*\*Status:\*\* .*|- **Status:** 🟡 In Progress|" "$PROGRESS_FILE"
     fi
 
     # Truncate description for the table
@@ -328,7 +328,7 @@ main() {
     print_info "Progress tracked in: $PROGRESS_FILE"
 
     # Update final status
-    sed -i "s/- \*\*Status:\*\* .*/- **Status:** 🟢 Complete/" "$PROGRESS_FILE"
+    sed -i "s|- \*\*Status:\*\* .*|- **Status:** 🟢 Complete|" "$PROGRESS_FILE"
 }
 
 # ─── Help ──────────────────────────────────────────────────────────────
