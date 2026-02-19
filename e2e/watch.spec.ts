@@ -4,7 +4,7 @@ test.describe('Watch Page', () => {
   const testVideoId = encodeURIComponent('QmTest123');
 
   test('should require authentication', async ({ page, gotoAndHydrate }) => {
-    await gotoAndHydrate(`/watch/${testVideoId}`);
+    await gotoAndHydrate(`/watch?v=${testVideoId}`);
     
     await page.waitForLoadState('networkidle');
     
@@ -18,7 +18,7 @@ test.describe('Watch Page', () => {
 
   test('should display video player when authenticated', async ({ page, gotoAndHydrate, mockWalletConnected }) => {
     await mockWalletConnected();
-    await gotoAndHydrate(`/watch/${testVideoId}`);
+    await gotoAndHydrate(`/watch?v=${testVideoId}`);
     
     await page.waitForLoadState('networkidle');
     
@@ -37,7 +37,7 @@ test.describe('Watch Page', () => {
 
   test('should have player controls', async ({ page, gotoAndHydrate, mockWalletConnected }) => {
     await mockWalletConnected();
-    await gotoAndHydrate(`/watch/${testVideoId}`);
+    await gotoAndHydrate(`/watch?v=${testVideoId}`);
     
     await page.waitForLoadState('networkidle');
     
@@ -61,7 +61,7 @@ test.describe('Watch Page', () => {
     await page.waitForLoadState('networkidle');
     
     // Navigate to watch page
-    await gotoAndHydrate(`/watch/${testVideoId}`);
+    await gotoAndHydrate(`/watch?v=${testVideoId}`);
     
     // Go back
     await page.goBack();
@@ -72,7 +72,7 @@ test.describe('Watch Page', () => {
 
   test('should display error for invalid video ID', async ({ page, gotoAndHydrate, mockWalletConnected }) => {
     await mockWalletConnected();
-    await gotoAndHydrate('/watch/invalid-video-id');
+    await gotoAndHydrate('/watch?v=invalid-video-id');
     
     await page.waitForLoadState('networkidle');
     
@@ -92,7 +92,7 @@ test.describe('Watch Page', () => {
     
     // Test mobile viewport
     await page.setViewportSize({ width: 375, height: 667 });
-    await gotoAndHydrate(`/watch/${testVideoId}`);
+    await gotoAndHydrate(`/watch?v=${testVideoId}`);
     await page.waitForLoadState('networkidle');
     
     // Player should be visible

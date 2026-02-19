@@ -179,14 +179,6 @@ test('user can connect wallet', async ({
 
 ## Deployment
 
-### Vercel
-
-The easiest way to deploy is using [Vercel](https://vercel.com):
-
-```bash
-vercel --prod
-```
-
 See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
 
 ## Documentation

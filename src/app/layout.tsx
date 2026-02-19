@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
-import { headers } from 'next/headers';
 import "./globals.css";
 import ContextProvider from '@/context';
 import { AuthProvider } from "@/components/providers/AuthProvider";
@@ -8,7 +7,6 @@ import { LitProvider } from "@/components/providers/LitProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { ThemeScript } from "@/components/providers/ThemeScript";
 import { ErrorProvider } from "@/components/providers/ErrorProvider";
-import { VercelAnalytics } from "@/components/analytics/VercelAnalytics";
 import { WebVitals } from "@/components/analytics/WebVitals";
 
 const geistSans = localFont({
@@ -120,14 +118,11 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const headersData = await headers();
-  const cookies = headersData.get('cookie');
-
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -141,7 +136,7 @@ export default async function RootLayout({
       >
         <ThemeProvider defaultTheme="dark" enableSystem>
           <ThemeScript />
-          <ContextProvider cookies={cookies}>
+          <ContextProvider>
             <AuthProvider>
               <LitProvider>
                 <ErrorProvider>
@@ -151,7 +146,6 @@ export default async function RootLayout({
             </AuthProvider>
           </ContextProvider>
         </ThemeProvider>
-        <VercelAnalytics />
         <WebVitals />
       </body>
     </html>

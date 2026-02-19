@@ -1,14 +1,60 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@import "tw-animate-css";
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+
+  /* Haven brand colors */
+  --color-haven-primary: #3b82f6;
+  --color-haven-secondary: #8b5cf6;
+  --color-haven-accent: #06b6d4;
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  /* Custom breakpoints */
+  --breakpoint-xs: 475px;
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1536px;
 }
-
-
 
 @layer base {
   :root {
@@ -66,8 +112,6 @@
   }
 }
 
-
-
 @layer base {
   * {
     @apply border-border;
@@ -75,12 +119,12 @@
   body {
     @apply bg-background text-foreground;
   }
-  
+
   /* Smooth theme transitions */
   html {
     @apply transition-colors duration-300 ease-in-out;
   }
-  
+
   /* Apply transition to commonly themed elements */
   *,
   *::before,
@@ -91,54 +135,52 @@
   }
 }
 
-@layer utilities {
-  /* Touch action optimization - prevents double-tap zoom delays */
-  .touch-manipulation {
-    touch-action: manipulation;
-  }
-  
-  /* Safe area insets for notched phones */
-  .safe-area-inset {
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
-  }
-  
-  .safe-area-top {
-    padding-top: env(safe-area-inset-top);
-  }
-  
-  .safe-area-bottom {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-  
-  .safe-area-x {
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
-  }
-  
-  /* Hide scrollbar on mobile for cleaner look */
-  .hide-scrollbar::-webkit-scrollbar {
+@utility text-balance {
+  text-wrap: balance;
+}
+
+@utility touch-manipulation {
+  touch-action: manipulation;
+}
+
+@utility safe-area-inset {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+@utility safe-area-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+@utility safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@utility safe-area-x {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+@utility hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
     display: none;
   }
-  .hide-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-  
-  /* Prevent text zoom on iOS when focusing inputs */
-  .text-base-ios {
-    font-size: 16px;
-  }
-  
-  /* Theme transition utilities */
-  .theme-transition {
-    @apply transition-colors duration-300 ease-in-out;
-  }
-  
-  /* Disable transitions on page load to prevent flash */
-  .no-transitions * {
+}
+
+@utility text-base-ios {
+  font-size: 16px;
+}
+
+@utility theme-transition {
+  @apply transition-colors duration-300 ease-in-out;
+}
+
+@utility no-transitions {
+  & * {
     transition: none !important;
   }
 }

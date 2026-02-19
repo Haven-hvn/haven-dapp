@@ -36,32 +36,6 @@ export function WebVitals(): null {
     if (process.env.NODE_ENV === "development") {
       console.log("[Web Vitals]", metric.name, metric.value);
     }
-
-    // Send to analytics in production
-    if (process.env.NODE_ENV === "production") {
-      // Example: Send to Vercel Analytics or other analytics service
-      const body = JSON.stringify({
-        event: "web_vitals",
-        metric: metric.name,
-        value: Math.round(metric.value * 1000) / 1000, // Round to 3 decimal places
-        id: metric.id,
-        page: window.location.pathname,
-        navigationType: metric.navigationType,
-      });
-
-      // Use sendBeacon for reliability
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon("/api/analytics/web-vitals", body);
-      } else {
-        fetch("/api/analytics/web-vitals", {
-          body,
-          method: "POST",
-          keepalive: true,
-        }).catch(() => {
-          // Silently fail - don't block the user experience
-        });
-      }
-    }
   });
 
   // Performance Observer for additional metrics

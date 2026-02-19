@@ -57,15 +57,22 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
     
     try {
       if (!video.isEncrypted) {
-        // Non-encrypted: direct IPFS streaming
+        // Non-encrypted: retrieve via Synapse SDK (with IPFS gateway fallback)
         const cid = video.filecoinCid
         if (!cid) {
           setError('Video not available')
           return
         }
         
-        const gateway = process.env.NEXT_PUBLIC_IPFS_GATEWAY || 'https://gateway.lighthouse.storage/ipfs/'
-        setVideoUrl(`${gateway}${cid}`)
+        // Fetch via Synapse SDK (direct client-side Filecoin retrieval)
+        const data = await ipfsFetch.fetch(cid)
+        if (!data) {
+          setError('Failed to download video')
+          return
+        }
+        
+        const blob = new Blob([data as BlobPart], { type: 'video/mp4' })
+        setVideoUrl(URL.createObjectURL(blob))
         
       } else {
         // Encrypted: fetch and decrypt

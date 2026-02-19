@@ -113,6 +113,16 @@ export {
   type IpfsConfig,
 } from './ipfs'
 
+// Synapse SDK utilities (Filecoin Onchain Cloud retrieval)
+export {
+  getSynapseInstance,
+  resetSynapseInstance,
+  downloadFromSynapse,
+  getSynapseErrorMessage,
+  SynapseError,
+  type SynapseConfig,
+} from './synapse'
+
 // Media capabilities utilities
 export {
   isMediaCapabilitiesSupported,

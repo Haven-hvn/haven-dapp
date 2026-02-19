@@ -15,7 +15,6 @@ This guide covers the deployment process for the Haven Web DApp, including envir
 
 - Node.js 18+ and npm 9+
 - Git
-- Vercel account (for Vercel deployment)
 - WalletConnect Project ID
 - Alchemy API Key (optional but recommended)
 
@@ -25,7 +24,8 @@ Copy `.env.local.example` to `.env.local` and fill in the required values:
 
 ```bash
 cp .env.local.example .env.local
-```n
+```
+
 ### Required Variables
 
 | Variable | Description | Source |
@@ -73,48 +73,6 @@ npm run analyze
 
 ## Deployment Options
 
-### Vercel (Recommended)
-
-1. **Install Vercel CLI**:
-   ```bash
-   npm i -g vercel
-   ```
-
-2. **Login to Vercel**:
-   ```bash
-   vercel login
-   ```
-
-3. **Deploy**:
-   ```bash
-   # Preview deployment
-   vercel
-
-   # Production deployment
-   vercel --prod
-   ```
-
-4. **Environment Variables in Vercel**:
-   - Go to Project Settings → Environment Variables
-   - Add all required variables from `.env.local`
-   - Ensure they are marked as "Production" for prod deployments
-
-### GitHub Actions + Vercel (Automated)
-
-The repository includes a GitHub Actions workflow (`.github/workflows/ci.yml`) that automatically:
-
-1. Runs linting and type checking on every push
-2. Builds the application
-3. Deploys to Vercel preview for pull requests
-4. Deploys to Vercel production on main branch pushes
-
-**Required Secrets**:
-- `VERCEL_TOKEN` - Vercel authentication token
-- `VERCEL_ORG_ID` - Vercel organization ID
-- `VERCEL_PROJECT_ID` - Vercel project ID
-- `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` - WalletConnect project ID
-- `NEXT_PUBLIC_ALCHEMY_API_KEY` - Alchemy API key
-
 ### IPFS (Fully Decentralized)
 
 1. **Build static export**:
@@ -140,14 +98,6 @@ The repository includes a GitHub Actions workflow (`.github/workflows/ci.yml`) t
 - **AWS Amplify**: Connect repository and use default Next.js settings
 
 ## Performance Monitoring
-
-### Vercel Analytics
-
-Vercel Analytics is automatically enabled when deploying to Vercel. View metrics in the Vercel dashboard.
-
-### Speed Insights
-
-Speed Insights provides Core Web Vitals monitoring. Enabled by default via `@vercel/speed-insights`.
 
 ### Web Vitals
 
@@ -222,12 +172,6 @@ The following security headers are configured in `next.config.mjs`:
 
 ## Rollback Procedure
 
-### Vercel
-
-1. Go to Vercel dashboard → Deployments
-2. Find the previous working deployment
-3. Click "Promote to Production"
-
 ### GitHub Actions
 
 1. Revert the problematic commit
@@ -249,7 +193,6 @@ The following security headers are configured in `next.config.mjs`:
 ## Support
 
 For deployment issues:
-1. Check Vercel deployment logs
-2. Review GitHub Actions logs
-3. Check browser console for errors
-4. Open an issue in the repository
+1. Review GitHub Actions logs
+2. Check browser console for errors
+3. Open an issue in the repository

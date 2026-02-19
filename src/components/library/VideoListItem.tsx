@@ -30,7 +30,7 @@ export function VideoListItem({ video }: VideoListItemProps) {
   
   return (
     <Link 
-      href={`/watch/${encodeURIComponent(video.id)}`} 
+      href={`/watch?v=${encodeURIComponent(video.id)}`}
       className="block group touch-manipulation"
     >
       <div className="flex gap-3 sm:gap-4 p-2 sm:p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors">

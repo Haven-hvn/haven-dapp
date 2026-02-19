@@ -6,6 +6,13 @@ import { createAppKit } from '@reown/appkit/react'
 import React, { type ReactNode } from 'react'
 import { cookieToInitialState, WagmiProvider, type Config } from 'wagmi'
 
+function getClientCookies(): string | null {
+  if (typeof document !== 'undefined') {
+    return document.cookie || null
+  }
+  return null
+}
+
 // Set up queryClient
 const queryClient = new QueryClient()
 
@@ -36,10 +43,10 @@ export const modal = projectId
 
 interface ContextProviderProps {
   children: ReactNode
-  cookies: string | null
 }
 
-function ContextProvider({ children, cookies }: ContextProviderProps) {
+function ContextProvider({ children }: ContextProviderProps) {
+  const cookies = getClientCookies()
   const initialState = cookieToInitialState(wagmiAdapter.wagmiConfig as Config, cookies)
 
   return (

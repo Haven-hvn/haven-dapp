@@ -6,33 +6,12 @@ const __dirname = dirname(__filename);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Image optimization configuration
+  // Static export for JAMstack deployment
+  output: 'export',
+  
+  // Image optimization disabled for static export
   images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'ipfs.io',
-      },
-      {
-        protocol: 'https',
-        hostname: '*.ipfs.dweb.link',
-      },
-      {
-        protocol: 'https',
-        hostname: 'gateway.ipfs.io',
-      },
-      {
-        protocol: 'https',
-        hostname: 'gateway.lighthouse.storage',
-      },
-      {
-        protocol: 'https',
-        hostname: '*.lighthouse.storage',
-      },
-    ],
-    // Optimize images
-    formats: ['image/webp', 'image/avif'],
-    minimumCacheTTL: 60,
+    unoptimized: true,
   },
   
   
@@ -45,7 +24,12 @@ const nextConfig = {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
   },
   
-  // Webpack configuration to handle Lit Protocol SDK dependencies
+  // Note: Turbopack is not used because its resolveAlias applies globally
+  // (server + client), which breaks server-side Node.js built-in modules.
+  // Webpack's resolve.fallback correctly only applies to client bundles.
+  // Both dev and build use --webpack flag instead.
+  
+  // Webpack configuration (fallback for production builds if needed)
   webpack: (config, { isServer }) => {
     // Fallback for Node.js modules that Lit SDK references but doesn't use in browser
     if (!isServer) {
@@ -116,71 +100,6 @@ const nextConfig = {
     '@lit-protocol/access-control-conditions-schemas',
   ],
   
-  // Headers for security and caching
-  async headers() {
-    return [
-      {
-        source: '/:path*',
-        headers: [
-          {
-            key: 'X-DNS-Prefetch-Control',
-            value: 'on',
-          },
-          {
-            key: 'Strict-Transport-Security',
-            value: 'max-age=63072000; includeSubDomains; preload',
-          },
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
-          },
-          {
-            key: 'Referrer-Policy',
-            value: 'origin-when-cross-origin',
-          },
-          {
-            key: 'X-Frame-Options',
-            value: 'SAMEORIGIN',
-          },
-          {
-            key: 'X-XSS-Protection',
-            value: '1; mode=block',
-          },
-        ],
-      },
-      {
-        // Cache static assets
-        source: '/:all*(svg|jpg|jpeg|png|webp|avif|woff|woff2|ttf|otf)',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
-          },
-        ],
-      },
-      {
-        // Cache JS and CSS chunks
-        source: '/_next/static/:path*',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
-          },
-        ],
-      },
-    ];
-  },
-  
-  // Redirects
-  async redirects() {
-    return [
-      {
-        source: '/home',
-        destination: '/',
-        permanent: true,
-      },
-    ];
-  },
 };
 
 export default nextConfig;

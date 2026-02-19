@@ -32,7 +32,7 @@ export function VideoCard({ video }: VideoCardProps) {
 
   return (
     <Link
-      href={`/watch/${encodeURIComponent(video.id)}`}
+      href={`/watch?v=${encodeURIComponent(video.id)}`}
       className="block group touch-manipulation"
     >
       <div className="relative rounded-lg overflow-hidden border bg-card hover:bg-accent/50 transition-colors">

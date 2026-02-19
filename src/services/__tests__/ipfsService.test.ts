@@ -1,7 +1,7 @@
 /**
- * IPFS Service Tests
+ * Content Retrieval Service Tests
  * 
- * Unit tests for the IPFS fetch service.
+ * Unit tests for the Synapse SDK content retrieval service.
  * 
  * @module services/__tests__/ipfsService
  */
@@ -12,10 +12,22 @@ import {
   fetchEncryptedData,
   fetchMultiple,
 } from '../ipfsService'
-import { IpfsError, buildIpfsUrl, isValidCid } from '@/lib/ipfs'
+import { IpfsError, isValidCid } from '@/lib/ipfs'
 
-// Mock the fetch API
-global.fetch = jest.fn()
+// Mock the Synapse SDK download
+jest.mock('@/lib/synapse', () => ({
+  downloadFromSynapse: jest.fn(),
+  SynapseError: class SynapseError extends Error {
+    code: string
+    constructor(message: string, code: string) {
+      super(message)
+      this.code = code
+      this.name = 'SynapseError'
+    }
+  },
+}))
+
+import { downloadFromSynapse } from '@/lib/synapse'
 
 // Mock performance.now
 Object.defineProperty(global, 'performance', {
@@ -40,7 +52,7 @@ describe('ipfsService', () => {
       expect(isValidCid('')).toBe(false)
       expect(isValidCid(null as unknown as string)).toBe(false)
       expect(isValidCid(undefined as unknown as string)).toBe(false)
-      expect(isValidCid('ab')).toBe(false) // Too short
+      expect(isValidCid('ab')).toBe(false)
     })
 
     it('should handle CID with ipfs:// prefix', () => {
@@ -61,62 +73,36 @@ describe('ipfsService', () => {
       await expect(fetchFromIpfs('invalid')).rejects.toThrow('Invalid CID')
     })
 
-    it('should fetch successfully from primary gateway', async () => {
-      const mockResponse = {
-        ok: true,
-        headers: new Map([['content-length', '5']]),
-        body: {
-          getReader: () => ({
-            read: jest.fn()
-              .mockResolvedValueOnce({ done: false, value: mockData })
-              .mockResolvedValueOnce({ done: true }),
-            releaseLock: jest.fn(),
-          }),
-        },
-      }
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce(mockResponse)
+    it('should fetch successfully from Synapse SDK', async () => {
+      ;(downloadFromSynapse as jest.Mock).mockResolvedValueOnce(mockData)
 
       const result = await fetchFromIpfs(mockCid)
 
       expect(result.data).toEqual(mockData)
-      expect(result.gateway).toBeDefined()
+      expect(result.gateway).toBe('synapse')
       expect(result.size).toBe(5)
+      expect(downloadFromSynapse).toHaveBeenCalledWith(mockCid)
     })
 
-    it('should retry on failure and fallback to next gateway', async () => {
-      // First gateway fails
-      ;(global.fetch as jest.Mock)
+    it('should retry on failure', async () => {
+      ;(downloadFromSynapse as jest.Mock)
         .mockRejectedValueOnce(new Error('Network error'))
         .mockRejectedValueOnce(new Error('Network error'))
-        .mockRejectedValueOnce(new Error('Network error'))
-      
-      // Second gateway succeeds
-      const mockResponse = {
-        ok: true,
-        headers: new Map(),
-        body: {
-          getReader: () => ({
-            read: jest.fn()
-              .mockResolvedValueOnce({ done: false, value: mockData })
-              .mockResolvedValueOnce({ done: true }),
-            releaseLock: jest.fn(),
-          }),
-        },
-      }
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce(mockResponse)
+        .mockResolvedValueOnce(mockData)
 
       const result = await fetchFromIpfs(mockCid, { retries: 3 })
 
       expect(result.data).toEqual(mockData)
-      expect(global.fetch).toHaveBeenCalledTimes(4) // 3 retries + 1 success
+      expect(downloadFromSynapse).toHaveBeenCalledTimes(3)
     })
 
-    it('should throw when all gateways fail', async () => {
-      ;(global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'))
+    it('should throw after all retries fail', async () => {
+      ;(downloadFromSynapse as jest.Mock).mockRejectedValue(new Error('Network error'))
 
-      await expect(fetchFromIpfs(mockCid, { retries: 1 })).rejects.toThrow(
-        'Failed to fetch from all gateways'
+      await expect(fetchFromIpfs(mockCid, { retries: 2 })).rejects.toThrow(
+        'Failed to fetch via Synapse'
       )
+      expect(downloadFromSynapse).toHaveBeenCalledTimes(2)
     })
 
     it('should handle abort signal', async () => {
@@ -130,62 +116,26 @@ describe('ipfsService', () => {
 
     it('should call progress callback', async () => {
       const onProgress = jest.fn()
-      const mockResponse = {
-        ok: true,
-        headers: new Map([['content-length', '10']]),
-        body: {
-          getReader: () => ({
-            read: jest.fn()
-              .mockResolvedValueOnce({ done: false, value: new Uint8Array([1, 2, 3, 4, 5]) })
-              .mockResolvedValueOnce({ done: false, value: new Uint8Array([6, 7, 8, 9, 10]) })
-              .mockResolvedValueOnce({ done: true }),
-            releaseLock: jest.fn(),
-          }),
-        },
-      }
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce(mockResponse)
+      ;(downloadFromSynapse as jest.Mock).mockResolvedValueOnce(mockData)
 
       await fetchFromIpfs(mockCid, { onProgress })
 
-      expect(onProgress).toHaveBeenCalled()
+      expect(onProgress).toHaveBeenCalledWith(5, 5)
     })
   })
 
   describe('streamFromIpfs', () => {
     const mockCid = 'QmTestCid123456789'
+    const mockData = new Uint8Array([1, 2, 3, 4, 5])
     
-    it('should return readable stream on success', async () => {
-      const mockStream = new ReadableStream()
-      const mockResponse = {
-        ok: true,
-        body: mockStream,
-        headers: new Map([
-          ['content-type', 'video/mp4'],
-          ['content-length', '1024'],
-        ]),
-      }
-      ;(global.fetch as jest.Mock).mockResolvedValueOnce(mockResponse)
-
-      const result = await streamFromIpfs(mockCid)
-
-      expect(result.stream).toBe(mockStream)
-      expect(result.contentType).toBe('video/mp4')
-      expect(result.contentLength).toBe(1024)
-    })
-
-    it('should fallback on failure', async () => {
-      ;(global.fetch as jest.Mock)
-        .mockRejectedValueOnce(new Error('Failed'))
-        .mockResolvedValueOnce({
-          ok: true,
-          body: new ReadableStream(),
-          headers: new Map(),
-        })
+    it('should return readable stream', async () => {
+      ;(downloadFromSynapse as jest.Mock).mockResolvedValueOnce(mockData)
 
       const result = await streamFromIpfs(mockCid)
 
       expect(result.stream).toBeDefined()
-      expect(global.fetch).toHaveBeenCalledTimes(2)
+      expect(result.gateway).toBe('synapse')
+      expect(result.contentLength).toBe(5)
     })
 
     it('should throw for invalid CID', async () => {
@@ -194,65 +144,29 @@ describe('ipfsService', () => {
   })
 
   describe('fetchEncryptedData', () => {
-    it('should use longer timeout for encrypted data', async () => {
-      const mockResponse = {
-        ok: true,
-        headers: new Map(),
-        body: {
-          getReader: () => ({
-            read: jest.fn()
-              .mockResolvedValueOnce({ done: false, value: new Uint8Array([1]) })
-              .mockResolvedValueOnce({ done: true }),
-            releaseLock: jest.fn(),
-          }),
-        },
-      }
-      ;(global.fetch as jest.Mock).mockResolvedValue(mockResponse)
+    it('should fetch via Synapse with encrypted defaults', async () => {
+      ;(downloadFromSynapse as jest.Mock).mockResolvedValueOnce(new Uint8Array([1]))
 
       await fetchEncryptedData('QmTest')
 
-      // Should succeed with default encrypted options
-      expect(global.fetch).toHaveBeenCalled()
+      expect(downloadFromSynapse).toHaveBeenCalled()
     })
   })
 
   describe('fetchMultiple', () => {
     it('should fetch multiple CIDs with concurrency limit', async () => {
-      const mockResponse = {
-        ok: true,
-        headers: new Map(),
-        body: {
-          getReader: () => ({
-            read: jest.fn()
-              .mockResolvedValueOnce({ done: false, value: new Uint8Array([1]) })
-              .mockResolvedValueOnce({ done: true }),
-            releaseLock: jest.fn(),
-          }),
-        },
-      }
-      ;(global.fetch as jest.Mock).mockResolvedValue(mockResponse)
+      ;(downloadFromSynapse as jest.Mock).mockResolvedValue(new Uint8Array([1]))
 
       const cids = ['QmAbc123', 'QmBcd234', 'QmCde345']
-      const results = await fetchMultiple(cids, {}, 2) // Max 2 concurrent
+      const results = await fetchMultiple(cids, {}, 2)
 
       expect(results).toHaveLength(3)
       expect(results.every(r => r !== null)).toBe(true)
     })
 
     it('should handle individual fetch failures', async () => {
-      ;(global.fetch as jest.Mock)
-        .mockResolvedValueOnce({
-          ok: true,
-          headers: new Map(),
-          body: {
-            getReader: () => ({
-              read: jest.fn()
-                .mockResolvedValueOnce({ done: false, value: new Uint8Array([1]) })
-                .mockResolvedValueOnce({ done: true }),
-              releaseLock: jest.fn(),
-            }),
-          },
-        })
+      ;(downloadFromSynapse as jest.Mock)
+        .mockResolvedValueOnce(new Uint8Array([1]))
         .mockRejectedValue(new Error('Failed'))
 
       const cids = ['QmAbc123', 'invalid-cid-that-will-fail']
@@ -261,25 +175,5 @@ describe('ipfsService', () => {
       expect(results[0]).not.toBeNull()
       expect(results[1]).toBeNull()
     })
-  })
-})
-
-describe('buildIpfsUrl', () => {
-  it('should build correct URL with default gateway', () => {
-    const url = buildIpfsUrl('QmTest')
-    expect(url).toContain('QmTest')
-    expect(url).toMatch(/^https:\/\//)
-  })
-
-  it('should handle ipfs:// prefix', () => {
-    const url = buildIpfsUrl('ipfs://QmTest')
-    expect(url).not.toContain('ipfs://')
-    expect(url).toContain('QmTest')
-  })
-
-  it('should handle leading slash', () => {
-    const url = buildIpfsUrl('/QmTest')
-    expect(url).not.toContain('/QmTest')
-    expect(url).toContain('QmTest')
   })
 })

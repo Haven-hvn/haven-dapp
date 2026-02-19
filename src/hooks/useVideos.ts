@@ -303,7 +303,7 @@ export function useInvalidateVideos(): UseInvalidateVideosReturn {
  *   return (
  *     <div 
  *       onMouseEnter={() => prefetch()}
- *       onClick={() => router.push(`/watch/${video.id}`)}
+ *       onClick={() => router.push(`/watch?v=${video.id}`)}
  *     >
  *       {video.title}
  *     </div>

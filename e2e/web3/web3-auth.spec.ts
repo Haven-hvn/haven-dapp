@@ -46,7 +46,7 @@ test.describe('Web3 Authentication Flow', () => {
     });
 
     test('watch page should require authentication', async ({ page, gotoWithWeb3 }) => {
-      await gotoWithWeb3('/watch/test-video-id');
+      await gotoWithWeb3('/watch?v=test-video-id');
       
       // Should either show video player or auth prompt
       const videoPlayer = page.locator('video, [data-testid="video-player"]').first();

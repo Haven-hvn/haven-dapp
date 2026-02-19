@@ -83,7 +83,7 @@ test.describe('Library Page', () => {
     await page.waitForLoadState('networkidle');
     
     // Look for video cards/items
-    const videoItem = page.locator('[data-testid="video-card"], a[href*="/watch/"]').first();
+    const videoItem = page.locator('[data-testid="video-card"], a[href*="/watch?v="]').first();
     
     if (await videoItem.count() > 0 && await videoItem.isVisible()) {
       const href = await videoItem.getAttribute('href');
