@@ -9,6 +9,7 @@ import { ThemeScript } from "@/components/providers/ThemeScript";
 import { ErrorProvider } from "@/components/providers/ErrorProvider";
 import { ServiceWorkerProvider } from "@/components/providers/ServiceWorkerProvider";
 import { SecurityCleanupProvider } from "@/components/providers/SecurityCleanupProvider";
+import { CacheProvider } from "@/components/providers/CacheProvider";
 import { WebVitals } from "@/components/analytics/WebVitals";
 
 const geistSans = localFont({
@@ -141,13 +142,15 @@ export default function RootLayout({
           <ServiceWorkerProvider>
             <ContextProvider>
               <SecurityCleanupProvider>
-                <AuthProvider>
-                  <LitProvider>
-                    <ErrorProvider>
-                      {children}
-                    </ErrorProvider>
-                  </LitProvider>
-                </AuthProvider>
+                <CacheProvider>
+                  <AuthProvider>
+                    <LitProvider>
+                      <ErrorProvider>
+                        {children}
+                      </ErrorProvider>
+                    </LitProvider>
+                  </AuthProvider>
+                </CacheProvider>
               </SecurityCleanupProvider>
             </ContextProvider>
           </ServiceWorkerProvider>

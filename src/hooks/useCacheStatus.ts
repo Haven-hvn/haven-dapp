@@ -13,24 +13,10 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useAppKitAccount } from '@reown/appkit/react'
 import type { CacheStats } from '../types/cache'
 import { useCacheStore, useCacheHealth } from '../stores/cacheStore'
 import { hasVideo, getCacheStorageEstimate, listCachedVideos } from '../lib/video-cache'
-
-// Mock for useAppKitAccount - in real app this would come from @reown/appkit
-interface AppKitAccount {
-  address: string | undefined
-  isConnected: boolean
-}
-
-function useAppKitAccount(): AppKitAccount {
-  // This is a placeholder - in the real app, this would use the actual hook
-  // from @reown/appkit or similar wallet connection library
-  return {
-    address: undefined,
-    isConnected: false,
-  }
-}
 
 // =============================================================================
 // Types - Global Cache Status (No Arguments)

@@ -20,23 +20,9 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { useAppKitAccount } from '@reown/appkit/react'
 import { useCacheStore } from '../stores/cacheStore'
 import { CacheSyncEngine, getSyncEngine } from '../lib/cache/syncEngine'
-
-// Mock for useAppKitAccount - in real app this would come from @reown/appkit
-interface AppKitAccount {
-  address: string | undefined
-  isConnected: boolean
-}
-
-function useAppKitAccount(): AppKitAccount {
-  // This is a placeholder - in the real app, this would use the actual hook
-  // from @reown/appkit or similar wallet connection library
-  return {
-    address: undefined,
-    isConnected: false,
-  }
-}
 
 // ── Return Types ───────────────────────────────────────────────────
 

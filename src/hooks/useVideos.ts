@@ -8,6 +8,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useAppKitAccount } from '@reown/appkit/react'
 import type { Video } from '../types/video'
 import { fetchAllVideos } from '../services/videoService'
 import { getVideoCacheService } from '../services/cacheService'
@@ -38,21 +39,6 @@ export interface UseVideosReturn {
   refetch: () => Promise<{ data: Video[] | undefined }>
   /** True if the query has successfully fetched data */
   isSuccess: boolean
-}
-
-// Mock for useAppKitAccount - in real app this would come from @reown/appkit
-interface AppKitAccount {
-  address: string | undefined
-  isConnected: boolean
-}
-
-function useAppKitAccount(): AppKitAccount {
-  // This is a placeholder - in the real app, this would use the actual hook
-  // from @reown/appkit or similar wallet connection library
-  return {
-    address: undefined,
-    isConnected: false,
-  }
 }
 
 /**

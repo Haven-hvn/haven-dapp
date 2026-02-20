@@ -23,6 +23,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { useAppKitAccount } from '@reown/appkit/react'
 import type { ExpirationInfo } from '../lib/cache/expirationTracker'
 import {
   getExpirationTracker,
@@ -31,21 +32,6 @@ import {
 } from '../lib/cache/expirationTracker'
 import { getVideoCacheService } from '../services/cacheService'
 import type { CachedVideo } from '../types/cache'
-
-// Mock for useAppKitAccount - in real app this would come from @reown/appkit
-interface AppKitAccount {
-  address: string | undefined
-  isConnected: boolean
-}
-
-function useAppKitAccount(): AppKitAccount {
-  // This is a placeholder - in the real app, this would use the actual hook
-  // from @reown/appkit or similar wallet connection library
-  return {
-    address: undefined,
-    isConnected: false,
-  }
-}
 
 // ── Return Types ───────────────────────────────────────────────────
 

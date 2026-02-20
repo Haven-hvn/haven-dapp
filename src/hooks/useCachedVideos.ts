@@ -7,25 +7,11 @@
  */
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useAppKitAccount } from '@reown/appkit/react'
 import type { Video } from '../types/video'
 import type { CacheStats } from '../types/cache'
 import { getVideoCacheService } from '../services/cacheService'
 import { useVideos } from './useVideos'
-
-// Mock for useAppKitAccount - in real app this would come from @reown/appkit
-interface AppKitAccount {
-  address: string | undefined
-  isConnected: boolean
-}
-
-function useAppKitAccount(): AppKitAccount {
-  // This is a placeholder - in the real app, this would use the actual hook
-  // from @reown/appkit or similar wallet connection library
-  return {
-    address: undefined,
-    isConnected: false,
-  }
-}
 
 // Video type already includes arkivStatus field from cache metadata
 // No need for extended interface anymore

@@ -8,6 +8,7 @@
  */
 
 import { create } from 'zustand'
+import { useShallow } from 'zustand/react/shallow'
 import { persist } from 'zustand/middleware'
 import type { CacheStats, CacheSyncResult } from '../types/cache'
 
@@ -153,11 +154,13 @@ export function checkIndexedDBAvailability(): boolean {
  * Use this in components that only need sync-related state
  */
 export function useCacheSyncStatus() {
-  return useCacheStore((s) => ({
-    isSyncing: s.isSyncing,
-    lastSyncedAt: s.lastSyncedAt,
-    lastSyncError: s.lastSyncError,
-  }))
+  return useCacheStore(
+    useShallow((s) => ({
+      isSyncing: s.isSyncing,
+      lastSyncedAt: s.lastSyncedAt,
+      lastSyncError: s.lastSyncError,
+    }))
+  )
 }
 
 /**
@@ -165,11 +168,13 @@ export function useCacheSyncStatus() {
  * Use this in components that only need health-related state
  */
 export function useCacheHealth() {
-  return useCacheStore((s) => ({
-    isInitialized: s.isInitialized,
-    isAvailable: s.isAvailable,
-    stats: s.stats,
-  }))
+  return useCacheStore(
+    useShallow((s) => ({
+      isInitialized: s.isInitialized,
+      isAvailable: s.isAvailable,
+      stats: s.stats,
+    }))
+  )
 }
 
 /**
@@ -177,10 +182,12 @@ export function useCacheHealth() {
  * Use this in components that only need preference-related state
  */
 export function useCachePreferences() {
-  return useCacheStore((s) => ({
-    showExpiredVideos: s.showExpiredVideos,
-    autoSyncEnabled: s.autoSyncEnabled,
-    toggleShowExpiredVideos: s.toggleShowExpiredVideos,
-    toggleAutoSync: s.toggleAutoSync,
-  }))
+  return useCacheStore(
+    useShallow((s) => ({
+      showExpiredVideos: s.showExpiredVideos,
+      autoSyncEnabled: s.autoSyncEnabled,
+      toggleShowExpiredVideos: s.toggleShowExpiredVideos,
+      toggleAutoSync: s.toggleAutoSync,
+    }))
+  )
 }

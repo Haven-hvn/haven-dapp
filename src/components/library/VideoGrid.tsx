@@ -10,7 +10,8 @@
  * @module components/library/VideoGrid
  */
 
-import { useState, Suspense, lazy, useMemo } from "react";
+import { useState, Suspense, lazy, useMemo, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useVideoSearch } from "@/hooks/useVideoSearch";
 import { useCacheStatus } from "@/hooks/useCacheStatus";
 import { VideoListItem } from "./VideoListItem";
@@ -71,6 +72,15 @@ export function VideoGrid() {
   const [filters, setFilters] = useState<VideoFilters>({});
   const [sortBy] = useState<VideoSortField>("date");
   const [sortOrder] = useState<SortOrder>("desc");
+
+  const router = useRouter();
+
+  const handleVideoClick = useCallback(
+    (video: { id: string }) => {
+      router.push(`/watch?v=${encodeURIComponent(video.id)}`);
+    },
+    [router]
+  );
 
   const {
     videos,
@@ -188,6 +198,7 @@ export function VideoGrid() {
               <VideoCard 
                 key={video.id} 
                 video={video} 
+                onClick={handleVideoClick}
                 isCached={cacheStatus.get(video.id) ?? false}
               />
             ))}
