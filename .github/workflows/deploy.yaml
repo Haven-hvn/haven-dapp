@@ -16,7 +16,7 @@ jobs:
         shell: bash
         run: |
           if [ -z "${{ secrets.ORBITER_API_KEY }}" ]; then
-            echo "🚨 ORBITER_API_KEY not found! Please follow these steps:"
+            echo "🚨 ORBITER_API_KEY not found ! Please follow these steps:"
             echo ""
             echo "1. Go to https://app.orbiter.host/api-keys"
             echo "2. Generate a new API key"
