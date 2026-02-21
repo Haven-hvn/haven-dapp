@@ -1,0 +1,123 @@
+name: Deploy to Orbiter
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Check if API key exists
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.ORBITER_API_KEY }}" ]; then
+            echo "🚨 ORBITER_API_KEY not found! Please add the secret."
+            exit 1
+          fi
+      - name: Check if Project ID exists
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}" ]; then
+            echo "🚨 NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID not found! Please add the secret."
+            exit 1
+          fi
+
+      - name: Check required inputs
+        run: |
+          if [ -z "./out" ]; then
+            echo "🚨 build-dir input is required but was not provided"
+            exit 1
+          fi
+          if [ -z "havenappnext" ]; then
+            echo "🚨 project-name input is required but was not provided"
+            exit 1
+          fi
+
+      - name: Detect package manager
+        id: detect-pm
+        run: |
+          BUILD_CMD="npm run build"
+          if [[ $BUILD_CMD == "npm "* ]]; then
+            echo "manager=npm" >> $GITHUB_OUTPUT
+          elif [[ $BUILD_CMD == "yarn "* ]]; then
+            echo "manager=yarn" >> $GITHUB_OUTPUT
+          elif [[ $BUILD_CMD == "pnpm "* ]]; then
+            echo "manager=pnpm" >> $GITHUB_OUTPUT
+          else
+            echo "manager=npm" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "25.3.x"
+
+      - name: Setup pnpm
+        if: steps.detect-pm.outputs.manager == 'pnpm'
+        uses: pnpm/action-setup@v2
+        with:
+          version: latest
+
+      - name: Setup yarn
+        if: steps.detect-pm.outputs.manager == 'yarn'
+        run: npm install -g yarn
+
+      - name: Install dependencies
+        run: |
+          case "${{ steps.detect-pm.outputs.manager }}" in
+            "npm")
+              npm ci --legacy-peer-deps
+              # Force reinstall lightningcss with native binaries
+              npm uninstall lightningcss --silent 2>/dev/null || true
+              npm install lightningcss --force
+              npm rebuild lightningcss --force
+              ;;
+            "yarn")
+              yarn install --frozen-lockfile
+              # Force reinstall lightningcss with native binaries
+              yarn remove lightningcss --silent 2>/dev/null || true
+              yarn add lightningcss --force
+              yarn rebuild lightningcss
+              ;;
+            "pnpm")
+              pnpm install --frozen-lockfile
+              # Force reinstall lightningcss with native binaries
+              pnpm remove lightningcss --silent 2>/dev/null || true
+              pnpm add lightningcss --force
+              pnpm rebuild lightningcss
+              ;;
+            *)
+              echo "Unsupported package manager: ${{ steps.detect-pm.outputs.manager }}"
+              exit 1
+              ;;
+          esac
+
+      - name: Verify lightningcss installation
+        run: |
+          echo "Checking lightningcss installation..."
+          node -e "try { require('lightningcss'); console.log('✅ lightningcss loaded successfully'); } catch(e) { console.error('❌ lightningcss failed to load:', e.message); process.exit(1); }"
+
+      - name: Build Next.js app
+        run: |
+          echo "Building Next.js application..."
+          npm run build
+
+      - name: Verify build output
+        run: |
+          if [ ! -d "./out" ]; then
+            echo "❌ Build failed: ./out directory not found"
+            exit 1
+          fi
+          echo "✅ Build successful: ./out directory exists"
+          ls -la ./out
+
+      - name: Deploy to Orbiter
+        env:
+          ORBITER_API_KEY: ${{ secrets.ORBITER_API_KEY }}
+          NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}          
+        run: npx orbiter-cli update -d havenappnext ./out
