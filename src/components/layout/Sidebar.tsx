@@ -26,11 +26,7 @@ export function Sidebar() {
     <aside className="w-64 border-r border-white/[0.06] bg-[#0A0A0F] h-full flex flex-col">
       <div className="p-6 safe-area-top">
         <Link href="/library" className="flex items-center gap-2 touch-manipulation">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#00F5FF] to-[#FF00E5] flex items-center justify-center">
-            <svg width="16" height="16" viewBox="0 0 100 100" fill="none" className="text-white">
-              <path d="M28 28 L28 72 L42 72 L42 56 L58 56 L58 72 L72 72 L72 28 L58 28 L58 44 L42 44 L42 28 Z" fill="currentColor"/>
-            </svg>
-          </div>
+          <img src="/favicon.ico" alt="Haven" className="w-8 h-8 rounded-lg" />
           <span className="text-xl font-bold">Haven</span>
         </Link>
       </div>
