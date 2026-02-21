@@ -71,21 +71,36 @@ jobs:
         run: |
           case "${{ steps.detect-pm.outputs.manager }}" in
             "npm")
-              npm ci --legacy-peer-deps
+              # Check if lockfile exists and is in sync
+              if [ -f "package-lock.json" ] && npm ci --dry-run --legacy-peer-deps 2>/dev/null; then
+                echo "Using npm ci for clean install..."
+                npm ci --legacy-peer-deps
+              else
+                echo "Lockfile missing or out of sync, using npm install to regenerate..."
+                npm install --legacy-peer-deps
+              fi
               # Force reinstall lightningcss with native binaries
               npm uninstall lightningcss --silent 2>/dev/null || true
               npm install lightningcss --force
               npm rebuild lightningcss --force
               ;;
             "yarn")
-              yarn install --frozen-lockfile
+              if [ -f "yarn.lock" ]; then
+                yarn install --frozen-lockfile
+              else
+                yarn install
+              fi
               # Force reinstall lightningcss with native binaries
               yarn remove lightningcss --silent 2>/dev/null || true
               yarn add lightningcss --force
               yarn rebuild lightningcss
               ;;
             "pnpm")
-              pnpm install --frozen-lockfile
+              if [ -f "pnpm-lock.yaml" ]; then
+                pnpm install --frozen-lockfile
+              else
+                pnpm install
+              fi
               # Force reinstall lightningcss with native binaries
               pnpm remove lightningcss --silent 2>/dev/null || true
               pnpm add lightningcss --force
