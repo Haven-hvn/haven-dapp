@@ -86,6 +86,9 @@ export interface Video {
   /** CID encryption metadata (when CID itself is encrypted) */
   cidEncryptionMetadata?: CidEncryptionMetadata
   
+  /** Decrypted CID (cached after first Lit decryption to avoid re-decryption) */
+  decryptedCid?: string
+  
   // AI analysis
   /** Whether AI analysis data is available */
   hasAiData: boolean

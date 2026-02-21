@@ -11,12 +11,13 @@
  * @module lib/lit-decrypt
  */
 
-import { getLitClient } from './lit'
+import { getLitClient, initLitClient } from './lit'
 import { createLitAuthContext, type LitAuthContextOptions } from './lit-auth'
 import { getCachedKey, setCachedKey, getVideoIdFromMetadata } from './aes-key-cache'
 import { base64ToUint8Array } from './crypto'
 import type { LitEncryptionMetadata, CidEncryptionMetadata } from '@/types'
-import type { Account, Transport, Chain } from 'viem'
+import type { Account, Transport, Chain, WalletClient } from 'viem'
+import type { GetWalletClientReturnType } from '@wagmi/core'
 
 // ============================================================================
 // Types
@@ -54,8 +55,8 @@ export interface DecryptAesKeyOptions {
   /** The blockchain chain to use for authentication */
   chain: Chain
   
-  /** EIP-1193 wallet provider (alternative to account/transport) */
-  walletProvider?: any
+  /** Viem WalletClient from wagmi useWalletClient() (preferred for Lit SDK v8) */
+  walletClient?: WalletClient | GetWalletClientReturnType
   
   /** Optional progress callback */
   onProgress?: DecryptProgressCallback
@@ -80,8 +81,8 @@ export interface DecryptCidOptions {
   /** The blockchain chain to use for authentication */
   chain: Chain
   
-  /** EIP-1193 wallet provider (alternative to account/transport) */
-  walletProvider?: any
+  /** Viem WalletClient from wagmi useWalletClient() (preferred for Lit SDK v8) */
+  walletClient?: WalletClient | GetWalletClientReturnType
   
   /** Optional progress callback */
   onProgress?: DecryptProgressCallback
@@ -158,7 +159,7 @@ export class LitDecryptError extends Error {
 export async function decryptAesKey(
   options: DecryptAesKeyOptions
 ): Promise<DecryptKeyResult> {
-  const { metadata, account, transport, chain, walletProvider, onProgress, signal } = options
+  const { metadata, account, transport, chain, walletClient, onProgress, signal } = options
 
   // Check for cancellation
   if (signal?.aborted) {
@@ -183,22 +184,23 @@ export async function decryptAesKey(
     }
   }
 
-  // Validate we have either walletProvider or (account and transport)
-  if (!walletProvider && !account) {
+  // Validate we have either walletClient or (account and transport)
+  if (!walletClient && !account) {
     throw new LitDecryptError(
-      'No wallet account or provider provided. Make sure wallet is connected.',
+      'No wallet client or account provided. Make sure wallet is connected.',
       'WALLET_NOT_CONNECTED'
     )
   }
 
   onProgress?.('Initializing Lit Protocol...')
 
-  let client: ReturnType<typeof getLitClient>
+  // Lazily initialize Lit client if not already connected
+  let client: Awaited<ReturnType<typeof initLitClient>>
   try {
-    client = getLitClient()
-  } catch {
+    client = await initLitClient()
+  } catch (err) {
     throw new LitDecryptError(
-      'Lit client not initialized. Call initLitClient() first.',
+      `Failed to initialize Lit client: ${err instanceof Error ? err.message : 'Unknown error'}`,
       'CLIENT_NOT_INITIALIZED'
     )
   }
@@ -215,10 +217,10 @@ export async function decryptAesKey(
   try {
     let authOptions: LitAuthContextOptions
 
-    if (walletProvider) {
-      // Use walletProvider directly
+    if (walletClient) {
+      // Use walletClient directly (preferred for Lit SDK v8)
       authOptions = {
-        walletProvider,
+        walletClient,
         chain,
       }
     } else {
@@ -364,7 +366,7 @@ export async function decryptAesKey(
 export async function decryptCid(
   options: DecryptCidOptions
 ): Promise<string> {
-  const { metadata, account, transport, chain, walletProvider, onProgress, signal } = options
+  const { metadata, account, transport, chain, walletClient, onProgress, signal } = options
 
   if (signal?.aborted) {
     throw new LitDecryptError('Decryption cancelled', 'CANCELLED')
@@ -378,22 +380,23 @@ export async function decryptCid(
     )
   }
 
-  // Validate we have either walletProvider or (account and transport)
-  if (!walletProvider && !account) {
+  // Validate we have either walletClient or (account and transport)
+  if (!walletClient && !account) {
     throw new LitDecryptError(
-      'No wallet account provided. Make sure wallet is connected.',
+      'No wallet client or account provided. Make sure wallet is connected.',
       'WALLET_NOT_CONNECTED'
     )
   }
 
   onProgress?.('Initializing Lit Protocol for CID decryption...')
 
-  let client: ReturnType<typeof getLitClient>
+  // Lazily initialize Lit client if not already connected
+  let client: Awaited<ReturnType<typeof initLitClient>>
   try {
-    client = getLitClient()
-  } catch {
+    client = await initLitClient()
+  } catch (err) {
     throw new LitDecryptError(
-      'Lit client not initialized. Call initLitClient() first.',
+      `Failed to initialize Lit client: ${err instanceof Error ? err.message : 'Unknown error'}`,
       'CLIENT_NOT_INITIALIZED'
     )
   }
@@ -409,10 +412,10 @@ export async function decryptCid(
   try {
     let authOptions: LitAuthContextOptions
 
-    if (walletProvider) {
-      // Use walletProvider directly - create auth options with provider
+    if (walletClient) {
+      // Use walletClient directly (preferred for Lit SDK v8)
       authOptions = {
-        walletProvider,
+        walletClient,
         chain,
       }
     } else {

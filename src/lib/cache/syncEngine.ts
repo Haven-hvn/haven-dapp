@@ -42,6 +42,48 @@ function getClient(): PublicArkivClient<Transport, Chain | undefined, undefined>
 // ── Entity Parsing ─────────────────────────────────────────────────
 
 /**
+ * Parse cid_encryption_metadata from Arkiv payload.
+ *
+ * The haven-player stores this as a JSON-serialized LitEncryptionMetadata object
+ * with field names: encryptedKey, keyHash, accessControlConditions, chain.
+ * Haven-dapp's CidEncryptionMetadata type uses: ciphertext, dataToEncryptHash.
+ * This function handles JSON parsing and field name mapping.
+ */
+function parseCidEncryptionMetadata(raw: unknown): Video['cidEncryptionMetadata'] {
+  if (!raw) return undefined
+
+  let parsed: Record<string, unknown>
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      return undefined
+    }
+  } else if (typeof raw === 'object' && raw !== null) {
+    parsed = raw as Record<string, unknown>
+  } else {
+    return undefined
+  }
+
+  // Map from LitEncryptionMetadata format (haven-player) to CidEncryptionMetadata format (haven-dapp)
+  const ciphertext = (parsed.ciphertext as string) || (parsed.encryptedKey as string) || ''
+  const dataToEncryptHash = (parsed.dataToEncryptHash as string) || (parsed.keyHash as string) || ''
+  const accessControlConditions = parsed.accessControlConditions as Video['cidEncryptionMetadata'] extends { accessControlConditions: infer T } ? T : never
+  const chain = (parsed.chain as string) || 'yellowstone'
+
+  if (!ciphertext || !dataToEncryptHash) {
+    return undefined
+  }
+
+  return {
+    ciphertext,
+    dataToEncryptHash,
+    accessControlConditions: accessControlConditions || [],
+    chain,
+  }
+}
+
+/**
  * Parse an Arkiv entity into a Video object.
  * Converts the SDK entity format (key, attributes, payload) into our Video type.
  */
@@ -99,7 +141,9 @@ function parseArkivEntity(entity: ArkivEntity): Video {
     description: (data.description as string) || '',
     duration: (data.duration as number) || 0,
 
-    // Storage CIDs (Arkiv payload uses filecoin_root_cid / encrypted_cid)
+    // Storage CIDs
+    // encrypted_cid: Arkiv attribute — Lit-encrypted ciphertext of the root CID (NOT a usable IPFS CID!)
+    // filecoin_root_cid: Arkiv payload — the plain IPFS CID for non-encrypted videos
     filecoinCid: (get('filecoin_root_cid') as string) || '',
     encryptedCid: (get('encrypted_cid') as string) || undefined,
 
@@ -107,8 +151,8 @@ function parseArkivEntity(entity: ArkivEntity): Video {
     isEncrypted: Boolean(get('is_encrypted')),
     litEncryptionMetadata: litMeta,
 
-    // CID encryption metadata
-    cidEncryptionMetadata: (get('cid_encryption_metadata') as Video['cidEncryptionMetadata']) || undefined,
+    // CID encryption metadata (parsed with field name mapping from LitEncryptionMetadata format)
+    cidEncryptionMetadata: parseCidEncryptionMetadata(get('cid_encryption_metadata')),
 
     // AI analysis
     hasAiData: Boolean(get('has_ai_data') || vlmJsonCid),

@@ -11,8 +11,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { useAppKitProvider } from '@reown/appkit/react'
-import { useAccount } from 'wagmi'
+import { useAccount, useWalletClient } from 'wagmi'
 import type { Video } from '@/types'
 import { decryptAesKey, getDecryptionErrorMessage } from '@/lib/lit-decrypt'
 import { aesDecryptToCache, base64ToUint8Array, checkLargeFileSupport } from '@/lib/crypto'
@@ -192,9 +191,9 @@ export function useVideoDecryption(
     onProgress,
   } = options
 
-  // Get wallet client from AppKit for authentication
+  // Get wallet client from wagmi for authentication (Lit SDK v8 requires WalletClient)
   const { address, isConnected, chainId } = useAccount()
-  const { walletProvider } = useAppKitProvider('eip155')
+  const { data: walletClient } = useWalletClient()
 
   // State
   const [status, setStatus] = useState<DecryptionStatus>('idle')
@@ -209,11 +208,23 @@ export function useVideoDecryption(
   const blobUrlRef = useRef<string | null>(null)
   const isMountedRef = useRef(true)
 
-  // Check browser support for large files
-  const largeFileSupport = checkLargeFileSupport()
+  // Refs for wallet values — keeps decrypt callback stable across re-renders
+  // (useWalletClient() can return a new object reference on every render,
+  // which would otherwise cause the callback → loadVideo → useEffect chain to loop)
+  const addressRef = useRef(address)
+  const walletClientRef = useRef(walletClient)
+  const chainIdRef = useRef(chainId)
 
-  // Cleanup blob URL on unmount
+  // Keep refs in sync
   useEffect(() => {
+    addressRef.current = address
+    walletClientRef.current = walletClient
+    chainIdRef.current = chainId
+  }, [address, walletClient, chainId])
+
+  // Track mount state (must set true on mount to handle React Strict Mode remounts)
+  useEffect(() => {
+    isMountedRef.current = true
     return () => {
       isMountedRef.current = false
       if (blobUrlRef.current) {
@@ -301,8 +312,13 @@ export function useVideoDecryption(
       return null
     }
 
+    // Read wallet values from refs (stable references, no re-render loop)
+    const currentAddress = addressRef.current
+    const currentWalletClient = walletClientRef.current
+    const currentChainId = chainIdRef.current
+
     // Check if wallet is connected
-    if (!address || !walletProvider) {
+    if (!currentAddress || !currentWalletClient) {
       const walletError = new Error('Please connect your wallet to decrypt this video.')
       if (isMountedRef.current) {
         setError(walletError)
@@ -347,6 +363,10 @@ export function useVideoDecryption(
           setShowLargeFileWarning(true)
         }
         
+        // Check browser support for large files (computed inside callback to avoid
+        // creating a new object on every render which would destabilize this callback)
+        const largeFileSupport = checkLargeFileSupport()
+
         // Log warnings for very large files
         if (fileSize > largeFileSupport.maxRecommended) {
           console.warn(
@@ -368,11 +388,11 @@ export function useVideoDecryption(
       updateProgress('authenticating', 'Authenticating with Lit Protocol...')
 
       // Get chain from chainId
-      const chain = chainId === sepolia.id ? sepolia : mainnet
+      const chain = currentChainId === sepolia.id ? sepolia : mainnet
 
       const { aesKey } = await decryptAesKey({
         metadata: video.litEncryptionMetadata,
-        walletProvider: walletProvider,
+        walletClient: currentWalletClient,
         chain: chain,
         onProgress: (msg) => {
           if (msg.includes('key') || msg.includes('Key')) {
@@ -460,12 +480,8 @@ export function useVideoDecryption(
     updateProgress,
     largeFileThreshold,
     maxFileSize,
-    largeFileSupport,
     onSuccess,
     onError,
-    address,
-    walletProvider,
-    chainId,
   ])
 
   return {

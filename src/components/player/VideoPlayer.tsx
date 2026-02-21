@@ -15,7 +15,7 @@
  * @module components/player/VideoPlayer
  */
 
-import { useVideo } from '@/hooks/useVideos'
+import { useVideoQuery } from '@/hooks/useVideos'
 import { useVideoCache } from '@/hooks/useVideoCache'
 import { VideoPlayerControls } from './VideoPlayerControls'
 import { CacheAwareProgress } from './CacheAwareProgress'
@@ -30,7 +30,7 @@ interface VideoPlayerProps {
 }
 
 export function VideoPlayer({ videoId }: VideoPlayerProps) {
-  const { video, isLoading: isVideoLoading, isFound } = useVideo(videoId)
+  const { video, isLoading: isVideoLoading, isFound } = useVideoQuery(videoId)
   
   // Single hook replaces Synapse fetch + useVideoDecryption + manual URL management
   const {

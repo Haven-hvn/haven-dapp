@@ -10,8 +10,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { useAppKitProvider } from '@reown/appkit/react'
-import { useAccount } from 'wagmi'
+import { useAccount, useWalletClient } from 'wagmi'
 import type { Video } from '@/types'
 import { decryptCid, getDecryptionErrorMessage } from '@/lib/lit-decrypt'
 import { sepolia, mainnet } from '@reown/appkit/networks'
@@ -133,9 +132,9 @@ export function useCidDecryption(
 ): UseCidDecryptionReturn {
   const { onSuccess, onError, onProgress } = options
 
-  // Get wallet client from AppKit for authentication
+  // Get wallet client from wagmi for authentication (Lit SDK v8 requires WalletClient)
   const { address, isConnected, chainId } = useAccount()
-  const { walletProvider } = useAppKitProvider('eip155')
+  const { data: walletClient } = useWalletClient()
 
   // State
   const [status, setStatus] = useState<CidDecryptionStatus>('idle')
@@ -147,8 +146,25 @@ export function useCidDecryption(
   const abortControllerRef = useRef<AbortController | null>(null)
   const isMountedRef = useRef(true)
 
-  // Cleanup on unmount
+  // Refs for wallet values — keeps decryptCidCallback stable across re-renders
+  // (useWalletClient() can return a new object reference on every render,
+  // which would otherwise cause the callback → loadVideo → useEffect chain to loop)
+  const addressRef = useRef(address)
+  const walletClientRef = useRef(walletClient)
+  const chainIdRef = useRef(chainId)
+  const isConnectedRef = useRef(isConnected)
+
+  // Keep refs in sync
   useEffect(() => {
+    addressRef.current = address
+    walletClientRef.current = walletClient
+    chainIdRef.current = chainId
+    isConnectedRef.current = isConnected
+  }, [address, walletClient, chainId, isConnected])
+
+  // Track mount state (must set true on mount to handle React Strict Mode remounts)
+  useEffect(() => {
+    isMountedRef.current = true
     return () => {
       isMountedRef.current = false
       abortControllerRef.current?.abort()
@@ -207,14 +223,29 @@ export function useCidDecryption(
   const decryptCidCallback = useCallback(async (
     video: Video
   ): Promise<string | null> => {
+    console.log('[useCidDecryption] decryptCidCallback called for video:', video.id)
+    
     reset()
 
     if (!isMountedRef.current) {
+      console.warn('[useCidDecryption] Component not mounted, returning null')
       return null
     }
 
+    // Read wallet values from refs (stable references, no re-render loop)
+    const currentAddress = addressRef.current
+    const currentWalletClient = walletClientRef.current
+    const currentChainId = chainIdRef.current
+    const currentIsConnected = isConnectedRef.current
+
     // Check if wallet is connected
-    if (!address || !walletProvider) {
+    if (!currentAddress || !currentWalletClient) {
+      console.error('[useCidDecryption] Wallet not ready:', {
+        address: currentAddress,
+        hasWalletClient: Boolean(currentWalletClient),
+        isConnected: currentIsConnected,
+        videoId: video.id,
+      })
       const walletError = new Error('Please connect your wallet to decrypt this CID.')
       if (isMountedRef.current) {
         setError(walletError)
@@ -224,6 +255,14 @@ export function useCidDecryption(
       onError?.(walletError)
       return null
     }
+
+    console.log('[useCidDecryption] Wallet ready, proceeding with decryption:', {
+      address: currentAddress,
+      chainId: currentChainId,
+      hasWalletClient: Boolean(currentWalletClient),
+      hasEncryptedCid: Boolean(video.encryptedCid),
+      hasCidEncryptionMetadata: Boolean(video.cidEncryptionMetadata),
+    })
 
     // Create abort controller for this operation
     abortControllerRef.current = new AbortController()
@@ -236,6 +275,7 @@ export function useCidDecryption(
       // If no encrypted CID metadata, return the plain CID directly
       if (!video.encryptedCid || !video.cidEncryptionMetadata) {
         const plainCid = video.filecoinCid || null
+        console.log('[useCidDecryption] No encrypted CID metadata, using plain CID:', plainCid)
         
         if (plainCid) {
           updateProgress('complete', 'Using unencrypted CID')
@@ -247,6 +287,7 @@ export function useCidDecryption(
       }
 
       if (signal.aborted) {
+        console.warn('[useCidDecryption] Signal aborted before Lit call')
         throw new Error('Decryption cancelled')
       }
 
@@ -254,17 +295,30 @@ export function useCidDecryption(
       updateProgress('authenticating', 'Authenticating with Lit Protocol...')
 
       // Get chain from chainId
-      const chain = chainId === sepolia.id ? sepolia : mainnet
+      const chain = currentChainId === sepolia.id ? sepolia : mainnet
+
+      console.log('[useCidDecryption] Calling decryptCid with:', {
+        hasCiphertext: Boolean(video.cidEncryptionMetadata.ciphertext),
+        ciphertextLength: video.cidEncryptionMetadata.ciphertext?.length,
+        hasDataToEncryptHash: Boolean(video.cidEncryptionMetadata.dataToEncryptHash),
+        accessControlConditionsCount: video.cidEncryptionMetadata.accessControlConditions?.length,
+        chain: video.cidEncryptionMetadata.chain,
+        walletChain: chain.name,
+      })
 
       const decryptedCid = await decryptCid({
         metadata: video.cidEncryptionMetadata,
-        walletProvider: walletProvider,
+        walletClient: currentWalletClient,
         chain: chain,
-        onProgress: (msg) => updateProgress('decrypting', msg),
+        onProgress: (msg) => {
+          console.log('[useCidDecryption] Lit progress:', msg)
+          updateProgress('decrypting', msg)
+        },
         signal,
       })
 
       if (signal.aborted) {
+        console.warn('[useCidDecryption] Signal aborted after Lit call')
         throw new Error('Decryption cancelled')
       }
 
@@ -284,7 +338,11 @@ export function useCidDecryption(
 
     } catch (err) {
       // Handle cancellation
-      if (err instanceof Error && err.message === 'Decryption cancelled') {
+      if (err instanceof Error && (
+        err.message === 'Decryption cancelled' || 
+        err.message.includes('cancelled')
+      )) {
+        console.warn('[useCidDecryption] Decryption was cancelled:', err.message)
         if (isMountedRef.current) {
           setStatus('cancelled')
           setProgress('Decryption cancelled')
@@ -296,6 +354,12 @@ export function useCidDecryption(
       const errorMessage = getDecryptionErrorMessage(err)
 
       console.error('[useCidDecryption] CID decryption failed:', err)
+      console.error('[useCidDecryption] Error details:', {
+        message: err instanceof Error ? err.message : String(err),
+        name: err instanceof Error ? err.name : 'unknown',
+        code: (err as { code?: string })?.code,
+        errorMessage,
+      })
 
       if (isMountedRef.current) {
         const errorObj = new Error(errorMessage)
@@ -306,7 +370,7 @@ export function useCidDecryption(
       onError?.(err instanceof Error ? err : new Error(errorMessage))
       return null
     }
-  }, [reset, updateProgress, onSuccess, onError, address, walletProvider, chainId])
+  }, [reset, updateProgress, onSuccess, onError])
 
   return {
     status,
@@ -377,5 +441,3 @@ export function useCidDecryptionAuto(
     reset,
   }
 }
-
-

@@ -24,6 +24,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useServiceWorker } from './useServiceWorker'
 import { useVideoDecryption } from './useVideoDecryption'
+import { useCidDecryption } from './useCidDecryption'
 import { hasVideo, putVideo, deleteVideo, getVideoUrl } from '@/lib/video-cache'
 import { requestPersistentStorageSilent, isPersisted } from '@/lib/storage-persistence'
 import { touchVideo } from '@/lib/cache-expiration'
@@ -41,7 +42,8 @@ import type { Video } from '@/types'
  */
 export type LoadingStage =
   | 'checking-cache' // Checking if video is in Cache API
-  | 'fetching' // Downloading encrypted data via Synapse SDK
+  | 'decrypting-cid' // Decrypting encrypted CID via Lit Protocol
+  | 'fetching' // Downloading encrypted data via IPFS
   | 'authenticating' // Authenticating with Lit Protocol (SIWE)
   | 'decrypting' // Decrypting AES key and video content
   | 'caching' // Storing decrypted content in Cache API
@@ -83,8 +85,9 @@ export interface UseVideoCacheReturn {
 
 const PROGRESS_WEIGHTS: Record<LoadingStage, number> = {
   'checking-cache': 5,
-  fetching: 10,
-  authenticating: 30,
+  'decrypting-cid': 15,
+  fetching: 25,
+  authenticating: 40,
   decrypting: 70,
   caching: 90,
   ready: 100,
@@ -145,7 +148,8 @@ const PROGRESS_WEIGHTS: Record<LoadingStage, number> = {
  */
 export function useVideoCache(video: Video | null): UseVideoCacheReturn {
   const sw = useServiceWorker()
-  const decryption = useVideoDecryption()
+  const { decrypt: decryptVideo } = useVideoDecryption()
+  const { decryptCid: decryptVideoCid } = useCidDecryption()
 
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [isCached, setIsCached] = useState(false)
@@ -158,8 +162,27 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
   const isMountedRef = useRef(true)
   const abortControllerRef = useRef<AbortController | null>(null)
 
-  // Cleanup on unmount
+  // Refs for callbacks — breaks the dependency chain that causes infinite loops.
+  // Without refs, useWalletClient() returns a new object on every render, which
+  // destabilizes decryptVideo/decryptVideoCid → loadVideo → useEffect → abort → restart.
+  // By reading from refs, loadVideo's identity never changes due to callback changes.
+  const decryptVideoRef = useRef(decryptVideo)
+  const decryptVideoCidRef = useRef(decryptVideoCid)
+
   useEffect(() => {
+    decryptVideoRef.current = decryptVideo
+  }, [decryptVideo])
+
+  useEffect(() => {
+    decryptVideoCidRef.current = decryptVideoCid
+  }, [decryptVideoCid])
+
+  // Guard against re-entry (prevents concurrent loadVideo calls)
+  const isLoadingRef = useRef(false)
+
+  // Track mount state (must set true on mount to handle React Strict Mode remounts)
+  useEffect(() => {
+    isMountedRef.current = true
     return () => {
       isMountedRef.current = false
       abortControllerRef.current?.abort()
@@ -178,9 +201,16 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
 
   /**
    * Main video loading function implementing cache-first strategy.
+   * Uses refs for decryption callbacks to keep this function's identity stable.
    */
   const loadVideo = useCallback(
     async (videoToLoad: Video) => {
+      // Prevent re-entry — if already loading, don't restart
+      if (isLoadingRef.current) {
+        return
+      }
+      isLoadingRef.current = true
+
       // Cancel any ongoing operation
       abortControllerRef.current?.abort()
       abortControllerRef.current = new AbortController()
@@ -252,13 +282,66 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
           return
         }
 
-        // Step 2: Cache MISS — fetch encrypted data via Synapse SDK
-        updateStage('fetching')
+        // Step 2: Resolve CID
+        // For encrypted videos, the CID stored in Arkiv (encrypted_cid attribute) is a
+        // Lit-encrypted ciphertext — NOT a usable IPFS CID. It must be decrypted using
+        // cid_encryption_metadata via Lit Protocol to get the actual IPFS CID.
+        // This matches the haven-player restore flow.
+        let cid: string | undefined
 
-        const cid = videoToLoad.encryptedCid || videoToLoad.filecoinCid
-        if (!cid) {
-          throw new Error('No CID available for video')
+        if (videoToLoad.decryptedCid) {
+          // Use previously cached decrypted CID (avoids re-decryption)
+          cid = videoToLoad.decryptedCid
+        } else if (videoToLoad.cidEncryptionMetadata && videoToLoad.encryptedCid) {
+          // Decrypt the encrypted CID via Lit Protocol (wallet signature required)
+          updateStage('decrypting-cid')
+
+          console.log('[useVideoCache] Attempting CID decryption for video:', videoToLoad.id)
+
+          const decryptedCid = await decryptVideoCidRef.current(videoToLoad)
+
+          if (signal.aborted) {
+            throw new Error('Loading cancelled')
+          }
+
+          if (!decryptedCid) {
+            throw new Error(
+              'Failed to decrypt CID — wallet may not be connected or signature was rejected'
+            )
+          }
+
+          cid = decryptedCid
+
+          // Cache the decrypted CID for future use (skip Lit on next access)
+          try {
+            const cacheService = getVideoCacheService(videoToLoad.owner)
+            await cacheService.updateDecryptedCid(videoToLoad.id, decryptedCid)
+          } catch {
+            // Non-critical — CID will be re-decrypted next time
+          }
+        } else {
+          // Fallback: use filecoinCid for non-encrypted videos or if no encryption metadata
+          cid = videoToLoad.filecoinCid
         }
+
+        if (!cid) {
+          console.error('[useVideoCache] No CID available for video:', {
+            id: videoToLoad.id,
+            title: videoToLoad.title,
+            isEncrypted: videoToLoad.isEncrypted,
+            hasEncryptedCid: Boolean(videoToLoad.encryptedCid),
+            hasCidEncryptionMetadata: Boolean(videoToLoad.cidEncryptionMetadata),
+            hasDecryptedCid: Boolean(videoToLoad.decryptedCid),
+            filecoinCid: videoToLoad.filecoinCid,
+          })
+          throw new Error(
+            'No CID available for video — encrypted_cid and cid_encryption_metadata ' +
+            'may be missing from Arkiv entity, or filecoin_root_cid is not set'
+          )
+        }
+
+        // Step 3: Cache MISS — fetch encrypted data via IPFS
+        updateStage('fetching')
 
         const fetchResult = await fetchFromIpfs(cid)
 
@@ -266,22 +349,22 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
           throw new Error('Loading cancelled')
         }
 
-        // Step 3: Decrypt (includes authenticating with Lit Protocol)
+        // Step 4: Decrypt (includes authenticating with Lit Protocol)
         updateStage('authenticating')
 
         // The decrypt function handles authenticating → decrypting key → decrypting file
         // It updates its own progress, so we map its status to our stages
-        const decryptedUrl = await decryption.decrypt(videoToLoad, fetchResult.data)
+        const decryptedUrl = await decryptVideoRef.current(videoToLoad, fetchResult.data)
 
         if (signal.aborted) {
           throw new Error('Loading cancelled')
         }
 
         if (!decryptedUrl) {
-          throw new Error(decryption.error?.message || 'Decryption failed')
+          throw new Error('Video decryption failed — wallet may not be connected or signature was rejected')
         }
 
-        // Step 4: Update stage to decrypting (decrypt function handles the actual work)
+        // Step 5: Update stage to decrypting (decrypt function handles the actual work)
         updateStage('decrypting')
 
         // Small delay to show progress if decryption was fast
@@ -292,7 +375,7 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
           throw new Error('Loading cancelled')
         }
 
-        // Step 5: Store decrypted content in Cache API
+        // Step 6: Store decrypted content in Cache API
         updateStage('caching')
 
         const response = await fetch(decryptedUrl)
@@ -343,12 +426,13 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
           updateStage('error')
         }
       } finally {
+        isLoadingRef.current = false
         if (isMountedRef.current) {
           setIsLoading(false)
         }
       }
     },
-    [decryption, updateStage]
+    [updateStage]
   )
 
   /**

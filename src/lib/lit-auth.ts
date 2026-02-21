@@ -12,7 +12,8 @@
 
 import { getLitClient, getAuthManager } from './lit'
 import { LitAccessControlConditionResource } from '@lit-protocol/auth-helpers'
-import type { Account, Transport, Chain } from 'viem'
+import type { Account, Transport, Chain, WalletClient } from 'viem'
+import type { GetWalletClientReturnType } from '@wagmi/core'
 import {
   getCachedAuthContext,
   setCachedAuthContext,
@@ -44,8 +45,8 @@ export interface LitAuthContextOptions {
   /** The blockchain chain to use for authentication */
   chain: Chain
   
-  /** EIP-1193 wallet provider (alternative to account/transport) */
-  walletProvider?: any
+  /** Viem WalletClient from wagmi useWalletClient() (preferred for Lit SDK v8) */
+  walletClient?: WalletClient | GetWalletClientReturnType
   
   /** Domain for the SIWE (Sign-In with Ethereum) message */
   domain?: string
@@ -60,7 +61,7 @@ export interface LitAuthContextOptions {
 /**
  * Default authentication context options.
  */
-const DEFAULT_AUTH_OPTIONS: Required<Omit<LitAuthContextOptions, 'account' | 'transport' | 'chain' | 'walletProvider'>> = {
+const DEFAULT_AUTH_OPTIONS: Required<Omit<LitAuthContextOptions, 'account' | 'transport' | 'chain' | 'walletClient'>> = {
   domain: 'haven.video',
   statement: 'Sign this message to decrypt your video with Haven',
   expirationMs: 60 * 60 * 1000, // 1 hour
@@ -94,26 +95,11 @@ function getAddressFromOptions(options: LitAuthContextOptions): string | null {
     return options.account.address
   }
 
-  // Try to get address from walletProvider
-  if (options.walletProvider) {
-    // EIP-1193 providers typically have selectedAddress or accounts[0]
-    const provider = options.walletProvider
-    if (typeof provider.selectedAddress === 'string') {
-      return provider.selectedAddress
-    }
-    if (Array.isArray(provider.accounts) && provider.accounts.length > 0) {
-      return provider.accounts[0]
-    }
-    // Some providers have a getAccounts method
-    if (typeof provider.getAccounts === 'function') {
-      try {
-        const accounts = provider.getAccounts()
-        if (Array.isArray(accounts) && accounts.length > 0) {
-          return accounts[0]
-        }
-      } catch {
-        // Ignore errors
-      }
+  // Try to get address from walletClient
+  if (options.walletClient) {
+    const wc = options.walletClient as WalletClient
+    if (wc.account?.address) {
+      return wc.account.address
     }
   }
 
@@ -159,16 +145,16 @@ export async function createLitAuthContext(
     account,
     transport,
     chain,
-    walletProvider,
+    walletClient,
     domain = DEFAULT_AUTH_OPTIONS.domain,
     statement = DEFAULT_AUTH_OPTIONS.statement,
     expirationMs = DEFAULT_AUTH_OPTIONS.expirationMs,
   } = options
 
-  // Validate we have either walletProvider or (account and transport)
-  if (!walletProvider && !account) {
+  // Validate we have either walletClient or (account and transport)
+  if (!walletClient && !account) {
     throw new LitAuthError(
-      'No wallet account or provider provided. Make sure wallet is connected.',
+      'No wallet client or account provided. Make sure wallet is connected.',
       'WALLET_NOT_CONNECTED'
     )
   }
@@ -200,54 +186,30 @@ export async function createLitAuthContext(
   const expiration = new Date(Date.now() + expirationMs).toISOString()
 
   try {
-    let authConfig: any
-
-    if (walletProvider) {
-      // Use walletProvider directly - pass it to the auth manager
-      authConfig = {
-        authConfig: {
-          domain,
-          statement,
-          resources: [
-            {
-              resource: new LitAccessControlConditionResource('*'),
-              ability: 'access-control-condition-decryption',
-            },
-          ],
-          expiration,
-        },
-        config: {
-          provider: walletProvider,
-          chain,
-        },
-        litClient: client,
-      }
-    } else {
-      // Use explicit account, transport, and chain
-      authConfig = {
-        authConfig: {
-          domain,
-          statement,
-          resources: [
-            {
-              resource: new LitAccessControlConditionResource('*'),
-              ability: 'access-control-condition-decryption',
-            },
-          ],
-          expiration,
-        },
-        config: {
-          account,
-          transport,
-          chain,
-        },
-        litClient: client,
-      }
+    // Build the auth config for Lit SDK v8
+    // The SDK expects config.account to be Account | WalletClient | GetWalletClientReturnType | PrivateKeyAccount
+    const authConfigObj: any = {
+      authConfig: {
+        domain,
+        statement,
+        resources: [
+          {
+            resource: new LitAccessControlConditionResource('*'),
+            ability: 'access-control-condition-decryption',
+          },
+        ],
+        expiration,
+      },
+      config: {
+        // Lit SDK v8 expects `account` to be a WalletClient, Account, or PrivateKeyAccount
+        account: walletClient || account,
+      },
+      litClient: client,
     }
 
     // Create authentication context using EOA with wallet signing
     // The wallet client will prompt the user to sign the SIWE message
-    const authContext = await authManager.createEoaAuthContext(authConfig)
+    const authContext = await authManager.createEoaAuthContext(authConfigObj)
 
     // Cache for reuse (triggers on cache miss)
     if (address) {

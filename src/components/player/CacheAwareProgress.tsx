@@ -1,4 +1,4 @@
-'use client'
+ 'use client'
 
 /**
  * Cache-Aware Progress Component
@@ -14,7 +14,7 @@
  * @module components/player/CacheAwareProgress
  */
 
-import { Loader2, Download, Shield, Unlock, HardDrive, Search } from 'lucide-react'
+import { Loader2, Download, Shield, Unlock, HardDrive, Search, Key } from 'lucide-react'
 import type { LoadingStage } from '@/hooks/useVideoCache'
 
 interface CacheAwareProgressProps {
@@ -42,6 +42,13 @@ const STAGE_CONFIG: Record<LoadingStage, {
     showProgress: true,
     isIndeterminate: true,
     iconClass: 'text-blue-400',
+  },
+  'decrypting-cid': {
+    icon: Key,
+    message: 'Please approve in your wallet...',
+    showProgress: true,
+    isIndeterminate: true,
+    iconClass: 'text-purple-400',
   },
   'fetching': {
     icon: Download,
@@ -95,6 +102,7 @@ function getIconBgClass(stage: LoadingStage): string {
     case 'checking-cache':
     case 'caching':
       return 'bg-blue-500/20'
+    case 'decrypting-cid':
     case 'fetching':
     case 'authenticating':
     case 'decrypting':
@@ -120,7 +128,7 @@ export function CacheAwareProgress({
   
   const Icon = config.icon
   const iconBgClass = getIconBgClass(stage)
-  const isSpinner = stage === 'checking-cache' || stage === 'authenticating'
+  const isSpinner = stage === 'checking-cache' || stage === 'authenticating' || stage === 'decrypting-cid'
 
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm z-10">
@@ -156,8 +164,8 @@ export function CacheAwareProgress({
           <p className="text-xs text-white/40 mt-2">{Math.round(progress)}%</p>
         )}
         
-        {/* Special message for authenticating stage */}
-        {stage === 'authenticating' && (
+        {/* Special message for stages that require wallet signature */}
+        {(stage === 'authenticating' || stage === 'decrypting-cid') && (
           <div className="mt-4 text-center">
             <p className="text-sm text-white/70 font-medium animate-pulse">
               Check your wallet for a signature request

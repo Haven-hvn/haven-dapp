@@ -457,6 +457,25 @@ export class VideoCacheService {
   }
 
   /**
+   * Update the decrypted CID for a video.
+   * Called after successfully decrypting an encrypted CID via Lit Protocol.
+   * The decrypted CID is persisted so subsequent loads skip Lit decryption.
+   * @param videoId - The video ID to update
+   * @param decryptedCid - The decrypted IPFS CID
+   */
+  async updateDecryptedCid(videoId: string, decryptedCid: string): Promise<void> {
+    try {
+      const cached = await getCachedVideo(this.walletAddress, videoId)
+      if (cached) {
+        const updated = { ...cached, decryptedCid }
+        await putCachedVideo(this.walletAddress, updated)
+      }
+    } catch (error) {
+      console.warn('[CacheService] Failed to update decrypted CID:', error)
+    }
+  }
+
+  /**
    * Get videos that have cached content (videoCacheStatus === 'cached').
    * Used by video-cache management UI to show content cache entries
    * alongside their metadata.

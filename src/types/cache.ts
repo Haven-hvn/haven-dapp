@@ -208,6 +208,21 @@ export interface CachedVideo extends Omit<Video, 'createdAt' | 'updatedAt' | 'se
    * @see ../../../video-cache/README.md
    */
   videoCachedAt?: number
+
+  // ========================================================================
+  // Decrypted CID Cache
+  // ========================================================================
+
+  /**
+   * Decrypted IPFS CID for encrypted videos.
+   * 
+   * When a video has `cidEncryptionMetadata`, the actual IPFS CID is encrypted
+   * via Lit Protocol. After the first successful decryption, the plaintext CID
+   * is stored here so subsequent loads skip the Lit decryption step entirely.
+   * 
+   * Undefined if the CID has never been decrypted or the video is not encrypted.
+   */
+  decryptedCid?: string
 }
 
 // ============================================================================
