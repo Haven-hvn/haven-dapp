@@ -47,6 +47,8 @@ jobs:
         run: bun install
 
       - name: Build Next.js app
+        env:
+            NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}
         run: |
           echo "Building Next.js application..."
           bun run build
