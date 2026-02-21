@@ -53,15 +53,15 @@ jobs:
 
       - name: Verify build output
         run: |
-          if [ ! -d "./dist" ]; then
-            echo "❌ Build failed: ./dist directory not found"
+          if [ ! -d "./out" ]; then
+            echo "❌ Build failed: ./out directory not found"
             exit 1
           fi
-          echo "✅ Build successful: ./dist directory exists"
-          ls -la ./dist
+          echo "✅ Build successful: ./out directory exists"
+          ls -la ./out
 
       - name: Deploy to Orbiter
         env:
           ORBITER_API_KEY: ${{ secrets.ORBITER_API_KEY }}
           SOURCE: github-action
-        run: bunx orbiter-cli deploy-server -s ${{ secrets.ORBITER_SITE_ID }} -o dist
+        run: bunx orbiter-cli deploy-server -s ${{ secrets.ORBITER_SITE_ID }} -o out
