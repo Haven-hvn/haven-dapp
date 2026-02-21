@@ -114,7 +114,7 @@ jobs:
 
       - name: Verify lightningcss installation
         run: |
-          echo "Checking lightningcss installation..."
+          echo "Checking lightningcss installation.."
           node -e "try { require('lightningcss'); console.log('✅ lightningcss loaded successfully'); } catch(e) { console.error('❌ lightningcss failed to load:', e.message); process.exit(1); }"
 
       - name: Build Next.js app
