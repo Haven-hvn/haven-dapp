@@ -64,4 +64,4 @@ jobs:
         env:
           ORBITER_API_KEY: ${{ secrets.ORBITER_API_KEY }}
           SOURCE: github-action
-        run: bunx orbiter-cli deploy-server -s ${{ secrets.ORBITER_SITE_ID }} -o out
+        run: bunx orbiter-cli update -s ${{ secrets.ORBITER_SITE_ID }} -o out
