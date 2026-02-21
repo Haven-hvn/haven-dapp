@@ -105,23 +105,6 @@ export {
 export * from './guards'
 
 // ============================================================================
-// Legacy/Compatibility Exports
-// ============================================================================
-
-/**
- * Legacy ArkivEntity type from lib/arkiv.ts.
- * @deprecated Use ArkivEntity from './arkiv' instead
- */
-export interface LegacyArkivEntity {
-  key: string
-  owner: string
-  attributes: Record<string, unknown>
-  payload: string
-  content_type: string
-  created_at: string
-}
-
-// ============================================================================
 // Global Configuration Types
 // ============================================================================
 

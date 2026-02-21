@@ -160,12 +160,6 @@ export function useVideoQuery(
   }
 }
 
-/**
- * Alias for useVideoQuery for backward compatibility
- * @deprecated Use useVideoQuery instead
- */
-export const useVideo = useVideoQuery
-
 // Hook return type for invalidation
 export interface UseInvalidateVideosReturn {
   /** Invalidate video queries to trigger re-fetch */

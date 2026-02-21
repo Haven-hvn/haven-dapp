@@ -50,19 +50,18 @@ function parseArkivEntity(entity: ArkivEntity): Video {
   const payloadData = parseEntityPayload<Record<string, unknown>>(entity.payload) || {}
 
   // Merge attributes and payload data (payload takes precedence)
-  // Arkiv uses snake_case field names; we check both snake_case and camelCase
+  // Arkiv uses snake_case field names exclusively
   const data: Record<string, unknown> = {
     ...entity.attributes,
     ...payloadData,
   }
 
-  // Helper: look up a value by snake_case key first, then camelCase fallback
-  const get = (snakeKey: string, camelKey: string): unknown =>
-    data[snakeKey] ?? data[camelKey]
+  // Helper: look up a value by snake_case key
+  const get = (key: string): unknown => data[key]
 
   // Parse lit_encryption_metadata (stored as JSON string in payload)
   let litMeta: Video['litEncryptionMetadata'] = undefined
-  const rawLitMeta = get('lit_encryption_metadata', 'litEncryptionMetadata')
+  const rawLitMeta = get('lit_encryption_metadata')
   if (rawLitMeta) {
     if (typeof rawLitMeta === 'string') {
       try { litMeta = JSON.parse(rawLitMeta) } catch { /* ignore */ }
@@ -72,40 +71,23 @@ function parseArkivEntity(entity: ArkivEntity): Video {
   }
 
   // Parse segment metadata (snake_case in payload)
-  const rawSegment = (get('segment_metadata', 'segmentMetadata') as Record<string, unknown>) || null
+  const rawSegment = (get('segment_metadata') as Record<string, unknown>) || null
   const segmentMetadata = rawSegment
     ? {
         startTimestamp: new Date(
-          (rawSegment.start_timestamp as string) ||
-          (rawSegment.startTimestamp as string) ||
-          ''
+          (rawSegment.start_timestamp as string) || ''
         ),
-        endTimestamp:
-          (rawSegment.end_timestamp || rawSegment.endTimestamp)
-            ? new Date(
-                (rawSegment.end_timestamp as string) ||
-                (rawSegment.endTimestamp as string)
-              )
-            : undefined,
-        segmentIndex:
-          (rawSegment.segment_index as number) ??
-          (rawSegment.segmentIndex as number) ??
-          0,
-        totalSegments:
-          (rawSegment.total_segments as number) ??
-          (rawSegment.totalSegments as number) ??
-          0,
-        mintId:
-          (rawSegment.mint_id as string) ??
-          (rawSegment.mintId as string) ??
-          '',
-        recordingSessionId:
-          (rawSegment.recording_session_id as string) ??
-          (rawSegment.recordingSessionId as string),
+        endTimestamp: rawSegment.end_timestamp
+          ? new Date(rawSegment.end_timestamp as string)
+          : undefined,
+        segmentIndex: (rawSegment.segment_index as number) ?? 0,
+        totalSegments: (rawSegment.total_segments as number) ?? 0,
+        mintId: (rawSegment.mint_id as string) ?? '',
+        recordingSessionId: rawSegment.recording_session_id as string | undefined,
       }
     : undefined
 
-  const vlmJsonCid = (get('vlm_json_cid', 'vlmJsonCid') as string) || undefined
+  const vlmJsonCid = (get('vlm_json_cid') as string) || undefined
 
   return {
     // Identity
@@ -118,50 +100,50 @@ function parseArkivEntity(entity: ArkivEntity): Video {
     duration: (data.duration as number) || 0,
 
     // Storage CIDs (Arkiv payload uses filecoin_root_cid / encrypted_cid)
-    filecoinCid: (get('filecoin_root_cid', 'filecoinCid') as string) || '',
-    encryptedCid: (get('encrypted_cid', 'encryptedCid') as string) || undefined,
+    filecoinCid: (get('filecoin_root_cid') as string) || '',
+    encryptedCid: (get('encrypted_cid') as string) || undefined,
 
     // Encryption (Arkiv attributes use is_encrypted as number 0/1)
-    isEncrypted: Boolean(get('is_encrypted', 'isEncrypted')),
+    isEncrypted: Boolean(get('is_encrypted')),
     litEncryptionMetadata: litMeta,
 
     // CID encryption metadata
-    cidEncryptionMetadata: (get('cid_encryption_metadata', 'cidEncryptionMetadata') as Video['cidEncryptionMetadata']) || undefined,
+    cidEncryptionMetadata: (get('cid_encryption_metadata') as Video['cidEncryptionMetadata']) || undefined,
 
     // AI analysis
-    hasAiData: Boolean(get('has_ai_data', 'hasAiData') || vlmJsonCid),
+    hasAiData: Boolean(get('has_ai_data') || vlmJsonCid),
     vlmJsonCid,
 
     // Minting
-    mintId: (get('mint_id', 'mintId') as string) || undefined,
+    mintId: (get('mint_id') as string) || undefined,
 
     // Source tracking
-    sourceUri: (get('source_uri', 'sourceUri') as string) || undefined,
-    creatorHandle: (get('creator_handle', 'creatorHandle') as string) || undefined,
+    sourceUri: (get('source_uri') as string) || undefined,
+    creatorHandle: (get('creator_handle') as string) || undefined,
 
     // Timestamps
     createdAt: entity.created_at ? new Date(entity.created_at) : new Date(),
-    updatedAt: (get('updated_at', 'updatedAt') as string)
-      ? new Date(get('updated_at', 'updatedAt') as string)
+    updatedAt: (get('updated_at') as string)
+      ? new Date(get('updated_at') as string)
       : undefined,
 
     // Variants for adaptive streaming (snake_case: codec_variants)
-    codecVariants: (get('codec_variants', 'codecVariants') as Video['codecVariants']) || undefined,
+    codecVariants: (get('codec_variants') as Video['codecVariants']) || undefined,
 
     // Segment metadata
     segmentMetadata,
 
     // Content identification
-    phash: (get('phash', 'phash') as string) || undefined,
-    analysisModel: (get('analysis_model', 'analysisModel') as string) || undefined,
-    cidHash: (get('cid_hash', 'cidHash') as string) || undefined,
+    phash: (get('phash') as string) || undefined,
+    analysisModel: (get('analysis_model') as string) || undefined,
+    cidHash: (get('cid_hash') as string) || undefined,
 
     // Cache status - fresh from Arkiv is always 'active'
     arkivStatus: 'active',
 
     // Expiration tracking
-    expiresAtBlock: (get('expires_at_block', 'expiresAtBlock') as number)
-      ? Number(get('expires_at_block', 'expiresAtBlock'))
+    expiresAtBlock: (get('expires_at_block') as number)
+      ? Number(get('expires_at_block'))
       : undefined,
   }
 }
