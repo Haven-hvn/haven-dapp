@@ -1,5 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <rect width="100" height="100" rx="20" fill="#6366f1"/>
-  <path d="M30 30 L30 70 L45 70 L45 55 L55 55 L55 70 L70 70 L70 30 L55 30 L55 45 L45 45 L45 30 Z" fill="white"/>
-  <circle cx="75" cy="25" r="8" fill="#a5b4fc"/>
+  <defs>
+    <linearGradient id="havenGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F5FF"/>
+      <stop offset="50%" stop-color="#0088CC"/>
+      <stop offset="100%" stop-color="#FF00E5"/>
+    </linearGradient>
+    <linearGradient id="havenGradientLight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00D4E5"/>
+      <stop offset="100%" stop-color="#E500D4"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded square background with gradient -->
+  <rect width="100" height="100" rx="22" fill="url(#havenGradient)"/>
+  <!-- Haven "H" mark - minimalist geometric design -->
+  <path d="M28 28 L28 72 L42 72 L42 56 L58 56 L58 72 L72 72 L72 28 L58 28 L58 44 L42 44 L42 28 Z" 
+        fill="white"/>
+  <!-- Subtle accent dot -->
+  <circle cx="78" cy="22" r="7" fill="rgba(255,255,255,0.9)"/>
 </svg>

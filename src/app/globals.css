@@ -3,51 +3,47 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* 
+ * Haven Liquid Glass Theme
+ * Aligned with haven-player aesthetic
+ * Dark-first design with cyan/magenta neon accents
+ */
+
 @theme {
+  /* Core colors - mapped to design system */
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
-
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
-
   --color-popover: hsl(var(--popover));
   --color-popover-foreground: hsl(var(--popover-foreground));
-
   --color-primary: hsl(var(--primary));
   --color-primary-foreground: hsl(var(--primary-foreground));
-
   --color-secondary: hsl(var(--secondary));
   --color-secondary-foreground: hsl(var(--secondary-foreground));
-
   --color-muted: hsl(var(--muted));
   --color-muted-foreground: hsl(var(--muted-foreground));
-
   --color-accent: hsl(var(--accent));
   --color-accent-foreground: hsl(var(--accent-foreground));
-
   --color-destructive: hsl(var(--destructive));
   --color-destructive-foreground: hsl(var(--destructive-foreground));
-
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
 
+  /* Chart colors */
   --color-chart-1: hsl(var(--chart-1));
   --color-chart-2: hsl(var(--chart-2));
   --color-chart-3: hsl(var(--chart-3));
   --color-chart-4: hsl(var(--chart-4));
   --color-chart-5: hsl(var(--chart-5));
 
-  /* Haven brand colors */
-  --color-haven-primary: #3b82f6;
-  --color-haven-secondary: #8b5cf6;
-  --color-haven-accent: #06b6d4;
-
+  /* Radius */
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
 
-  /* Custom breakpoints */
+  /* Breakpoints */
   --breakpoint-xs: 475px;
   --breakpoint-sm: 640px;
   --breakpoint-md: 768px;
@@ -58,57 +54,81 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
-  }
-  .dark {
-    --background: 0 0% 3.9%;
+    /* Liquid Glass Design Tokens - Dark Theme Default */
+    
+    /* Canvas Colors */
+    --canvas-base: #0A0A0F;
+    --canvas-elevated: #12121A;
+    --canvas-deep: #050508;
+    
+    /* Neon Accent Colors */
+    --neon-cyan: #00F5FF;
+    --neon-magenta: #FF00E5;
+    --neon-amber: #FFB800;
+    --neon-success: #00FF88;
+    --neon-error: #FF3366;
+    
+    /* Glass Properties */
+    --glass-fill: rgba(255, 255, 255, 0.06);
+    --glass-fill-hover: rgba(255, 255, 255, 0.08);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-border-hover: rgba(255, 255, 255, 0.12);
+    --glass-blur: 16px;
+    
+    /* Mapped to shadcn/ui variables - Dark Theme */
+    --background: 240 33% 4%;
     --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
+    --card: 240 25% 6%;
     --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
+    --popover: 240 25% 6%;
     --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
+    --primary: 182 100% 50%;
+    --primary-foreground: 240 33% 4%;
+    --secondary: 240 20% 12%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
+    --muted: 240 20% 12%;
+    --muted-foreground: 0 0% 60%;
+    --accent: 308 100% 50%;
     --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 348 100% 60%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    --border: 240 10% 14%;
+    --input: 240 10% 14%;
+    --ring: 182 100% 50%;
+    --chart-1: 182 100% 50%;
+    --chart-2: 308 100% 50%;
+    --chart-3: 45 100% 50%;
+    --chart-4: 152 100% 50%;
+    --chart-5: 348 100% 60%;
+    --radius: 0.75rem;
+  }
+
+  /* Light theme - minimal, clean white with cyan accents */
+  .light {
+    --background: 0 0% 100%;
+    --foreground: 240 33% 4%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 33% 4%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 33% 4%;
+    --primary: 190 100% 42%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 10% 96%;
+    --secondary-foreground: 240 33% 4%;
+    --muted: 240 10% 96%;
+    --muted-foreground: 240 10% 40%;
+    --accent: 308 100% 50%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 348 100% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 10% 90%;
+    --input: 240 10% 90%;
+    --ring: 190 100% 42%;
+    --chart-1: 190 100% 42%;
+    --chart-2: 308 100% 50%;
+    --chart-3: 45 100% 50%;
+    --chart-4: 152 100% 50%;
+    --chart-5: 348 100% 55%;
   }
 }
 
@@ -116,8 +136,10 @@
   * {
     @apply border-border;
   }
+  
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
 
   /* Smooth theme transitions */
@@ -125,16 +147,35 @@
     @apply transition-colors duration-300 ease-in-out;
   }
 
-  /* Apply transition to commonly themed elements */
-  *,
-  *::before,
-  *::after {
-    transition-property: background-color, border-color, color, fill, stroke;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    transition-duration: 300ms;
+  /* Selection styling with cyan accent */
+  ::selection {
+    background: rgba(0, 245, 255, 0.3);
+    color: white;
+  }
+
+  /* Custom scrollbar - Liquid Glass style */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    transition: background 0.2s ease;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
   }
 }
 
+/* Utilities */
 @utility text-balance {
   text-wrap: balance;
 }
@@ -183,4 +224,80 @@
   & * {
     transition: none !important;
   }
+}
+
+/* Glass effect utilities */
+@utility glass {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@utility glass-hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+@utility glow-cyan {
+  box-shadow: 0 0 24px rgba(0, 245, 255, 0.3);
+}
+
+@utility glow-magenta {
+  box-shadow: 0 0 24px rgba(255, 0, 229, 0.3);
+}
+
+@utility glow-amber {
+  box-shadow: 0 0 24px rgba(255, 184, 0, 0.3);
+}
+
+/* Gradient utilities */
+@utility gradient-cyan-magenta {
+  background: linear-gradient(135deg, #00F5FF 0%, #FF00E5 100%);
+}
+
+@utility gradient-dark {
+  background: linear-gradient(180deg, #0A0A0F 0%, #12121A 100%);
+}
+
+/* Animation keyframes */
+@keyframes surface-in {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.25; }
+}
+
+@keyframes glow-bloom {
+  0% {
+    box-shadow: 0 0 0 rgba(0, 245, 255, 0);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(0, 245, 255, 0.4);
+  }
+  100% {
+    box-shadow: 0 0 20px rgba(0, 245, 255, 0.2);
+  }
+}
+
+/* Animation utilities */
+@utility animate-surface-in {
+  animation: surface-in 0.4s cubic-bezier(0.4, 0.0, 0.2, 1) forwards;
+}
+
+@utility animate-glow-bloom {
+  animation: glow-bloom 0.6s cubic-bezier(0.4, 0.0, 0.2, 1) forwards;
+}
+
+@utility animate-pulse-glow {
+  animation: pulse-glow 8s ease-in-out infinite;
 }

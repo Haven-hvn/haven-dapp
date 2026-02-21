@@ -13,7 +13,10 @@ export default function LibraryPage() {
     <ProtectedRoute>
       <LibraryLayout>
         <div className="p-6">
-          <h1 className="text-2xl font-bold mb-6">Your Library</h1>
+          <div className="mb-8">
+            <h1 className="text-2xl font-bold tracking-tight text-white/90">Library</h1>
+            <p className="text-sm text-white/50 mt-1">Access your decentralized video collection</p>
+          </div>
           <VideoGrid />
         </div>
       </LibraryLayout>
