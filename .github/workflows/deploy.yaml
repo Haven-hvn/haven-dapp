@@ -16,123 +16,52 @@ jobs:
         shell: bash
         run: |
           if [ -z "${{ secrets.ORBITER_API_KEY }}" ]; then
-            echo "🚨 ORBITER_API_KEY not found! Please add the secret."
+            echo "🚨 ORBITER_API_KEY not found! Please follow these steps:"
+            echo ""
+            echo "1. Go to https://app.orbiter.host/api-keys"
+            echo "2. Generate a new API key"
+            echo "3. Go to https://github.com/${{ github.repository }}/settings/secrets/actions"
+            echo "4. Click 'New repository secret'"
+            echo "5. Name: ORBITER_API_KEY"
+            echo "6. Value: Your API key from step 2"
+            echo "7. Click 'Add secret'"
+            echo ""
+            echo "Once done, re-run this workflow."
             exit 1
           fi
-      - name: Check if Project ID exists
+
+      - name: Check if Site ID exists
         shell: bash
         run: |
-          if [ -z "${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}" ]; then
-            echo "🚨 NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID not found! Please add the secret."
+          if [ -z "${{ secrets.ORBITER_SITE_ID }}" ]; then
+            echo "🚨 ORBITER_SITE_ID not found! Please add the secret."
             exit 1
           fi
 
-      - name: Check required inputs
-        run: |
-          if [ -z "./out" ]; then
-            echo "🚨 build-dir input is required but was not provided"
-            exit 1
-          fi
-          if [ -z "havenappnext" ]; then
-            echo "🚨 project-name input is required but was not provided"
-            exit 1
-          fi
-
-      - name: Detect package manager
-        id: detect-pm
-        run: |
-          BUILD_CMD="npm run build"
-          if [[ $BUILD_CMD == "npm "* ]]; then
-            echo "manager=npm" >> $GITHUB_OUTPUT
-          elif [[ $BUILD_CMD == "yarn "* ]]; then
-            echo "manager=yarn" >> $GITHUB_OUTPUT
-          elif [[ $BUILD_CMD == "pnpm "* ]]; then
-            echo "manager=pnpm" >> $GITHUB_OUTPUT
-          else
-            echo "manager=npm" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
         with:
-          node-version: "25.3.x"
-
-      - name: Setup pnpm
-        if: steps.detect-pm.outputs.manager == 'pnpm'
-        uses: pnpm/action-setup@v2
-        with:
-          version: latest
-
-      - name: Setup yarn
-        if: steps.detect-pm.outputs.manager == 'yarn'
-        run: npm install -g yarn
+          bun-version: latest
 
       - name: Install dependencies
-        run: |
-          case "${{ steps.detect-pm.outputs.manager }}" in
-            "npm")
-              # Check if lockfile exists and is in sync
-              if [ -f "package-lock.json" ] && npm ci --dry-run --legacy-peer-deps 2>/dev/null; then
-                echo "Using npm ci for clean install..."
-                npm ci --legacy-peer-deps
-              else
-                echo "Lockfile missing or out of sync, using npm install to regenerate..."
-                npm install --legacy-peer-deps
-              fi
-              # Force reinstall lightningcss with native binaries
-              npm uninstall lightningcss --silent 2>/dev/null || true
-              npm install lightningcss --force
-              npm rebuild lightningcss --force
-              ;;
-            "yarn")
-              if [ -f "yarn.lock" ]; then
-                yarn install --frozen-lockfile
-              else
-                yarn install
-              fi
-              # Force reinstall lightningcss with native binaries
-              yarn remove lightningcss --silent 2>/dev/null || true
-              yarn add lightningcss --force
-              yarn rebuild lightningcss
-              ;;
-            "pnpm")
-              if [ -f "pnpm-lock.yaml" ]; then
-                pnpm install --frozen-lockfile
-              else
-                pnpm install
-              fi
-              # Force reinstall lightningcss with native binaries
-              pnpm remove lightningcss --silent 2>/dev/null || true
-              pnpm add lightningcss --force
-              pnpm rebuild lightningcss
-              ;;
-            *)
-              echo "Unsupported package manager: ${{ steps.detect-pm.outputs.manager }}"
-              exit 1
-              ;;
-          esac
-
-      - name: Verify lightningcss installation
-        run: |
-          echo "Checking lightningcss installation.."
-          node -e "try { require('lightningcss'); console.log('✅ lightningcss loaded successfully'); } catch(e) { console.error('❌ lightningcss failed to load:', e.message); process.exit(1); }"
+        run: bun install
 
       - name: Build Next.js app
         run: |
           echo "Building Next.js application..."
-          npm run build
+          bun run build
 
       - name: Verify build output
         run: |
-          if [ ! -d "./out" ]; then
-            echo "❌ Build failed: ./out directory not found"
+          if [ ! -d "./dist" ]; then
+            echo "❌ Build failed: ./dist directory not found"
             exit 1
           fi
-          echo "✅ Build successful: ./out directory exists"
-          ls -la ./out
+          echo "✅ Build successful: ./dist directory exists"
+          ls -la ./dist
 
       - name: Deploy to Orbiter
         env:
           ORBITER_API_KEY: ${{ secrets.ORBITER_API_KEY }}
-          NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}          
-        run: npx orbiter-cli update -d havenappnext ./out
+          SOURCE: github-action
+        run: bunx orbiter-cli deploy-server -s ${{ secrets.ORBITER_SITE_ID }} -o dist
