@@ -14,6 +14,11 @@ interface TokenGatedEventsEmbedProps {
   theme?: 'light' | 'dark'
   /** Whether to use compact card style */
   compact?: boolean
+  /**
+   * Public mode — show all events regardless of whether the viewer holds the token.
+   * Defaults to true for landing page use cases.
+   */
+  publicMode?: boolean
   /** Base URL of the events platform */
   baseUrl?: string
   /** Additional CSS class names */
@@ -43,6 +48,7 @@ export function TokenGatedEventsEmbed({
   filterChain = 'ethereum',
   theme = 'dark',
   compact = true,
+  publicMode = true,
   baseUrl = 'https://tokengatedevents.orbiter.website',
   className = '',
 }: TokenGatedEventsEmbedProps) {
@@ -56,6 +62,7 @@ export function TokenGatedEventsEmbed({
   if (filterChain) embedUrl.searchParams.set('filterChain', filterChain)
   if (theme) embedUrl.searchParams.set('theme', theme)
   if (compact) embedUrl.searchParams.set('compact', 'true')
+  if (publicMode) embedUrl.searchParams.set('publicMode', 'true')
 
   // Listen for PostMessage events from the embedded widget
   const handleMessage = useCallback((event: MessageEvent) => {
