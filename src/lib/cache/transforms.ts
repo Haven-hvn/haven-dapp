@@ -45,7 +45,8 @@ export async function videoToCachedVideo(
     filecoinCid: video.filecoinCid,
     encryptedCid: video.encryptedCid,
     isEncrypted: video.isEncrypted,
-    litEncryptionMetadata: video.litEncryptionMetadata,
+    encryptionMetadata: video.encryptionMetadata,
+    cidEncryptionMetadata: video.cidEncryptionMetadata,
     hasAiData: video.hasAiData,
     vlmJsonCid: video.vlmJsonCid,
     mintId: video.mintId,
@@ -113,7 +114,8 @@ export function cachedVideoToVideo(cached: CachedVideo): Video {
     filecoinCid: cached.filecoinCid,
     encryptedCid: cached.encryptedCid,
     isEncrypted: cached.isEncrypted,
-    litEncryptionMetadata: cached.litEncryptionMetadata as Video['litEncryptionMetadata'],
+    encryptionMetadata: cached.encryptionMetadata,
+    cidEncryptionMetadata: cached.cidEncryptionMetadata,
     hasAiData: cached.hasAiData,
     vlmJsonCid: cached.vlmJsonCid,
     mintId: cached.mintId,
@@ -188,7 +190,8 @@ export async function computeSyncHash(video: Video): Promise<string> {
         }
       : undefined,
     // Include encryption metadata if present
-    litEncryptionMetadata: video.litEncryptionMetadata,
+    encryptionMetadata: video.encryptionMetadata,
+    cidEncryptionMetadata: video.cidEncryptionMetadata,
     // Include expiration block for change detection
     expiresAtBlock: video.expiresAtBlock,
   })

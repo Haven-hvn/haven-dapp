@@ -88,7 +88,7 @@ test.describe('Cache Integration', () => {
             filecoinCid: 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi',
             encryptedCid: undefined,
             isEncrypted: false,
-            litEncryptionMetadata: undefined,
+            encryptionMetadata: undefined,
             hasAiData: false,
             vlmJsonCid: undefined,
             mintId: undefined,

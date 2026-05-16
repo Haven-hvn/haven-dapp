@@ -325,7 +325,7 @@ export function createTestCachedVideo(
 
     // Encryption
     isEncrypted: false,
-    litEncryptionMetadata: undefined,
+    encryptionMetadata: undefined,
 
     // AI analysis
     hasAiData: false,

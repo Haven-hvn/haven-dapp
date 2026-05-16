@@ -10,7 +10,7 @@
  * @module types/arkiv
  */
 
-import type { CidEncryptionMetadata, LitEncryptionMetadata } from './encryption'
+import type { CidEncryptionMetadata } from './encryption'
 
 // ============================================================================
 // Raw Arkiv Entity Types
@@ -217,14 +217,13 @@ export interface ArkivPayload {
    * Used when the CID itself is encrypted for privacy.
    */
   cid_encryption_metadata?: CidEncryptionMetadata
-  
-  /** 
-   * Lit encryption metadata as JSON string.
-   * Contains the full LitEncryptionMetadata object serialized.
-   * Use parseLitEncryptionMetadata() to convert to object.
+
+  /**
+   * Content encryption metadata (Haven-AOL gate or hybrid-v1 from haven-cli).
+   * Stored as JSON string or object in the entity payload.
    */
-  lit_encryption_metadata?: string
-  
+  encryption_metadata?: string | Record<string, unknown>
+
   // AI analysis
   /** CID of VLM analysis JSON on Filecoin */
   vlm_json_cid?: string
@@ -410,36 +409,6 @@ export class ArkivError extends Error {
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-/**
- * Parse legacy encryption metadata from JSON string.
- * 
- * @param metadataJson - JSON string from Arkiv payload
- * @returns Parsed LitEncryptionMetadata or null if invalid
- */
-export function parseLitEncryptionMetadata(
-  metadataJson: string | undefined
-): LitEncryptionMetadata | null {
-  if (!metadataJson) return null
-  
-  try {
-    const parsed = JSON.parse(metadataJson)
-    
-    // Basic validation
-    if (
-      parsed.version === 'hybrid-v1' &&
-      typeof parsed.encryptedKey === 'string' &&
-      typeof parsed.iv === 'string' &&
-      Array.isArray(parsed.accessControlConditions)
-    ) {
-      return parsed as LitEncryptionMetadata
-    }
-    
-    return null
-  } catch {
-    return null
-  }
-}
 
 /**
  * Convert attributes array to record object.

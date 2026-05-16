@@ -7,7 +7,7 @@
  * after clearing browser data.
  *
  * Security considerations:
- * - No encryption keys in export (litEncryptionMetadata contains encrypted keys, not plaintext)
+ * - No encryption keys in export (encryptionMetadata contains encrypted keys, not plaintext)
  * - Wallet address verification (import only works for matching wallet address)
  * - Checksum verification (detects file corruption or tampering)
  * - No executable code (export is pure JSON data)

@@ -142,9 +142,5 @@ export {
   DEFAULT_CACHE_CONFIG,
 } from '../../types/cache'
 
-export type {
-  Video,
-  CodecVariant,
-  LitEncryptionMetadata,
-  SegmentMetadata,
-} from '../../types/video'
+export type { Video, CodecVariant, SegmentMetadata } from '../../types/video'
+export type { LitEncryptionMetadata } from '../../types/encryption'

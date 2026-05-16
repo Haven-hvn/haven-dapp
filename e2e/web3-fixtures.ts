@@ -60,8 +60,8 @@ type Web3Fixtures = {
   /** Mock wallet disconnection */
   mockWalletDisconnected: () => Promise<void>;
   
-  /** Mock signature response */
-  mockSignature: (signature?: string) => Promise<void>;
+  /** Mock Haven-AOL nonce in localStorage */
+  mockHavenAolNonce: (address: string, nonce?: string) => Promise<void>;
   
   /** Wait for wallet modal to appear */
   waitForWalletModal: () => Promise<void>;
@@ -191,15 +191,15 @@ export const test = baseTest.extend<Web3Fixtures>({
     });
   },
 
-  /** Mock signature by injecting into localStorage */
-  mockSignature: async ({ page }, use) => {
-    await use(async (signature = '0x' + 'a'.repeat(130)) => {
-      await page.evaluate((sig) => {
-        localStorage.setItem('lit-auth-signature', JSON.stringify({
-          signature: sig,
-          timestamp: Date.now()
-        }));
-      }, signature);
+  /** Mock Haven-AOL nonce state in localStorage */
+  mockHavenAolNonce: async ({ page }, use) => {
+    await use(async (address: string, nonce = '1') => {
+      await page.evaluate(({ walletAddress, value }) => {
+        localStorage.setItem(
+          `haven-aol-nonce-${walletAddress.toLowerCase()}`,
+          value
+        );
+      }, { walletAddress: address, value: nonce });
     });
   },
 

@@ -35,7 +35,7 @@ export function createMockVideo(overrides?: Partial<Video>): Video {
 
     // Encryption
     isEncrypted: false,
-    litEncryptionMetadata: undefined,
+    encryptionMetadata: undefined,
 
     // AI analysis
     hasAiData: false,
@@ -81,7 +81,7 @@ export function createMockCachedVideo(overrides?: Partial<CachedVideo>): CachedV
     filecoinCid: 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi',
     encryptedCid: undefined,
     isEncrypted: false,
-    litEncryptionMetadata: undefined,
+    encryptionMetadata: undefined,
     hasAiData: false,
     vlmJsonCid: undefined,
     mintId: undefined,
@@ -180,7 +180,7 @@ export function createFullVideo(overrides?: Partial<Video>): Video {
     description: 'Full video with all fields',
     encryptedCid: 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdl',
     isEncrypted: true,
-    litEncryptionMetadata: {
+    encryptionMetadata: {
       encryptedSymmetricKey: '0x1234567890abcdef',
       accessControlConditions: [],
       chain: 'ethereum',
@@ -209,7 +209,7 @@ export function createFullCachedVideo(overrides?: Partial<CachedVideo>): CachedV
     description: 'Full cached video with all fields',
     encryptedCid: 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdl',
     isEncrypted: true,
-    litEncryptionMetadata: {
+    encryptionMetadata: {
       encryptedSymmetricKey: '0x1234567890abcdef',
       accessControlConditions: [],
       chain: 'ethereum',

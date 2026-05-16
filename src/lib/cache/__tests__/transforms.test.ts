@@ -85,7 +85,7 @@ describe('videoToCachedVideo', () => {
 
     expect(cached.encryptedCid).toBe(video.encryptedCid)
     expect(cached.isEncrypted).toBe(true)
-    expect(cached.litEncryptionMetadata).toEqual(video.litEncryptionMetadata)
+    expect(cached.encryptionMetadata).toEqual(video.encryptionMetadata)
     expect(cached.hasAiData).toBe(true)
     expect(cached.vlmJsonCid).toBe(video.vlmJsonCid)
     expect(cached.mintId).toBe(video.mintId)
@@ -293,7 +293,7 @@ describe('cachedVideoToVideo', () => {
   it('handles undefined optional fields correctly', () => {
     const cached = createMockCachedVideo({
       encryptedCid: undefined,
-      litEncryptionMetadata: undefined,
+      encryptionMetadata: undefined,
       vlmJsonCid: undefined,
       mintId: undefined,
       sourceUri: undefined,
@@ -306,7 +306,7 @@ describe('cachedVideoToVideo', () => {
     const video = cachedVideoToVideo(cached)
 
     expect(video.encryptedCid).toBeUndefined()
-    expect(video.litEncryptionMetadata).toBeUndefined()
+    expect(video.encryptionMetadata).toBeUndefined()
     expect(video.vlmJsonCid).toBeUndefined()
     expect(video.mintId).toBeUndefined()
     expect(video.sourceUri).toBeUndefined()
@@ -348,7 +348,7 @@ describe('Round-trip Tests', () => {
     const cached = await videoToCachedVideo(original)
     const restored = cachedVideoToVideo(cached)
 
-    expect(restored.litEncryptionMetadata).toEqual(original.litEncryptionMetadata)
+    expect(restored.encryptionMetadata).toEqual(original.encryptionMetadata)
     expect(restored.segmentMetadata?.startTimestamp.getTime()).toBe(
       original.segmentMetadata?.startTimestamp.getTime()
     )
@@ -366,7 +366,7 @@ describe('Round-trip Tests', () => {
     const restored = cachedVideoToVideo(cached)
 
     expect(restored.encryptedCid).toBeUndefined()
-    expect(restored.litEncryptionMetadata).toBeUndefined()
+    expect(restored.encryptionMetadata).toBeUndefined()
     expect(restored.vlmJsonCid).toBeUndefined()
     expect(restored.mintId).toBeUndefined()
     expect(restored.sourceUri).toBeUndefined()
@@ -446,7 +446,7 @@ describe('computeSyncHash', () => {
       createdAt: minimal.createdAt,
       // All optional fields are explicitly undefined
       encryptedCid: undefined,
-      litEncryptionMetadata: undefined,
+      encryptionMetadata: undefined,
       vlmJsonCid: undefined,
       mintId: undefined,
       sourceUri: undefined,

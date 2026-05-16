@@ -23,6 +23,7 @@
 import { hasVideo, putVideo, getCacheStorageEstimate } from './video-cache'
 import { hasCachedKey } from './aes-key-cache'
 import { fetchFromIpfs } from '@/services/ipfsService'
+import { isHybridV1Metadata } from '@/lib/haven-aol'
 import type { Video } from '@/types'
 
 // ============================================================================
@@ -636,14 +637,17 @@ async function executePrefetch(item: PrefetchItem): Promise<void> {
     return
   }
 
+  const hybridMeta =
+    video.encryptionMetadata && isHybridV1Metadata(video.encryptionMetadata)
+      ? video.encryptionMetadata
+      : undefined
+
   // For encrypted videos, we need to decrypt
   // Check if we have the key cached first
-  const hasKey = video.litEncryptionMetadata?.keyHash
-    ? hasCachedKey(video.litEncryptionMetadata.keyHash)
-    : false
+  const hasKey = hybridMeta?.keyHash ? hasCachedKey(hybridMeta.keyHash) : false
 
   if (!hasKey) {
-    // We don't have the key cached - this would require Lit authentication
+    // We don't have the key cached - decryption would require a wallet signature
     // which we don't want to trigger during prefetch
     // Mark this as failed but don't throw - it's expected behavior
     throw new Error('AES key not cached - skipping prefetch to avoid wallet popup')
@@ -660,7 +664,7 @@ async function executePrefetch(item: PrefetchItem): Promise<void> {
   }
 
   // Get the cached key
-  const keyHash = video.litEncryptionMetadata?.keyHash
+  const keyHash = hybridMeta?.keyHash
   if (!keyHash) {
     throw new Error('No key hash in encryption metadata')
   }
@@ -675,8 +679,8 @@ async function executePrefetch(item: PrefetchItem): Promise<void> {
   }
 
   // Decrypt and cache
-  const iv = base64ToUint8Array(video.litEncryptionMetadata!.iv)
-  const mimeType = video.litEncryptionMetadata!.originalMimeType || 'video/mp4'
+  const iv = base64ToUint8Array(hybridMeta.iv)
+  const mimeType = hybridMeta.originalMimeType || 'video/mp4'
 
   await aesDecryptToCache(
     fetchResult.data,

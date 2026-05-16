@@ -7,7 +7,7 @@
  * properly cleaned up.
  *
  * Security considerations:
- * - Lit session cache (SIWE auth context) is tied to a specific wallet address
+ * - Haven-AOL gate nonces are tied to a specific wallet address
  * - AES keys were decrypted using that wallet's access permissions
  * - Cached videos may need clearing if decrypted under different wallet's permissions
  *
@@ -38,7 +38,7 @@ export interface CleanupOptions {
  * Result of a full security clear operation.
  */
 export interface SecurityClearResult {
-  /** Whether Lit sessions were cleared */
+  /** Whether Haven-AOL nonces were cleared */
   sessionsCleared: boolean
   /** Whether AES keys were cleared */
   keysCleared: boolean
@@ -111,7 +111,7 @@ export function resetCleanupOptions(): void {
  * Handle wallet disconnect - full cleanup.
  *
  * Called when a user explicitly disconnects their wallet. Clears:
- * - Lit session cache for the address
+ * - Haven-AOL nonce cache for the address
  * - All AES keys (tied to wallet permissions)
  * - OPFS staging files
  * - Video cache (configurable, default: keep)
@@ -150,7 +150,7 @@ export function onWalletDisconnect(address: string): void {
  * Handle account change - cleanup old account's auth state.
  *
  * Called when a user switches to a different wallet account. Clears:
- * - Old account's Lit session
+ * - Old account's Haven-AOL nonces
  * - All AES keys (permissions may differ)
  * - OPFS staging files
  * - Video cache (configurable, default: keep)
@@ -189,15 +189,10 @@ export function onAccountChange(oldAddress: string, newAddress: string): void {
 }
 
 /**
- * Handle chain change - cleanup chain-specific auth.
+ * Handle chain change.
  *
- * Called when a user switches to a different blockchain network. Clears:
- * - Lit session (SIWE is chain-specific)
- *
- * Keeps:
- * - AES keys (chain-agnostic)
- * - Video cache (chain-agnostic)
- * - OPFS staging files
+ * Called when a user switches networks. Haven-AOL nonces and cached keys
+ * are chain-agnostic, so nothing is cleared here.
  *
  * @param oldChainId - The previous chain ID
  * @param newChainId - The new chain ID
@@ -222,10 +217,10 @@ export function onChainChange(oldChainId: number, newChainId: number): void {
 }
 
 /**
- * Handle Lit session expiration.
+ * Handle Haven-AOL session expiration.
  *
- * Called when a Lit session expires. Clears:
- * - Lit session cache
+ * Clears:
+ * - Haven-AOL nonce cache
  *
  * Keeps:
  * - AES keys (may still be valid)
@@ -247,7 +242,7 @@ export function onSessionExpired(): void {
  * Nuclear option: clear everything.
  *
  * Called from settings UI "Clear All Data". Clears:
- * - All Lit sessions
+ * - All Haven-AOL nonces
  * - All AES keys
  * - All cached videos
  * - All OPFS staging files

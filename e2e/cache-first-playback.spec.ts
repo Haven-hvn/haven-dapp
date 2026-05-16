@@ -50,7 +50,7 @@ test.describe('Cache-First Playback', () => {
       filecoinCid: fixture.cid,
       encryptedCid: fixture.encryptedCid,
       isEncrypted: true,
-      litEncryptionMetadata: fixture.encryptionMetadata,
+      encryptionMetadata: fixture.encryptionMetadata,
       hasAiData: false,
       createdAt: Date.now(),
       cachedAt: Date.now(),

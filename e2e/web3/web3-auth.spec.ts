@@ -125,20 +125,17 @@ test.describe('Web3 Authentication Flow', () => {
   });
 
   test.describe('Auth Integration', () => {
-    test('should store signature in localStorage', async ({ page, gotoWithWeb3, mockWalletConnected, mockSignature }) => {
+    test('should persist Haven-AOL nonce in localStorage', async ({ page, gotoWithWeb3, mockWalletConnected, mockHavenAolNonce }) => {
       await gotoWithWeb3('/library');
       await mockWalletConnected(TEST_WALLET.address, 1);
-      
-      // Mock a signature (normally would be requested by Haven-AOL)
-      const testSig = '0x' + 'b'.repeat(130);
-      await mockSignature(testSig);
-      
-      // Verify signature was stored
-      const storedSig = await page.evaluate(() => {
-        return localStorage.getItem('lit-auth-signature');  // legacy key
-      });
-      
-      expect(storedSig).toContain(testSig);
+
+      await mockHavenAolNonce(TEST_WALLET.address, '42');
+
+      const storedNonce = await page.evaluate((address) => {
+        return localStorage.getItem(`haven-aol-nonce-${address.toLowerCase()}`);
+      }, TEST_WALLET.address);
+
+      expect(storedNonce).toBe('42');
     });
 
     test('should have auth storage available', async ({ page, gotoWithWeb3, mockWalletConnected }) => {

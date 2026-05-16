@@ -93,31 +93,14 @@ function parseArkivEntity(entity: ArkivEntity): Video {
   // Helper: look up a value by snake_case key
   const get = (key: string): unknown => data[key]
 
-  // Parse encryption_metadata (Haven-AOL format, primary) and lit_encryption_metadata (legacy)
   let encryptionMeta: Video['encryptionMetadata'] = undefined
-  let litMeta: Video['litEncryptionMetadata'] = undefined
 
-  // Try encryption_metadata first (Haven-AOL / haven-cli uploads)
   const rawEncMeta = get('encryption_metadata')
   if (rawEncMeta) {
     if (typeof rawEncMeta === 'string') {
       try { encryptionMeta = JSON.parse(rawEncMeta) } catch { /* ignore */ }
     } else {
       encryptionMeta = rawEncMeta as Video['encryptionMetadata']
-    }
-  }
-
-  // Fallback: lit_encryption_metadata (legacy Lit uploads)
-  const rawLitMeta = get('lit_encryption_metadata')
-  if (rawLitMeta) {
-    if (typeof rawLitMeta === 'string') {
-      try { litMeta = JSON.parse(rawLitMeta) } catch { /* ignore */ }
-    } else {
-      litMeta = rawLitMeta as Video['litEncryptionMetadata']
-    }
-    // If no encryptionMeta yet, promote litMeta (it's hybrid-v1 format)
-    if (!encryptionMeta && litMeta) {
-      encryptionMeta = litMeta as unknown as Video['encryptionMetadata']
     }
   }
 
@@ -160,7 +143,6 @@ function parseArkivEntity(entity: ArkivEntity): Video {
     // Encryption (Arkiv attributes use is_encrypted as number 0/1)
     isEncrypted: Boolean(get('is_encrypted')),
     encryptionMetadata: encryptionMeta,
-    litEncryptionMetadata: litMeta,
 
     // CID encryption metadata — stored as JSON string in Arkiv payload, uses legacy
     // field names (encryptedKey/keyHash) which must be mapped to CidEncryptionMetadata format

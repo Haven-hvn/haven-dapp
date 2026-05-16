@@ -30,7 +30,7 @@ const nextConfig = {
   // Both dev and build use --webpack flag instead.
   
   // Webpack configuration for @dfinity packages and browser polyfills
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, webpack }) => {
     // Fallback for Node.js modules that @dfinity/agent may reference
     if (!isServer) {
       config.resolve.fallback = {
@@ -50,7 +50,14 @@ const nextConfig = {
         buffer: false,
         events: false,
         util: false,
+        ws: false,
       };
+
+      config.plugins.push(
+        new webpack.IgnorePlugin({
+          resourceRegExp: /^ws$/,
+        })
+      );
     }
 
     // Resolve haven-aol source directly (the package uses .js extensions in imports)
@@ -58,6 +65,7 @@ const nextConfig = {
       ...config.resolve.alias,
       'haven-aol': join(__dirname, 'haven-aol-main/packages/typescript/src/index.ts'),
       '@react-native-async-storage/async-storage': join(__dirname, 'src/mocks/react-native-async-storage.js'),
+      ws: join(__dirname, 'src/mocks/ws.js'),
     };
 
     // Allow .js extension imports to resolve to .ts files (ESM convention in haven-aol source)
@@ -76,6 +84,9 @@ const nextConfig = {
     '@dfinity/candid',
     '@dfinity/principal',
     '@dfinity/vetkeys',
+    '@filoz/synapse-sdk',
+    '@filoz/synapse-core',
+    '@web3-storage/data-segment',
   ],
 
   // HTTP headers configuration for Service Worker support

@@ -16,16 +16,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Checkout Haven-AOL SDK
+        uses: actions/checkout@v4
+        with:
+          repository: Haven-hvn/haven-aol
+          path: haven-aol-main
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: Setup npm
-        run: npm config set legacy-peer-deps true
+          cache: npm
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Haven-AOL SDK dependencies
+        working-directory: haven-aol-main/packages/typescript
+        run: npm ci
 
       - name: Run ESLint
         run: npm run lint
@@ -43,13 +51,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Checkout Haven-AOL SDK
+        uses: actions/checkout@v4
+        with:
+          repository: Haven-hvn/haven-aol
+          path: haven-aol-main
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Haven-AOL SDK dependencies
+        working-directory: haven-aol-main/packages/typescript
+        run: npm ci
 
       - name: Build Next.js application
         run: npm run build

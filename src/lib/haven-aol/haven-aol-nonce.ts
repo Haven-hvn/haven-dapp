@@ -41,8 +41,10 @@ export function getNextNonce(address: string): bigint {
   let current = nonceMap.get(key)
 
   if (current === undefined) {
-    // Try localStorage
-    current = loadNonceFromStorage(key)
+    const stored = loadNonceFromStorage(key)
+    if (stored !== null) {
+      current = stored
+    }
   }
 
   // Increment

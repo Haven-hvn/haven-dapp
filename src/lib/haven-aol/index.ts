@@ -27,6 +27,9 @@ export {
   toGateMetadataJson,
   resolveDerivationCid,
   parseEncryptionMetadata,
+  normalizeDerivationThreshold,
+  derivationThresholdFromAccessCondition,
+  normalizeGateMetadataForDerivation,
 } from './haven-aol-metadata'
 export type {
   HybridV1EncryptionMetadata,

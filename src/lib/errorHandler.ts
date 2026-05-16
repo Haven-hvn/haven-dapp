@@ -33,7 +33,8 @@ export function handleError(error: unknown): AppError {
     
     // Decryption errors
     if (error.message.includes('decrypt') ||
-        error.message.includes('Lit')) {
+        error.message.includes('Haven-AOL') ||
+        error.message.includes('haven-aol')) {
       return {
         type: 'decryption',
         message: 'Failed to decrypt video. Make sure you own this content.',

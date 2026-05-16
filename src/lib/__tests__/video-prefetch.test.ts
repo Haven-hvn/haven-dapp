@@ -22,11 +22,6 @@ jest.mock('../video-cache', () => ({
   getCacheStorageEstimate: jest.fn().mockResolvedValue({ usage: 100, quota: 1000, percent: 10 }),
 }))
 
-jest.mock('../lit-session-cache', () => ({
-  getCachedAuthContext: jest.fn(),
-  hasCachedSession: jest.fn().mockReturnValue(true),
-}))
-
 jest.mock('../aes-key-cache', () => ({
   hasCachedKey: jest.fn().mockReturnValue(false),
   getCachedKey: jest.fn(),
@@ -47,7 +42,7 @@ describe('video-prefetch', () => {
     isEncrypted: true,
     hasAiData: false,
     encryptedCid: 'QmTest123',
-    litEncryptionMetadata: {
+    encryptionMetadata: {
       keyHash: 'key-1',
       iv: 'dGVzdGl2',
       originalMimeType: 'video/mp4',

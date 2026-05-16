@@ -10,7 +10,13 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Checkout Haven-AOL SDK
+        uses: actions/checkout@v4
+        with:
+          repository: Haven-hvn/haven-aol
+          path: haven-aol-main
 
       - name: Check if API key exists
         shell: bash
@@ -38,21 +44,37 @@ jobs:
             exit 1
           fi
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+      - name: Validate package manifests
+        shell: bash
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('package.json','utf8'))"
+          node -e "JSON.parse(require('fs').readFileSync('package-lock.json','utf8'))"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          bun-version: latest
+          node-version: '20'
+          cache: npm
 
       - name: Install dependencies
-        run: bun install
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Haven-AOL SDK dependencies
+        working-directory: haven-aol-main/packages/typescript
+        run: npm ci
 
       - name: Build Next.js app
         env:
-            NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}
-            NEXT_PUBLIC_APP_URL: "https://haven.orbiter.website/"
+          NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}
+          NEXT_PUBLIC_APP_URL: "https://haven.orbiter.website/"
+          NEXT_PUBLIC_ALCHEMY_API_KEY: ${{ secrets.NEXT_PUBLIC_ALCHEMY_API_KEY }}
+          NEXT_PUBLIC_ALCHEMY_RPC: ${{ secrets.NEXT_PUBLIC_ALCHEMY_RPC }}
+          NEXT_PUBLIC_ARKIV_RPC_URL: ${{ secrets.NEXT_PUBLIC_ARKIV_RPC_URL || 'https://braga.hoodi.arkiv.network/rpc' }}
+          NEXT_PUBLIC_ARKIV_API_URL: ${{ secrets.NEXT_PUBLIC_ARKIV_API_URL || 'https://braga.hoodi.arkiv.network/api' }}
+          NEXT_PUBLIC_LIT_NETWORK: ${{ secrets.NEXT_PUBLIC_LIT_NETWORK || 'naga-dev' }}
         run: |
           echo "Building Next.js application..."
-          bun run build
+          npm run build
 
       - name: Verify build output
         run: |
@@ -67,4 +89,4 @@ jobs:
         env:
           ORBITER_API_KEY: ${{ secrets.ORBITER_API_KEY }}
           SOURCE: github-action
-        run: bunx orbiter-cli update ./out --siteId ${{ secrets.ORBITER_SITE_ID }}
+        run: npx orbiter-cli update ./out --siteId ${{ secrets.ORBITER_SITE_ID }}

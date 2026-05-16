@@ -25,6 +25,7 @@ import {
   resolveDerivationCid,
   isHybridV1Metadata,
   isGateMetadata,
+  normalizeGateMetadataForDerivation,
   type HybridV1EncryptionMetadata,
   type GateMetadataJson,
 } from './haven-aol-metadata'
@@ -126,8 +127,9 @@ export async function decryptContentKey(
   let gateMetadataJson: string
 
   if (isGateMetadata(encryptionMetadata)) {
-    // Already in gate format
-    gateMetadataJson = JSON.stringify(encryptionMetadata)
+    gateMetadataJson = JSON.stringify(
+      normalizeGateMetadataForDerivation(encryptionMetadata)
+    )
   } else if (isHybridV1Metadata(encryptionMetadata)) {
     // Convert from hybrid-v1
     const derivationCid = resolveDerivationCid(encryptedCid, encryptionMetadata.originalHash)
@@ -284,7 +286,7 @@ export async function decryptCidWithHavenAol(
   // AES-GCM decrypt
   const key = await crypto.subtle.importKey(
     'raw',
-    aesKey,
+    aesKey as BufferSource,
     { name: 'AES-GCM' },
     false,
     ['decrypt'],

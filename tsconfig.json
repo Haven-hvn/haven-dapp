@@ -30,7 +30,7 @@
         "./haven-aol-main/packages/typescript/src/index.ts"
       ]
     },
-    "target": "ES2017"
+    "target": "ES2020"
   },
   "include": [
     "next-env.d.ts",

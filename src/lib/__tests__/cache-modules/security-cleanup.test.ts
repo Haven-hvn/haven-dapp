@@ -16,9 +16,8 @@ import {
   hasCachedAuthData,
 } from '../../security-cleanup'
 
-// Mock the modules that security-cleanup depends on
-jest.mock('../../lit-session-cache', () => ({
-  clearAuthContext: jest.fn(),
+jest.mock('../../haven-aol/haven-aol-nonce', () => ({
+  clearNonce: jest.fn(),
 }))
 
 jest.mock('../../aes-key-cache', () => ({
@@ -33,12 +32,12 @@ jest.mock('../../opfs', () => ({
   clearAllStaging: jest.fn().mockResolvedValue(undefined),
 }))
 
-import { clearAuthContext } from '../../lit-session-cache'
+import { clearNonce } from '../../haven-aol/haven-aol-nonce'
 import { clearAllKeys } from '../../aes-key-cache'
 import { clearAllVideos } from '../../video-cache'
 import { clearAllStaging } from '../../opfs'
 
-const mockedClearAuthContext = clearAuthContext as jest.MockedFunction<typeof clearAuthContext>
+const mockedClearNonce = clearNonce as jest.MockedFunction<typeof clearNonce>
 const mockedClearAllKeys = clearAllKeys as jest.MockedFunction<typeof clearAllKeys>
 const mockedClearAllVideos = clearAllVideos as jest.MockedFunction<typeof clearAllVideos>
 const mockedClearAllStaging = clearAllStaging as jest.MockedFunction<typeof clearAllStaging>
@@ -54,12 +53,12 @@ describe('security-cleanup', () => {
   })
 
   describe('onWalletDisconnect', () => {
-    it('clears Lit session for address', () => {
+    it('clears Haven-AOL nonce for address', () => {
       const address = '0x1234567890123456789012345678901234567890'
 
       onWalletDisconnect(address)
 
-      expect(mockedClearAuthContext).toHaveBeenCalledWith(address)
+      expect(mockedClearNonce).toHaveBeenCalledWith(address)
     })
 
     it('clears all AES keys', () => {
@@ -109,7 +108,7 @@ describe('security-cleanup', () => {
       expect(() => onWalletDisconnect('')).not.toThrow()
       
       // Should not clear anything
-      expect(mockedClearAuthContext).not.toHaveBeenCalled()
+      expect(mockedClearNonce).not.toHaveBeenCalled()
     })
 
     it('handles staging cleanup errors gracefully', async () => {
@@ -123,7 +122,7 @@ describe('security-cleanup', () => {
       await new Promise(r => setTimeout(r, 0))
 
       // Auth and keys should still be cleared
-      expect(mockedClearAuthContext).toHaveBeenCalled()
+      expect(mockedClearNonce).toHaveBeenCalled()
       expect(mockedClearAllKeys).toHaveBeenCalled()
     })
   })
@@ -135,7 +134,7 @@ describe('security-cleanup', () => {
 
       onAccountChange(oldAddress, newAddress)
 
-      expect(mockedClearAuthContext).toHaveBeenCalledWith(oldAddress)
+      expect(mockedClearNonce).toHaveBeenCalledWith(oldAddress)
     })
 
     it('clears AES keys', () => {
@@ -188,7 +187,7 @@ describe('security-cleanup', () => {
       expect(() => onAccountChange('', '')).not.toThrow()
 
       // Should not clear when addresses are invalid
-      expect(mockedClearAuthContext).not.toHaveBeenCalled()
+      expect(mockedClearNonce).not.toHaveBeenCalled()
     })
 
     it('normalizes addresses', () => {
@@ -198,15 +197,15 @@ describe('security-cleanup', () => {
       onAccountChange(oldAddress, newAddress)
 
       // Should clear the old address
-      expect(mockedClearAuthContext).toHaveBeenCalledWith(oldAddress)
+      expect(mockedClearNonce).toHaveBeenCalledWith(oldAddress)
     })
   })
 
   describe('onChainChange', () => {
-    it('clears auth context', () => {
+    it('does not clear Haven-AOL nonces (chain-agnostic)', () => {
       onChainChange(1, 137)
 
-      expect(mockedClearAuthContext).toHaveBeenCalledWith()
+      expect(mockedClearNonce).not.toHaveBeenCalled()
     })
 
     it('does not clear AES keys', () => {
@@ -238,15 +237,15 @@ describe('security-cleanup', () => {
       expect(() => onChainChange(0, 0)).not.toThrow()
 
       // Should not clear when chain IDs are invalid
-      expect(mockedClearAuthContext).not.toHaveBeenCalled()
+      expect(mockedClearNonce).not.toHaveBeenCalled()
     })
   })
 
   describe('onSessionExpired', () => {
-    it('clears auth context', () => {
+    it('clears Haven-AOL nonces', () => {
       onSessionExpired()
 
-      expect(mockedClearAuthContext).toHaveBeenCalledWith()
+      expect(mockedClearNonce).toHaveBeenCalledWith()
     })
 
     it('does not clear AES keys', () => {
@@ -276,7 +275,7 @@ describe('security-cleanup', () => {
     it('clears all sessions', async () => {
       await onSecurityClear()
 
-      expect(mockedClearAuthContext).toHaveBeenCalledWith()
+      expect(mockedClearNonce).toHaveBeenCalledWith()
     })
 
     it('clears all keys', async () => {
@@ -318,7 +317,7 @@ describe('security-cleanup', () => {
     })
 
     it('continues even if some operations fail', async () => {
-      mockedClearAuthContext.mockImplementation(() => {
+      mockedClearNonce.mockImplementation(() => {
         throw new Error('Auth error')
       })
 
@@ -332,7 +331,7 @@ describe('security-cleanup', () => {
     })
 
     it('handles all failures gracefully', async () => {
-      mockedClearAuthContext.mockImplementation(() => {
+      mockedClearNonce.mockImplementation(() => {
         throw new Error('Auth error')
       })
       mockedClearAllKeys.mockImplementation(() => {

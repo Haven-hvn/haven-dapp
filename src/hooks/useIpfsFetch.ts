@@ -567,7 +567,7 @@ export interface UseEncryptedVideoFetchReturn extends UseIpfsFetchReturn {
   /** Blob URL for decrypted video (null if not yet decrypted) */
   decryptedUrl: string | null
   /** Fetch and decrypt a video in one operation */
-  fetchAndDecrypt: (video: { encryptedCid?: string; litEncryptionMetadata?: unknown }) => Promise<string | null>
+  fetchAndDecrypt: (video: { encryptedCid?: string; encryptionMetadata?: unknown }) => Promise<string | null>
 }
 
 export function useEncryptedVideoFetch(
@@ -595,7 +595,7 @@ export function useEncryptedVideoFetch(
   }, [decryptedUrl, baseHook])
   
   const fetchAndDecrypt = useCallback(async (
-    video: { encryptedCid?: string; litEncryptionMetadata?: unknown }
+    video: { encryptedCid?: string; encryptionMetadata?: unknown }
   ): Promise<string | null> => {
     // This is a placeholder - actual implementation would integrate
     // with the decryption hook from useVideoDecryption

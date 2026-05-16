@@ -26,7 +26,8 @@
     "test:web3": "cross-env INCLUDE_WEB3_TESTS=true playwright test --project=web3-chromium",
     "test:web3:headed": "cross-env INCLUDE_WEB3_TESTS=true playwright test --project=web3-chromium --headed",
     "test:web3:ui": "cross-env INCLUDE_WEB3_TESTS=true playwright test --project=web3-chromium --ui",
-    "test:all": "cross-env INCLUDE_WEB3_TESTS=true playwright test"
+    "test:all": "cross-env INCLUDE_WEB3_TESTS=true playwright test",
+    "postinstall": "node scripts/ensure-haven-aol.mjs"
   },
   "dependencies": {
     "@arkiv-network/sdk": "0.6.8",
@@ -43,6 +44,8 @@
     "@reown/appkit-adapter-wagmi": "1.8.19",
     "@tanstack/react-query": "5.100.10",
     "@tanstack/react-query-devtools": "5.100.10",
+    "@wagmi/core": "3.4.12",
+    "accounts": "^0.12.1",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "ethers": "6.16.0",

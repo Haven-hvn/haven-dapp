@@ -156,6 +156,47 @@ export function isGateMetadata(meta: unknown): meta is GateMetadataJson {
 }
 
 // ============================================================================
+// Derivation Threshold
+// ============================================================================
+
+/**
+ * Clamp a gate metadata threshold string for VetKD derivation (minimum 1).
+ *
+ * The Haven-AOL canister rejects threshold=0 (#InvalidThreshold). On-chain access
+ * conditions may still use returnValueTest.value "0" (e.g. balanceOf > 0).
+ */
+export function normalizeDerivationThreshold(threshold: string): string {
+  const parsed = Number.parseInt(String(threshold), 10)
+  if (Number.isNaN(parsed)) {
+    return '1'
+  }
+  return String(Math.max(1, parsed))
+}
+
+/**
+ * VetKD derivation threshold from an on-chain access condition.
+ *
+ * Mirrors haven-cli's `derivation_threshold_from_access_condition`.
+ */
+export function derivationThresholdFromAccessCondition(
+  returnValueTest?: { value?: string }
+): string {
+  return normalizeDerivationThreshold(returnValueTest?.value ?? '1')
+}
+
+/**
+ * Ensure gate metadata uses a valid VetKD derivation threshold.
+ */
+export function normalizeGateMetadataForDerivation(
+  meta: GateMetadataJson
+): GateMetadataJson {
+  return {
+    ...meta,
+    threshold: normalizeDerivationThreshold(meta.threshold),
+  }
+}
+
+// ============================================================================
 // Metadata Conversion
 // ============================================================================
 
@@ -184,8 +225,7 @@ export function toGateMetadataJson(
     throw new Error('Cannot convert metadata: empty contractAddress in accessControlConditions[0]')
   }
 
-  // Determine threshold from returnValueTest.value
-  const threshold = acc.returnValueTest?.value || '1'
+  const threshold = derivationThresholdFromAccessCondition(acc.returnValueTest)
 
   // Normalize chain
   const chain = normalizeChain(acc.chain || meta.chain)
