@@ -5,23 +5,26 @@
  * 
  * Main video player component that handles:
  * - Non-encrypted videos: Direct IPFS streaming via cache
- * - Encrypted videos: Cache-first loading with Lit Protocol decryption
- * - Loading states and progress indicators with cache awareness
+ * - Encrypted videos: Progressive playback (plays while decrypting)
+ * - Cache-first loading: instant playback when cached
+ * - Loading states and progress indicators with streaming awareness
  * - Error handling and recovery
+ * - Download button (available after full decryption + caching)
  * 
- * Refactored to use useVideoCache hook for all video loading,
- * eliminating direct Synapse fetch and useVideoDecryption usage.
+ * The player shows the video immediately once progressive decryption starts,
+ * with a streaming indicator while remaining chunks are being decrypted.
  * 
  * @module components/player/VideoPlayer
  */
 
 import { useVideoQuery } from '@/hooks/useVideos'
 import { useVideoCache } from '@/hooks/useVideoCache'
+import { useVideoDownload } from '@/hooks/useVideoDownload'
 import { VideoPlayerControls } from './VideoPlayerControls'
 import { CacheAwareProgress } from './CacheAwareProgress'
 import { CacheIndicator } from './CacheIndicator'
 import { ErrorOverlay } from './ErrorOverlay'
-import { ArrowLeft, Loader2, Lock } from 'lucide-react'
+import { ArrowLeft, Loader2, Lock, Download, Radio } from 'lucide-react'
 import Link from 'next/link'
 import type { Video } from '@/types'
 
@@ -32,17 +35,30 @@ interface VideoPlayerProps {
 export function VideoPlayer({ videoId }: VideoPlayerProps) {
   const { video, isLoading: isVideoLoading, isFound } = useVideoQuery(videoId)
   
-  // Single hook replaces Synapse fetch + useVideoDecryption + manual URL management
+  // Progressive playback + cache hook
   const {
     videoUrl,
     isCached,
     isLoading,
+    isStreaming,
     loadingStage,
     progress,
+    chunksDecrypted,
+    totalChunks,
     error,
+    canDownload,
     retry,
     evict,
   } = useVideoCache(video ?? null)
+
+  // Download hook (works from player: cached = instant, uncached = full pipeline)
+  const {
+    download,
+    isDownloading,
+    stage: downloadStage,
+    progress: downloadProgress,
+    progressMessage: downloadMessage,
+  } = useVideoDownload()
   
   // Loading state (fetching video metadata)
   if (isVideoLoading) {
@@ -53,6 +69,12 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
   if (!isFound || !video) {
     return <VideoNotFoundState />
   }
+
+  // Determine if we should show the video player
+  // Show it during streaming (progressive) OR when fully ready
+  const showPlayer = videoUrl && !error
+  // Show progress overlay only when loading AND not yet streaming
+  const showProgress = isLoading && !isStreaming && !error
   
   return (
     <div className="flex flex-col h-screen bg-black">
@@ -68,8 +90,37 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
         </Link>
         
         <div className="flex items-center gap-2">
+          {/* Download button */}
+          {video && (
+            <button
+              onClick={(e) => { e.stopPropagation(); download(video) }}
+              disabled={isDownloading}
+              className="flex items-center gap-1 px-3 py-1 bg-white/10 hover:bg-white/20 text-white/80 hover:text-white rounded-full text-sm transition-colors touch-manipulation min-h-[36px] disabled:opacity-50"
+              title={isDownloading ? downloadMessage : 'Download video'}
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">
+                {isDownloading
+                  ? `${downloadMessage} ${downloadProgress}%`
+                  : downloadStage === 'complete'
+                    ? 'Saved!'
+                    : 'Download'}
+              </span>
+            </button>
+          )}
+
+          {/* Streaming indicator */}
+          {isStreaming && (
+            <div className="flex items-center gap-1 px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm animate-pulse">
+              <Radio className="w-4 h-4" />
+              <span className="hidden sm:inline">
+                Streaming {chunksDecrypted}/{totalChunks}
+              </span>
+            </div>
+          )}
+
           {/* Cache status indicator */}
-          {video.isEncrypted && (
+          {video.isEncrypted && !isStreaming && (
             <CacheIndicator 
               isCached={isCached} 
               videoId={video.id} 
@@ -98,8 +149,8 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
           />
         )}
         
-        {/* Loading/decryption progress */}
-        {isLoading && !error && (
+        {/* Loading/decryption progress (before streaming starts) */}
+        {showProgress && (
           <CacheAwareProgress 
             stage={loadingStage}
             progress={progress}
@@ -107,8 +158,8 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
           />
         )}
         
-        {/* Video element */}
-        {videoUrl && !error && !isLoading && (
+        {/* Video element — shown during streaming AND when fully ready */}
+        {showPlayer && (
           <VideoPlayerControls 
             src={videoUrl}
             title={video.title}

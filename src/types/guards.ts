@@ -8,7 +8,7 @@
  */
 
 import type { Video, VlmAnalysis, SegmentMetadata, VideoProcessingStatus } from './video'
-import type { LitEncryptionMetadata, CidEncryptionMetadata, AccessControlCondition } from './lit'
+import type { LitEncryptionMetadata, CidEncryptionMetadata, AccessControlCondition } from './encryption'
 import type { ArkivEntity, ArkivPayload, ArkivAttributes, ArkivSegmentMetadata } from './arkiv'
 import type { VideoCardData, LibraryState, ViewMode, SortField, SortOrder } from './ui'
 
@@ -113,11 +113,11 @@ export function isVideoProcessingStatus(status: string): status is VideoProcessi
 }
 
 // ============================================================================
-// Lit Protocol Type Guards
+// Encryption Metadata Type Guards
 // ============================================================================
 
 /**
- * Check if a value is a valid LitEncryptionMetadata object.
+ * Check if a value is a valid LitEncryptionMetadata (hybrid-v1) object.
  * 
  * @param obj - Value to check
  * @returns True if obj is a valid LitEncryptionMetadata
@@ -415,7 +415,7 @@ export function parseArkivPayloadSafe(payloadBase64: string):
 }
 
 /**
- * Parse Lit encryption metadata from JSON string.
+ * Parse legacy encryption metadata from JSON string.
  * 
  * @param metadataJson - JSON string containing LitEncryptionMetadata
  * @returns Parsed metadata or null if invalid
@@ -467,7 +467,7 @@ export function assertVideo(value: unknown, message?: string): asserts value is 
 }
 
 /**
- * Assert that a value is a valid LitEncryptionMetadata.
+ * Assert that a value is a valid LitEncryptionMetadata (hybrid-v1 format).
  * Throws if the value is not valid.
  * 
  * @param value - Value to check

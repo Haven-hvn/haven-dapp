@@ -6,40 +6,39 @@
  * @module lib
  */
 
-// Lit Protocol exports
+// Haven-AOL exports (ICP VetKD decryption)
 export {
-  initLitClient,
-  getLitClient,
-  getAuthManager,
-  disconnectLitClient,
-  isLitConnected,
-  getLitNetwork,
-  LitError,
-  type LitClient,
-} from './lit'
-
-export {
-  createLitAuthContext,
-  createLitAuthContextWithResources,
-  isAuthContextExpired,
-  getAuthContextAddress,
-  LitAuthError,
-  type LitAuthContextOptions,
-  type LitAuthContext,
-} from './lit-auth'
-
-// Lit Session Cache exports
-export {
-  getCachedAuthContext,
-  setCachedAuthContext,
-  clearAuthContext,
-  isAuthContextValid,
-  getSessionInfo,
-  hasCachedSession,
-  getCachedSessionAddresses,
-  restoreSessionsFromStorage,
-  EXPIRY_SAFETY_MARGIN_MS,
-} from './lit-session-cache'
+  getHavenAolConfig,
+  isHavenAolConfigValid,
+  createSignedGateRequest,
+  retryWithBumpedNonce,
+  decryptContentKey,
+  decryptCidWithHavenAol,
+  normalizeChain,
+  isHybridV1Metadata,
+  isGateMetadata,
+  toGateMetadataJson,
+  resolveDerivationCid,
+  parseEncryptionMetadata,
+  HavenAolDecryptError,
+  mapGateError,
+  getHavenAolErrorMessage,
+  isRetryableError,
+  getNextNonce,
+  bumpNonce,
+  clearNonce,
+  getCurrentNonce,
+  type HavenAolConfig,
+  type SignedGateRequest,
+  type WalletClientLike,
+  type DecryptContentKeyOptions,
+  type DecryptContentKeyResult,
+  type DecryptCidOptions,
+  type HybridV1EncryptionMetadata,
+  type AccessControlCondition,
+  type GateMetadataJson,
+  type HavenAolErrorCode,
+} from './haven-aol'
 
 // AES Key Cache exports
 export {
@@ -112,19 +111,6 @@ export {
   checkLargeFileSupport,
 } from './crypto'
 
-// Lit Decryption utilities
-export {
-  decryptAesKey,
-  decryptCid,
-  batchDecryptAesKeys,
-  canDecrypt,
-  getDecryptionErrorMessage,
-  LitDecryptError,
-  type DecryptKeyResult,
-  type DecryptProgressCallback,
-  type DecryptAesKeyOptions,
-  type DecryptCidOptions,
-} from './lit-decrypt'
 
 // IPFS utilities
 export {
@@ -366,3 +352,19 @@ export {
   type BenchmarkResults,
   type BenchmarkOptions,
 } from './perf-benchmarks'
+
+// Chunked File Decryption (haven-cli streaming format)
+export {
+  decryptChunkedStream,
+  decryptChunkedFile,
+  decryptChunkedToCache,
+  decryptChunkedProgressive,
+  deriveChunkIv,
+  parseChunkedFileHeader,
+  concatenateChunks,
+  isChunkedFormat,
+  estimateChunks,
+  type ChunkedDecryptProgress,
+  type ChunkedDecryptOptions,
+  type ChunkedFileHeader,
+} from './chunked-decrypt'

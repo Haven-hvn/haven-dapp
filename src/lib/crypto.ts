@@ -15,8 +15,8 @@
  * Decrypt data using AES-256-GCM.
  * 
  * Uses the Web Crypto API for performant symmetric decryption
- * of video content. The AES key is obtained from Lit Protocol
- * via BLS-IBE decryption.
+ * of video content. The AES key is obtained from Haven-AOL
+ * via VetKD IBE decryption.
  * 
  * @param encryptedData - The encrypted data (ciphertext + auth tag)
  * @param key - The 256-bit AES key

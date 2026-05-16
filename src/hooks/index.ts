@@ -90,3 +90,17 @@ export type {
   UseHoverPrefetchReturn,
   UseHoverPrefetchOptions,
 } from './useHoverPrefetch'
+
+// Progressive playback hook (MediaSource API)
+export { useProgressivePlayback } from './useProgressivePlayback'
+export type {
+  UseProgressivePlaybackReturn,
+  ProgressivePlaybackState,
+} from './useProgressivePlayback'
+
+// Video download hook (full pipeline: fetch → decrypt → save to disk)
+export { useVideoDownload } from './useVideoDownload'
+export type {
+  UseVideoDownloadReturn,
+  DownloadStage,
+} from './useVideoDownload'

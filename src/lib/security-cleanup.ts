@@ -14,10 +14,10 @@
  * @module lib/security-cleanup
  */
 
-import { clearAuthContext } from './lit-session-cache'
 import { clearAllKeys } from './aes-key-cache'
 import { clearAllVideos } from './video-cache'
 import { clearAllStaging } from './opfs'
+import { clearNonce } from './haven-aol/haven-aol-nonce'
 
 // ============================================================================
 // Types
@@ -130,7 +130,7 @@ export function onWalletDisconnect(address: string): void {
   console.info(`[SecurityCleanup] Wallet disconnected: ${address.slice(0, 8)}...`)
 
   // Always clear auth-related caches
-  clearAuthContext(address)
+  clearNonce(address)
   clearAllKeys()
 
   // Optionally clear video cache
@@ -172,7 +172,7 @@ export function onAccountChange(oldAddress: string, newAddress: string): void {
   )
 
   // Clear old account's auth
-  clearAuthContext(oldAddress)
+  clearNonce(oldAddress)
   clearAllKeys()
 
   // Optionally clear video cache
@@ -215,9 +215,7 @@ export function onChainChange(oldChainId: number, newChainId: number): void {
     `[SecurityCleanup] Chain changed: ${oldChainId} → ${newChainId}`
   )
 
-  // SIWE is chain-specific, clear session
-  clearAuthContext()
-
+  // Haven-AOL nonces are chain-agnostic, keep them
   // AES keys are chain-agnostic, keep them
   // Video cache is chain-agnostic, keep it
   // OPFS staging is chain-agnostic, keep it
@@ -241,8 +239,8 @@ export function onChainChange(oldChainId: number, newChainId: number): void {
  * ```
  */
 export function onSessionExpired(): void {
-  console.info('[SecurityCleanup] Lit session expired')
-  clearAuthContext()
+  console.info('[SecurityCleanup] Session expired — clearing nonces')
+  clearNonce()
 }
 
 /**
@@ -274,7 +272,7 @@ export async function onSecurityClear(): Promise<SecurityClearResult> {
   }
 
   try {
-    clearAuthContext()
+    clearNonce()
     results.sessionsCleared = true
   } catch (err) {
     console.error('[SecurityCleanup] Failed to clear sessions:', err)
@@ -316,8 +314,6 @@ export async function onSecurityClear(): Promise<SecurityClearResult> {
  * @returns True if any session or key is cached
  */
 export function hasCachedAuthData(): boolean {
-  const { getCachedSessionAddresses, getCachedKeyCount } = require('./index')
-  return (
-    getCachedSessionAddresses().length > 0 || getCachedKeyCount() > 0
-  )
+  const { getCachedKeyCount } = require('./aes-key-cache')
+  return getCachedKeyCount() > 0
 }

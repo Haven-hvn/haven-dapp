@@ -38,7 +38,7 @@ test.describe('Landing Page', () => {
     await expect(page.locator('text=Own Your Data')).toBeVisible();
     
     // Check feature descriptions
-    await expect(page.locator('text=Your videos are encrypted using Lit Protocol')).toBeVisible();
+    await expect(page.locator('text=Your videos are encrypted end-to-end')).toBeVisible();
     await expect(page.locator('text=Stream your videos from IPFS anywhere')).toBeVisible();
     await expect(page.locator('text=No accounts, no passwords')).toBeVisible();
   });

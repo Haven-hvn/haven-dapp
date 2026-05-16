@@ -16,9 +16,10 @@
 'use client'
 
 import React from 'react'
-import { Cloud } from 'lucide-react'
+import { Cloud, Download, Loader2 } from 'lucide-react'
 import type { Video } from '../../types/video'
 import { CacheStatusBadge, getArkivStatusFromVideo } from './CacheStatusBadge'
+import { useVideoDownload } from '@/hooks/useVideoDownload'
 
 // =============================================================================
 // Types
@@ -164,6 +165,9 @@ export function VideoCard({
   currentBlock,
   isCached = false,
 }: VideoCardProps) {
+  // Download hook for this card
+  const { download, isDownloading, progress, progressMessage, stage } = useVideoDownload()
+
   // Determine arkiv status
   const arkivStatus = getArkivStatusFromVideo(video, currentBlock)
 
@@ -246,6 +250,41 @@ export function VideoCard({
             <PlayIcon className="w-6 h-6 text-gray-900 dark:text-white ml-0.5" />
           </div>
         </div>
+
+        {/* Download button (bottom-left, shown on hover) */}
+        <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <button
+            onClick={(e) => { e.stopPropagation(); download(video) }}
+            disabled={isDownloading}
+            className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-xs font-medium bg-black/70 hover:bg-black/90 text-white transition-colors disabled:opacity-70"
+            title={isDownloading ? progressMessage : 'Download video'}
+            aria-label={`Download ${video.title}`}
+          >
+            {isDownloading ? (
+              <>
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>{progress}%</span>
+              </>
+            ) : stage === 'complete' ? (
+              <>
+                <Download className="h-3 w-3" />
+                <span>Saved!</span>
+              </>
+            ) : (
+              <Download className="h-3 w-3" />
+            )}
+          </button>
+        </div>
+
+        {/* Download progress bar (visible during download) */}
+        {isDownloading && (
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/30">
+            <div
+              className="h-full bg-purple-500 transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        )}
 
         {/* Duration badge (bottom-right) */}
         <div className="absolute bottom-2 right-2">

@@ -1,6 +1,6 @@
 # Lit → Haven-AOL Migration Plan (haven-dapp)
 
-**Status:** Planning  
+**Status:** Implemented (Phase 1-3, 5 complete; Phase 4 pending soak)  
 **Last updated:** 2026-05-16  
 **Scope:** haven-dapp (read/playback). Upload path is haven-cli (already on Haven-AOL).
 
@@ -10,9 +10,9 @@ Keep **haven-dapp as an Ethereum-first application** (wagmi/Reown, Arkiv on EVM,
 
 Reference repos in this workspace:
 
-- `haven-aol/` — TypeScript decrypt SDK, derivation spec, mainnet canister docs
-- `haven-cli/` — Upload/encrypt pipeline, Arkiv entity shape, EIP-712 signing (Python)
-
+- `haven-aol-main/` — TypeScript decrypt SDK, derivation spec, mainnet canister docs
+- `haven-cli-main/` — Upload/encrypt pipeline, Arkiv entity shape, EIP-712 signing (Python)
+- web3-shoutbox-platform-main/ - web3 reference frontend
 ---
 
 ## Current vs target architecture

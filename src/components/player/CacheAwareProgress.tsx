@@ -64,12 +64,19 @@ const STAGE_CONFIG: Record<LoadingStage, {
     isIndeterminate: true,
     iconClass: 'text-purple-400',
   },
-  'decrypting': {
+  'decrypting-key': {
+    icon: Key,
+    message: 'Recovering decryption key...',
+    showProgress: true,
+    isIndeterminate: true,
+    iconClass: 'text-purple-400',
+  },
+  'streaming': {
     icon: Unlock,
-    message: 'Decrypting video...',
+    message: 'Decrypting and playing...',
     showProgress: true,
     isIndeterminate: false,
-    iconClass: 'text-purple-400',
+    iconClass: 'text-green-400',
   },
   'caching': {
     icon: HardDrive,
@@ -105,8 +112,9 @@ function getIconBgClass(stage: LoadingStage): string {
     case 'decrypting-cid':
     case 'fetching':
     case 'authenticating':
-    case 'decrypting':
+    case 'decrypting-key':
       return 'bg-purple-500/20'
+    case 'streaming':
     case 'ready':
       return 'bg-green-500/20'
     case 'error':
@@ -186,8 +194,8 @@ export function CacheAwareProgress({
           </div>
         )}
         
-        {/* Privacy note for decrypting stage */}
-        {stage === 'decrypting' && (
+        {/* Privacy note for key decryption stage */}
+        {stage === 'decrypting-key' && (
           <p className="text-xs text-white/30 mt-4">
             Your private key never leaves your browser
           </p>

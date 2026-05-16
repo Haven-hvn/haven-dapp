@@ -2,7 +2,7 @@
  * Per-Video AES Key Cache
  *
  * Caches decrypted AES keys in memory so that if a video needs to be re-decrypted
- * (e.g., cache eviction, corruption), the expensive Lit Protocol BLS-IBE key
+ * (e.g., cache eviction, corruption), the expensive Haven-AOL VetKD key
  * decryption can be skipped entirely.
  *
  * Security considerations:
@@ -69,8 +69,8 @@ export interface KeyCacheStats {
 // Configuration
 // ============================================================================
 
-/** Default TTL: 1 hour (same as Lit session) */
-export const DEFAULT_KEY_TTL = 60 * 60 * 1000
+/** Default TTL: 24 hours */
+export const DEFAULT_KEY_TTL = 24 * 60 * 60 * 1000
 
 /** Extended tab hidden threshold: 30 minutes */
 const TAB_HIDDEN_THRESHOLD = 30 * 60 * 1000

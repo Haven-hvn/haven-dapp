@@ -29,7 +29,7 @@ export default function SettingsPage() {
             <section className="p-6 bg-white/[0.03] rounded-xl border border-white/[0.06] hover:border-white/[0.08] transition-colors">
               <h2 className="text-base font-semibold mb-2 text-white/90">Storage</h2>
               <p className="text-sm text-white/50 leading-relaxed">
-                Your videos are stored on IPFS and encrypted with Lit Protocol.
+                Your videos are stored on IPFS and encrypted end-to-end.
                 They are accessible only through your connected wallet.
               </p>
             </section>

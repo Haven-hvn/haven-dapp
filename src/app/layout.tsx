@@ -3,7 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import ContextProvider from '@/context';
 import { AuthProvider } from "@/components/providers/AuthProvider";
-import { LitProvider } from "@/components/providers/LitProvider";
+import { HavenAolProvider } from "@/components/providers/HavenAolProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { ThemeScript } from "@/components/providers/ThemeScript";
 import { ErrorProvider } from "@/components/providers/ErrorProvider";
@@ -28,13 +28,13 @@ export const metadata: Metadata = {
     default: "Haven - Decentralized Video Library",
     template: "%s | Haven",
   },
-  description: "Access your encrypted video collection from anywhere using your Web3 wallet. Secure, private, and decentralized video storage powered by IPFS, Filecoin, and Lit Protocol.",
+  description: "Access your encrypted video collection from anywhere using your Web3 wallet. Secure, private, and decentralized video storage powered by IPFS, Filecoin, and Haven-AOL.",
   keywords: [
     "web3",
     "video",
     "ipfs",
     "filecoin",
-    "lit protocol",
+    "haven-aol",
     "encrypted",
     "decentralized",
     "video library",
@@ -56,7 +56,7 @@ export const metadata: Metadata = {
     url: "/",
     siteName: "Haven",
     title: "Haven - Decentralized Video Library",
-    description: "Access your encrypted video collection from anywhere using your Web3 wallet. Secure, private, and decentralized video storage powered by IPFS, Filecoin, and Lit Protocol.",
+    description: "Access your encrypted video collection from anywhere using your Web3 wallet. Secure, private, and decentralized video storage powered by IPFS, Filecoin, and Haven-AOL.",
     images: [
       {
         url: "/og-image.png",
@@ -69,7 +69,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Haven - Decentralized Video Library",
-    description: "Access your encrypted video collection from anywhere using your Web3 wallet. Secure, private, and decentralized video storage powered by IPFS, Filecoin, and Lit Protocol.",
+    description: "Access your encrypted video collection from anywhere using your Web3 wallet. Secure, private, and decentralized video storage powered by IPFS, Filecoin, and Haven-AOL.",
     images: ["/og-image.png"],
     creator: "@havenvideo",
   },
@@ -139,11 +139,11 @@ export default function RootLayout({
               <SecurityCleanupProvider>
                 <CacheProvider>
                   <AuthProvider>
-                    <LitProvider>
+                    <HavenAolProvider>
                       <ErrorProvider>
                         {children}
                       </ErrorProvider>
-                    </LitProvider>
+                    </HavenAolProvider>
                   </AuthProvider>
                 </CacheProvider>
               </SecurityCleanupProvider>

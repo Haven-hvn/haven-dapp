@@ -10,7 +10,6 @@ import { useSecurityCleanup } from '@/hooks/useSecurityCleanup'
  *
  * This provider uses the useSecurityCleanup hook to detect changes via
  * wagmi and triggers appropriate cleanup of cached sensitive data:
- * - Lit session cache
  * - AES key cache
  * - OPFS staging files
  * - Video cache (configurable)

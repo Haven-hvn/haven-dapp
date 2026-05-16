@@ -86,7 +86,7 @@ export default function LandingPage() {
               <FeatureCard
                 icon={Lock}
                 title="Encrypted Storage"
-                description="Your videos are encrypted using Lit Protocol. Only your wallet can decrypt them."
+                description="Your videos are encrypted end-to-end. Only your wallet can decrypt them."
               />
               <FeatureCard
                 icon={Video}

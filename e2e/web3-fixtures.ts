@@ -179,8 +179,6 @@ export const test = baseTest.extend<Web3Fixtures>({
         localStorage.removeItem('wagmi.store');
         localStorage.removeItem('wagmi.connected');
         localStorage.removeItem('haven-auth-storage');
-        localStorage.removeItem('lit-auth-signature');
-        localStorage.removeItem('lit-auth-storage');
         
         window.dispatchEvent(new StorageEvent('storage', {
           key: 'wagmi.store',

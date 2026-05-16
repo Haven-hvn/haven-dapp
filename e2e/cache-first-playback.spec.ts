@@ -13,7 +13,7 @@
 
 import { test, expect } from '@playwright/test'
 import { clearAllCaches, TEST_WALLET_ADDRESS, seedCache } from './helpers/cache-helpers'
-import { setupSynapseMock, setupLitMock, VIDEO_FIXTURES, registerMockVideo, clearMockVideos } from './mocks/synapse-mock'
+import { setupSynapseMock, VIDEO_FIXTURES, registerMockVideo, clearMockVideos } from './mocks/synapse-mock'
 
 const CACHE_NAME = 'haven-video-cache-v1'
 
@@ -24,7 +24,6 @@ test.describe('Cache-First Playback', () => {
     await clearAllCaches(page)
     await clearMockVideos(page)
     await setupSynapseMock(page)
-    await setupLitMock(page, { shouldSucceed: true, delayMs: 200 })
   })
 
   test.afterEach(async ({ page }) => {
@@ -85,14 +84,14 @@ test.describe('Cache-First Playback', () => {
       const progress: string[] = []
       
       // Step 1: Initialize
-      progress.push('Initializing Lit Protocol...')
+      progress.push('Initializing decryption...')
       
       // Step 2: Authenticate
       progress.push('Authenticating with your wallet...')
       await new Promise(r => setTimeout(r, 100))
       
       // Step 3: Request key
-      progress.push('Requesting decryption key from Lit nodes...')
+      progress.push('Requesting decryption key from Haven-AOL...')
       await new Promise(r => setTimeout(r, 100))
       
       // Step 4: Success

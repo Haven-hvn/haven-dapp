@@ -458,8 +458,8 @@ export class VideoCacheService {
 
   /**
    * Update the decrypted CID for a video.
-   * Called after successfully decrypting an encrypted CID via Lit Protocol.
-   * The decrypted CID is persisted so subsequent loads skip Lit decryption.
+   * Called after successfully decrypting an encrypted CID via Haven-AOL.
+   * The decrypted CID is persisted so subsequent loads skip re-decryption.
    * @param videoId - The video ID to update
    * @param decryptedCid - The decrypted IPFS CID
    */

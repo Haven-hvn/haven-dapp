@@ -1,9 +1,9 @@
-/**
+ /**
  * React Hook for CID Decryption
- * 
+ *
  * Provides a hook for decrypting encrypted Filecoin CIDs using
- * Lit Protocol with wallet-based authentication.
- * 
+ * Haven-AOL with wallet-based authentication.
+ *
  * @module hooks/useCidDecryption
  */
 
@@ -12,8 +12,15 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useAccount, useWalletClient } from 'wagmi'
 import type { Video } from '@/types'
-import { decryptCid, getDecryptionErrorMessage } from '@/lib/lit-decrypt'
-import { sepolia, mainnet } from '@reown/appkit/networks'
+import {
+  decryptContentKey,
+  getHavenAolErrorMessage,
+  isHybridV1Metadata,
+  type WalletClientLike,
+  type HybridV1EncryptionMetadata,
+  type GateMetadataJson,
+} from '@/lib/haven-aol'
+import { base64ToUint8Array } from '@/lib/crypto'
 
 // ============================================================================
 // Types
@@ -25,8 +32,8 @@ import { sepolia, mainnet } from '@reown/appkit/networks'
 export type CidDecryptionStatus =
   | 'idle'           // Not started
   | 'checking'       // Checking if CID is encrypted
-  | 'authenticating' // Authenticating with wallet
-  | 'decrypting'     // Decrypting CID
+  | 'authenticating' // EIP-712 signing with wallet
+  | 'decrypting'     // Decrypting CID via Haven-AOL
   | 'complete'       // Decryption complete
   | 'error'          // Error occurred
   | 'cancelled'      // User cancelled
@@ -37,25 +44,25 @@ export type CidDecryptionStatus =
 export interface UseCidDecryptionReturn {
   /** Current decryption status */
   status: CidDecryptionStatus
-  
+
   /** Whether decryption is in progress */
   isDecrypting: boolean
-  
+
   /** Human-readable progress message */
   progress: string
-  
+
   /** Error object if decryption failed */
   error: Error | null
-  
+
   /** The decrypted CID (null until complete) */
   cid: string | null
-  
+
   /** Start CID decryption */
   decryptCid: (video: Video) => Promise<string | null>
-  
+
   /** Cancel ongoing decryption */
   cancel: () => void
-  
+
   /** Reset all state */
   reset: () => void
 }
@@ -64,19 +71,11 @@ export interface UseCidDecryptionReturn {
  * Options for the useCidDecryption hook.
  */
 export interface UseCidDecryptionOptions {
-  /**
-   * Callback when decryption completes successfully.
-   */
+  /** Callback when decryption completes successfully. */
   onSuccess?: (cid: string) => void
-  
-  /**
-   * Callback when decryption fails.
-   */
+  /** Callback when decryption fails. */
   onError?: (error: Error) => void
-  
-  /**
-   * Callback for progress updates.
-   */
+  /** Callback for progress updates. */
   onProgress?: (status: CidDecryptionStatus, message: string) => void
 }
 
@@ -85,55 +84,22 @@ export interface UseCidDecryptionOptions {
 // ============================================================================
 
 /**
- * React hook for decrypting encrypted Filecoin CIDs with wallet-based authentication.
- * 
+ * React hook for decrypting encrypted Filecoin CIDs with Haven-AOL.
+ *
  * For encrypted videos, the actual Filecoin CID is often encrypted
  * separately from the content for additional privacy. This hook
- * decrypts that CID using the connected wallet for authentication.
- * 
- * Features:
- * - Automatic detection of unencrypted CIDs (returns directly)
- * - Progress tracking with user-friendly messages
- * - Error handling with user-friendly messages
- * - Cancellation support
- * - Automatic cleanup on unmount
- * - Wallet-based authentication (no private key needed)
- * 
+ * decrypts that CID using Haven-AOL with the connected wallet.
+ *
  * @param options - Hook options
  * @returns Object containing state and control functions
- * 
- * @example
- * ```typescript
- * function VideoFetcher({ video }) {
- *   const { cid, isDecrypting, error, decryptCid } = useCidDecryption()
- * 
- *   useEffect(() => {
- *     decryptCid(video)
- *   }, [video])
- * 
- *   if (isDecrypting) {
- *     return <Loading message="Decrypting CID..." />
- *   }
- * 
- *   if (error) {
- *     return <Error message={error.message} />
- *   }
- * 
- *   if (cid) {
- *     return <VideoStream cid={cid} />
- *   }
- * 
- *   return null
- * }
- * ```
  */
 export function useCidDecryption(
   options: UseCidDecryptionOptions = {}
 ): UseCidDecryptionReturn {
   const { onSuccess, onError, onProgress } = options
 
-  // Get wallet client from wagmi for authentication (Lit SDK v8 requires WalletClient)
-  const { address, isConnected, chainId } = useAccount()
+  // Get wallet client from wagmi
+  const { address, isConnected } = useAccount()
   const { data: walletClient } = useWalletClient()
 
   // State
@@ -146,23 +112,19 @@ export function useCidDecryption(
   const abortControllerRef = useRef<AbortController | null>(null)
   const isMountedRef = useRef(true)
 
-  // Refs for wallet values — keeps decryptCidCallback stable across re-renders
-  // (useWalletClient() can return a new object reference on every render,
-  // which would otherwise cause the callback → loadVideo → useEffect chain to loop)
+  // Refs for wallet values
   const addressRef = useRef(address)
   const walletClientRef = useRef(walletClient)
-  const chainIdRef = useRef(chainId)
   const isConnectedRef = useRef(isConnected)
 
   // Keep refs in sync
   useEffect(() => {
     addressRef.current = address
     walletClientRef.current = walletClient
-    chainIdRef.current = chainId
     isConnectedRef.current = isConnected
-  }, [address, walletClient, chainId, isConnected])
+  }, [address, walletClient, isConnected])
 
-  // Track mount state (must set true on mount to handle React Strict Mode remounts)
+  // Track mount state
   useEffect(() => {
     isMountedRef.current = true
     return () => {
@@ -171,9 +133,6 @@ export function useCidDecryption(
     }
   }, [])
 
-  /**
-   * Reset all state to initial values.
-   */
   const reset = useCallback(() => {
     abortControllerRef.current?.abort()
     abortControllerRef.current = null
@@ -186,9 +145,6 @@ export function useCidDecryption(
     }
   }, [])
 
-  /**
-   * Cancel ongoing decryption.
-   */
   const cancel = useCallback(() => {
     abortControllerRef.current?.abort()
 
@@ -198,9 +154,6 @@ export function useCidDecryption(
     }
   }, [])
 
-  /**
-   * Update progress state with callback.
-   */
   const updateProgress = useCallback((
     newStatus: CidDecryptionStatus,
     message: string
@@ -214,38 +167,23 @@ export function useCidDecryption(
 
   /**
    * Decrypt the CID for a video using the connected wallet.
-   * 
-   * If the video's CID is not encrypted, returns the filecoinCid directly.
-   * 
-   * @param video - The video whose CID to decrypt
-   * @returns Promise resolving to the CID string or null if failed
    */
   const decryptCidCallback = useCallback(async (
     video: Video
   ): Promise<string | null> => {
     console.log('[useCidDecryption] decryptCidCallback called for video:', video.id)
-    
+
     reset()
 
     if (!isMountedRef.current) {
-      console.warn('[useCidDecryption] Component not mounted, returning null')
       return null
     }
 
-    // Read wallet values from refs (stable references, no re-render loop)
     const currentAddress = addressRef.current
     const currentWalletClient = walletClientRef.current
-    const currentChainId = chainIdRef.current
-    const currentIsConnected = isConnectedRef.current
 
     // Check if wallet is connected
     if (!currentAddress || !currentWalletClient) {
-      console.error('[useCidDecryption] Wallet not ready:', {
-        address: currentAddress,
-        hasWalletClient: Boolean(currentWalletClient),
-        isConnected: currentIsConnected,
-        videoId: video.id,
-      })
       const walletError = new Error('Please connect your wallet to decrypt this CID.')
       if (isMountedRef.current) {
         setError(walletError)
@@ -256,15 +194,7 @@ export function useCidDecryption(
       return null
     }
 
-    console.log('[useCidDecryption] Wallet ready, proceeding with decryption:', {
-      address: currentAddress,
-      chainId: currentChainId,
-      hasWalletClient: Boolean(currentWalletClient),
-      hasEncryptedCid: Boolean(video.encryptedCid),
-      hasCidEncryptionMetadata: Boolean(video.cidEncryptionMetadata),
-    })
-
-    // Create abort controller for this operation
+    // Create abort controller
     abortControllerRef.current = new AbortController()
     const signal = abortControllerRef.current.signal
 
@@ -275,52 +205,79 @@ export function useCidDecryption(
       // If no encrypted CID metadata, return the plain CID directly
       if (!video.encryptedCid || !video.cidEncryptionMetadata) {
         const plainCid = video.filecoinCid || null
-        console.log('[useCidDecryption] No encrypted CID metadata, using plain CID:', plainCid)
-        
+
         if (plainCid) {
           updateProgress('complete', 'Using unencrypted CID')
           setCid(plainCid)
           onSuccess?.(plainCid)
         }
-        
+
         return plainCid
       }
 
       if (signal.aborted) {
-        console.warn('[useCidDecryption] Signal aborted before Lit call')
         throw new Error('Decryption cancelled')
       }
 
-      // Decrypt the CID using wallet-based authentication
-      updateProgress('authenticating', 'Authenticating with Lit Protocol...')
+      // Decrypt the CID using Haven-AOL
+      updateProgress('authenticating', 'Sign with your wallet to decrypt CID...')
 
-      // Get chain from chainId
-      const chain = currentChainId === sepolia.id ? sepolia : mainnet
-
-      console.log('[useCidDecryption] Calling decryptCid with:', {
-        hasCiphertext: Boolean(video.cidEncryptionMetadata.ciphertext),
-        ciphertextLength: video.cidEncryptionMetadata.ciphertext?.length,
-        hasDataToEncryptHash: Boolean(video.cidEncryptionMetadata.dataToEncryptHash),
-        accessControlConditionsCount: video.cidEncryptionMetadata.accessControlConditions?.length,
-        chain: video.cidEncryptionMetadata.chain,
-        walletChain: chain.name,
-      })
-
-      const decryptedCid = await decryptCid({
-        metadata: video.cidEncryptionMetadata,
-        walletClient: currentWalletClient,
-        chain: chain,
+      // Get the AES key for CID decryption
+      // Type narrowing: cidEncryptionMetadata may be legacy CidEncryptionMetadata or EncryptionMetadata
+      const cidMeta = video.cidEncryptionMetadata as HybridV1EncryptionMetadata | GateMetadataJson
+      const { aesKey } = await decryptContentKey({
+        encryptionMetadata: cidMeta,
+        walletClient: currentWalletClient as unknown as WalletClientLike,
         onProgress: (msg) => {
-          console.log('[useCidDecryption] Lit progress:', msg)
           updateProgress('decrypting', msg)
         },
         signal,
       })
 
       if (signal.aborted) {
-        console.warn('[useCidDecryption] Signal aborted after Lit call')
         throw new Error('Decryption cancelled')
       }
+
+      // Decrypt the encrypted CID
+      // The encryptedCid from Arkiv is the ciphertext (base64 encoded or raw)
+      const encryptedCidBytes = base64ToUint8Array(video.encryptedCid)
+
+      // Get IV from CID metadata
+      let iv: Uint8Array
+      if (isHybridV1Metadata(video.cidEncryptionMetadata)) {
+        iv = base64ToUint8Array(video.cidEncryptionMetadata.iv)
+      } else {
+        // First 12 bytes are IV
+        iv = encryptedCidBytes.slice(0, 12)
+      }
+
+      const ciphertext = isHybridV1Metadata(video.cidEncryptionMetadata)
+        ? encryptedCidBytes
+        : encryptedCidBytes.slice(12)
+
+      // AES-GCM decrypt (copy to fresh ArrayBuffer to satisfy TypeScript BufferSource requirement)
+      const toBuffer = (u: Uint8Array): ArrayBuffer => {
+        const buf = new ArrayBuffer(u.length)
+        new Uint8Array(buf).set(u)
+        return buf
+      }
+
+      const key = await crypto.subtle.importKey(
+        'raw',
+        toBuffer(aesKey),
+        { name: 'AES-GCM' },
+        false,
+        ['decrypt'],
+      )
+
+      const plaintext = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: toBuffer(iv) },
+        key,
+        toBuffer(ciphertext),
+      )
+
+      const decoder = new TextDecoder()
+      const decryptedCid = decoder.decode(plaintext).trim()
 
       if (!decryptedCid) {
         throw new Error('CID decryption returned empty result')
@@ -338,11 +295,7 @@ export function useCidDecryption(
 
     } catch (err) {
       // Handle cancellation
-      if (err instanceof Error && (
-        err.message === 'Decryption cancelled' || 
-        err.message.includes('cancelled')
-      )) {
-        console.warn('[useCidDecryption] Decryption was cancelled:', err.message)
+      if (err instanceof Error && err.message.includes('cancelled')) {
         if (isMountedRef.current) {
           setStatus('cancelled')
           setProgress('Decryption cancelled')
@@ -350,16 +303,8 @@ export function useCidDecryption(
         return null
       }
 
-      // Get user-friendly error message
-      const errorMessage = getDecryptionErrorMessage(err)
-
+      const errorMessage = getHavenAolErrorMessage(err)
       console.error('[useCidDecryption] CID decryption failed:', err)
-      console.error('[useCidDecryption] Error details:', {
-        message: err instanceof Error ? err.message : String(err),
-        name: err instanceof Error ? err.name : 'unknown',
-        code: (err as { code?: string })?.code,
-        errorMessage,
-      })
 
       if (isMountedRef.current) {
         const errorObj = new Error(errorMessage)
@@ -386,28 +331,6 @@ export function useCidDecryption(
 
 /**
  * React hook for CID decryption with automatic initialization.
- * 
- * Similar to useCidDecryption but automatically starts decryption
- * when the video changes.
- * 
- * @param video - The video to decrypt CID for
- * @param options - Hook options
- * @returns Object containing state (without decryptCid function)
- * 
- * @example
- * ```typescript
- * function VideoFetcher({ video }) {
- *   const { cid, isDecrypting, error } = useCidDecryptionAuto(
- *     video,
- *     { onSuccess: (cid) => console.log('CID:', cid) }
- *   )
- * 
- *   if (isDecrypting) return <Loading />
- *   if (error) return <Error message={error.message} />
- *   if (cid) return <VideoStream cid={cid} />
- *   return null
- * }
- * ```
  */
 export function useCidDecryptionAuto(
   video: Video | null | undefined,

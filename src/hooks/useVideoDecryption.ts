@@ -1,10 +1,10 @@
 /**
  * React Hook for Video Decryption
- * 
+ *
  * Provides a comprehensive hook for decrypting encrypted videos using
- * hybrid decryption (AES-256-GCM + Lit BLS-IBE) with wallet-based authentication.
+ * Haven-AOL (EIP-712 + VetKD + AES-256-GCM) with wallet-based authentication.
  * Includes progress tracking, error handling, memory management, and cancellation support.
- * 
+ *
  * @module hooks/useVideoDecryption
  */
 
@@ -13,10 +13,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useAccount, useWalletClient } from 'wagmi'
 import type { Video } from '@/types'
-import { decryptAesKey, getDecryptionErrorMessage } from '@/lib/lit-decrypt'
-import { aesDecryptToCache, base64ToUint8Array, checkLargeFileSupport } from '@/lib/crypto'
+import { decryptContentKey, getHavenAolErrorMessage, isHybridV1Metadata } from '@/lib/haven-aol'
+import { checkLargeFileSupport } from '@/lib/crypto'
+import { decryptChunkedToCache, type ChunkedDecryptProgress } from '@/lib/chunked-decrypt'
 import { createBufferLifecycle } from '@/lib/buffer-lifecycle'
-import { sepolia, mainnet } from '@reown/appkit/networks'
 
 // ============================================================================
 // Types
@@ -29,9 +29,9 @@ export type DecryptionStatus =
   | 'idle'           // Not started
   | 'checking'       // Checking video metadata
   | 'fetching'       // Downloading encrypted data
-  | 'authenticating' // Getting auth from Lit (requires wallet signature)
-  | 'decrypting-key' // Decrypting AES key
-  | 'decrypting-file' // Decrypting video file
+  | 'authenticating' // EIP-712 signing with wallet
+  | 'decrypting-key' // Requesting key from ICP canister + VetKD unwrap
+  | 'decrypting-file' // Decrypting video file with AES
   | 'complete'       // Decryption complete
   | 'error'          // Error occurred
   | 'cancelled'      // User cancelled
@@ -42,28 +42,28 @@ export type DecryptionStatus =
 export interface UseVideoDecryptionReturn {
   /** Current decryption status */
   status: DecryptionStatus
-  
+
   /** Human-readable progress message */
   progress: string
-  
+
   /** Error object if decryption failed */
   error: Error | null
-  
+
   /** Blob URL for the decrypted video (null until complete) */
   decryptedUrl: string | null
-  
+
   /** Percentage complete (0-100, approximate) */
   percentComplete: number
-  
+
   /** Whether a large file warning should be shown */
   showLargeFileWarning: boolean
-  
+
   /** Start decryption of a video */
   decrypt: (video: Video, encryptedData: Uint8Array) => Promise<string | null>
-  
+
   /** Cancel ongoing decryption */
   cancel: () => void
-  
+
   /** Reset all state */
   reset: () => void
 }
@@ -77,24 +77,24 @@ export interface UseVideoDecryptionOptions {
    * Default: 500MB
    */
   largeFileThreshold?: number
-  
+
   /**
    * Maximum file size to attempt decrypting (in bytes).
    * Decryption will fail if exceeded.
    * Default: 2GB
    */
   maxFileSize?: number
-  
+
   /**
    * Callback when decryption completes successfully.
    */
   onSuccess?: (url: string) => void
-  
+
   /**
    * Callback when decryption fails.
    */
   onError?: (error: Error) => void
-  
+
   /**
    * Callback for progress updates.
    */
@@ -127,13 +127,14 @@ const PROGRESS_WEIGHTS: Record<DecryptionStatus, number> = {
 
 /**
  * React hook for decrypting encrypted videos with wallet-based authentication.
- * 
- * This hook manages the full hybrid decryption process:
- * 1. Authenticate with Lit Protocol using the connected wallet (SIWE signature)
- * 2. Decrypt the AES key using Lit Protocol (BLS-IBE)
- * 3. Decrypt the video content using AES-256-GCM
- * 4. Create a blob URL for playback
- * 
+ *
+ * This hook manages the full Haven-AOL decryption process:
+ * 1. Sign EIP-712 gate request with connected wallet
+ * 2. Request decryption key from ICP canister (VetKD)
+ * 3. IBE-decrypt the AES key
+ * 4. Decrypt the video content using AES-256-GCM
+ * 5. Write to Cache API for playback
+ *
  * Features:
  * - Progress tracking with user-friendly messages
  * - Error handling with specific error types
@@ -141,44 +142,10 @@ const PROGRESS_WEIGHTS: Record<DecryptionStatus, number> = {
  * - Large file warnings (>500MB by default)
  * - Cancellation support via AbortController
  * - Automatic cleanup on unmount
- * - Wallet-based authentication (no private key needed)
- * 
+ * - AES key caching (skip ICP call on replay)
+ *
  * @param options - Hook options
  * @returns Object containing state and control functions
- * 
- * @example
- * ```typescript
- * function VideoPlayer({ video, encryptedData }) {
- *   const { 
- *     status, 
- *     progress, 
- *     error, 
- *     decryptedUrl, 
- *     decrypt,
- *     cancel 
- *   } = useVideoDecryption()
- * 
- *   useEffect(() => {
- *     if (video.isEncrypted && encryptedData) {
- *       decrypt(video, encryptedData)
- *     }
- *   }, [video, encryptedData])
- * 
- *   if (status === 'decrypting-key' || status === 'decrypting-file') {
- *     return <Loading message={progress} />
- *   }
- * 
- *   if (error) {
- *     return <Error message={error.message} />
- *   }
- * 
- *   if (decryptedUrl) {
- *     return <video src={decryptedUrl} controls />
- *   }
- * 
- *   return <div>Ready to decrypt</div>
- * }
- * ```
  */
 export function useVideoDecryption(
   options: UseVideoDecryptionOptions = {}
@@ -191,8 +158,8 @@ export function useVideoDecryption(
     onProgress,
   } = options
 
-  // Get wallet client from wagmi for authentication (Lit SDK v8 requires WalletClient)
-  const { address, isConnected, chainId } = useAccount()
+  // Get wallet client from wagmi for authentication
+  const { address, chainId } = useAccount()
   const { data: walletClient } = useWalletClient()
 
   // State
@@ -209,8 +176,6 @@ export function useVideoDecryption(
   const isMountedRef = useRef(true)
 
   // Refs for wallet values — keeps decrypt callback stable across re-renders
-  // (useWalletClient() can return a new object reference on every render,
-  // which would otherwise cause the callback → loadVideo → useEffect chain to loop)
   const addressRef = useRef(address)
   const walletClientRef = useRef(walletClient)
   const chainIdRef = useRef(chainId)
@@ -222,7 +187,7 @@ export function useVideoDecryption(
     chainIdRef.current = chainId
   }, [address, walletClient, chainId])
 
-  // Track mount state (must set true on mount to handle React Strict Mode remounts)
+  // Track mount state
   useEffect(() => {
     isMountedRef.current = true
     return () => {
@@ -239,11 +204,9 @@ export function useVideoDecryption(
    * Reset all state to initial values.
    */
   const reset = useCallback(() => {
-    // Cancel any ongoing operation
     abortControllerRef.current?.abort()
     abortControllerRef.current = null
 
-    // Revoke existing blob URL
     if (blobUrlRef.current) {
       URL.revokeObjectURL(blobUrlRef.current)
       blobUrlRef.current = null
@@ -264,7 +227,7 @@ export function useVideoDecryption(
    */
   const cancel = useCallback(() => {
     abortControllerRef.current?.abort()
-    
+
     if (isMountedRef.current) {
       setStatus('cancelled')
       setProgress('Decryption cancelled')
@@ -275,47 +238,36 @@ export function useVideoDecryption(
    * Update progress state with callback.
    */
   const updateProgress = useCallback((
-    newStatus: DecryptionStatus, 
+    newStatus: DecryptionStatus,
     message: string
   ) => {
     const percent = PROGRESS_WEIGHTS[newStatus]
-    
+
     if (isMountedRef.current) {
       setStatus(newStatus)
       setProgress(message)
       setPercentComplete(percent)
     }
-    
+
     onProgress?.(newStatus, message, percent)
   }, [onProgress])
 
   /**
    * Decrypt a video using the connected wallet for authentication.
-   * 
-   * Uses BufferLifecycleManager for aggressive memory cleanup to ensure
-   * intermediate buffers are released as soon as they're no longer needed,
-   * rather than waiting for JavaScript's garbage collector.
-   * 
-   * @param video - The video to decrypt
-   * @param encryptedData - The encrypted video data
-   * @returns Promise resolving to the blob URL or null if failed
    */
   const decrypt = useCallback(async (
     video: Video,
     encryptedData: Uint8Array
   ): Promise<string | null> => {
-    // Reset state first
     reset()
 
-    // Check if component is still mounted
     if (!isMountedRef.current) {
       return null
     }
 
-    // Read wallet values from refs (stable references, no re-render loop)
+    // Read wallet values from refs
     const currentAddress = addressRef.current
     const currentWalletClient = walletClientRef.current
-    const currentChainId = chainIdRef.current
 
     // Check if wallet is connected
     if (!currentAddress || !currentWalletClient) {
@@ -329,11 +281,11 @@ export function useVideoDecryption(
       return null
     }
 
-    // Create new abort controller for this operation
+    // Create new abort controller
     abortControllerRef.current = new AbortController()
     const signal = abortControllerRef.current.signal
 
-    // Create buffer lifecycle manager for this decryption operation
+    // Create buffer lifecycle manager
     const lifecycle = createBufferLifecycle()
 
     try {
@@ -344,7 +296,7 @@ export function useVideoDecryption(
         throw new Error('Video is not encrypted')
       }
 
-      if (!video.litEncryptionMetadata) {
+      if (!video.encryptionMetadata) {
         throw new Error('Missing encryption metadata')
       }
 
@@ -362,12 +314,8 @@ export function useVideoDecryption(
         if (isMountedRef.current) {
           setShowLargeFileWarning(true)
         }
-        
-        // Check browser support for large files (computed inside callback to avoid
-        // creating a new object on every render which would destabilize this callback)
-        const largeFileSupport = checkLargeFileSupport()
 
-        // Log warnings for very large files
+        const largeFileSupport = checkLargeFileSupport()
         if (fileSize > largeFileSupport.maxRecommended) {
           console.warn(
             `[useVideoDecryption] Large file detected (${(fileSize / 1024 / 1024).toFixed(0)}MB). ` +
@@ -384,18 +332,15 @@ export function useVideoDecryption(
       // Track encrypted data for lifecycle management
       lifecycle.track('encrypted', encryptedData)
 
-      // Step 2: Decrypt AES key using Lit with wallet authentication
-      updateProgress('authenticating', 'Authenticating with Lit Protocol...')
+      // Step 2: Decrypt AES key using Haven-AOL
+      updateProgress('authenticating', 'Sign with your wallet to decrypt...')
 
-      // Get chain from chainId
-      const chain = currentChainId === sepolia.id ? sepolia : mainnet
-
-      const { aesKey } = await decryptAesKey({
-        metadata: video.litEncryptionMetadata,
-        walletClient: currentWalletClient,
-        chain: chain,
+      const { aesKey } = await decryptContentKey({
+        encryptionMetadata: video.encryptionMetadata,
+        encryptedCid: video.encryptedCid,
+        walletClient: currentWalletClient as unknown as import('@/lib/haven-aol').WalletClientLike,
         onProgress: (msg) => {
-          if (msg.includes('key') || msg.includes('Key')) {
+          if (msg.includes('key') || msg.includes('Key') || msg.includes('network')) {
             updateProgress('decrypting-key', msg)
           }
         },
@@ -412,20 +357,31 @@ export function useVideoDecryption(
       // Step 3: Decrypt file using AES and write directly to Cache API
       updateProgress('decrypting-file', 'Decrypting and caching video...')
 
-      const iv = base64ToUint8Array(video.litEncryptionMetadata.iv)
-      const mimeType = video.litEncryptionMetadata.originalMimeType || 'video/mp4'
+      const mimeType = isHybridV1Metadata(video.encryptionMetadata)
+        ? (video.encryptionMetadata.originalMimeType || 'video/mp4')
+        : 'video/mp4'
 
-      // Decrypt and write directly to Cache API (no blob URL)
-      const url = await aesDecryptToCache(
+      // Chunked decryption — handles per-chunk IV derivation and sequential
+      // AES-GCM decryption of the haven-cli streaming format:
+      // [12B base_iv][4B idx LE][4B len LE][encrypted_chunk]...
+      const onChunkedProgress: ChunkedDecryptProgress = (chunkIdx, totalEst) => {
+        if (isMountedRef.current && totalEst > 0) {
+          // Map chunk progress to 70-95% range (decrypting-file stage)
+          const chunkPercent = Math.min(95, 70 + Math.round((chunkIdx / totalEst) * 25))
+          setPercentComplete(chunkPercent)
+          setProgress(`Decrypting chunk ${chunkIdx + 1}/${totalEst}...`)
+        }
+      }
+
+      const url = await decryptChunkedToCache(
         encryptedData,
         aesKey,
-        iv,
         video.id,
-        mimeType
+        mimeType,
+        { signal, onProgress: onChunkedProgress }
       )
 
-      // Encrypted data and AES key are no longer needed after decryption
-      // Release them eagerly for immediate memory reclamation
+      // Release buffers eagerly
       lifecycle.release('encrypted')
       lifecycle.release('aesKey')
 
@@ -433,7 +389,7 @@ export function useVideoDecryption(
         throw new Error('Decryption cancelled')
       }
 
-      // Success: Update state
+      // Success
       if (isMountedRef.current) {
         setDecryptedUrl(url)
         setStatus('complete')
@@ -456,9 +412,8 @@ export function useVideoDecryption(
       }
 
       // Get user-friendly error message
-      const errorMessage = getDecryptionErrorMessage(err)
+      const errorMessage = getHavenAolErrorMessage(err)
 
-      // Log error for debugging
       console.error('[useVideoDecryption] Decryption failed:', err)
 
       if (isMountedRef.current) {
@@ -471,8 +426,6 @@ export function useVideoDecryption(
       onError?.(err instanceof Error ? err : new Error(errorMessage))
       return null
     } finally {
-      // Release all remaining tracked buffers
-      // This ensures no memory leaks on success, error, or cancellation
       lifecycle.releaseAll()
     }
   }, [
@@ -499,31 +452,6 @@ export function useVideoDecryption(
 
 /**
  * React hook for video decryption with automatic initialization.
- * 
- * Similar to useVideoDecryption but automatically starts decryption
- * when the dependencies change.
- * 
- * @param video - The video to decrypt
- * @param encryptedData - The encrypted video data
- * @param options - Hook options
- * @returns Object containing state (without decrypt function)
- * 
- * @example
- * ```typescript
- * function VideoPlayer({ video, encryptedData }) {
- *   const { decryptedUrl, status, error, progress } = useVideoDecryptionAuto(
- *     video,
- *     encryptedData,
- *     { onSuccess: (url) => console.log('Ready:', url) }
- *   )
- * 
- *   if (status === 'decrypting-file') {
- *     return <Loading message={progress} />
- *   }
- * 
- *   return decryptedUrl ? <video src={decryptedUrl} controls /> : null
- * }
- * ```
  */
 export function useVideoDecryptionAuto(
   video: Video | null | undefined,

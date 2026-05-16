@@ -13,16 +13,14 @@
  * - Connection-aware (disabled on metered/slow connections)
  * - Storage quota awareness
  * - Cancellable prefetches
- * - Requires cached Lit session (no wallet popups)
+ * - Only prefetches videos whose AES key is already cached (no wallet popups)
  *
  * @module lib/video-prefetch
  * @see ./video-cache - Core cache operations
- * @see ./lit-session-cache - Session availability check
  * @see ./aes-key-cache - Key availability check
  */
 
 import { hasVideo, putVideo, getCacheStorageEstimate } from './video-cache'
-import { getCachedAuthContext, hasCachedSession } from './lit-session-cache'
 import { hasCachedKey } from './aes-key-cache'
 import { fetchFromIpfs } from '@/services/ipfsService'
 import type { Video } from '@/types'
@@ -555,18 +553,10 @@ async function processQueue(): Promise<void> {
 
       if (!next) break
 
-      // Check if we have a Lit session (don't trigger wallet popup)
-      if (currentWalletAddress) {
-        const hasSession = hasCachedSession(currentWalletAddress)
-        if (!hasSession) {
-          // Skip this item but keep it in queue for later
-          // Mark it as low priority so other items can be processed
-          next.priority += 1000000 // Move to end of queue
-          continue
-        }
-      } else {
+      // Haven-AOL uses wallet signing at decrypt time, not persistent sessions.
+      // Prefetch can only proceed if the AES key is already cached.
+      if (!currentWalletAddress) {
         // No wallet connected - skip all encrypted videos
-        // They'll be processed when wallet connects
         break
       }
 

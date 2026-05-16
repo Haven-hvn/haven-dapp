@@ -35,7 +35,7 @@ import { hasVideo, putVideo, getVideo, getVideoUrl, VIDEO_URL_PREFIX } from './v
 import { isOpfsAvailable, writeToStaging, readFromStaging, deleteStaging } from './opfs'
 import { getMemoryInfo } from './memory-detect'
 import { aesDecrypt, aesEncrypt, generateAESKey, generateIV } from './crypto'
-import { getCachedAuthContext } from './lit-session-cache'
+import { getCachedKeyCount } from './aes-key-cache'
 
 // ============================================================================
 // Types
@@ -113,11 +113,11 @@ export interface DecryptionPipelineResults {
   /** Synapse fetch time (ms) */
   synapseFetchMs: number
 
-  /** Lit auth time - cold (first auth in session) */
-  litAuthColdMs: number
+  /** Key auth time - cold (first auth in session, EIP-712 signing) */
+  keyAuthColdMs: number
 
-  /** Lit auth time - warm (cached session reuse) */
-  litAuthWarmMs: number
+  /** Key auth time - warm (cached AES key reuse) */
+  keyAuthWarmMs: number
 
   /** AES decrypt time (ms) */
   aesDecryptMs: number
@@ -601,16 +601,15 @@ export async function benchmarkDecryptionPipeline(
 
   const synapseFetchMs = performance.now() - synapseFetchStart
 
-  // 2. Simulate Lit auth timing
-  // Check if we have a cached session (warm) or need to authenticate (cold)
-  const walletAddress = '0x0000000000000000000000000000000000000000'
-  const hasCachedSession = getCachedAuthContext(walletAddress) !== null
+  // 2. Simulate Haven-AOL auth timing
+  // Check if we have cached keys (warm) or need wallet signing (cold)
+  const hasCachedKeys = getCachedKeyCount() > 0
 
-  // Cold auth (first time) - typically 500-2000ms due to wallet signing
-  const litAuthColdMs = quickMode ? 100 : 500
+  // Cold auth (first time) - typically 200-500ms due to EIP-712 wallet signing
+  const keyAuthColdMs = quickMode ? 50 : 200
 
-  // Warm auth (cached session) - typically 0-50ms
-  const litAuthWarmMs = hasCachedSession ? 5 : 0
+  // Warm auth (cached AES key reuse) - typically 0-5ms
+  const keyAuthWarmMs = hasCachedKeys ? 2 : 0
 
   // 3. Measure AES decrypt time
   const { durationMs: aesDecryptMs } = await measureTime(() => aesDecrypt(ciphertext, key, iv))
@@ -622,7 +621,7 @@ export async function benchmarkDecryptionPipeline(
   )
 
   // Calculate total
-  const totalPipelineMs = synapseFetchMs + (hasCachedSession ? litAuthWarmMs : litAuthColdMs) + aesDecryptMs + cacheWriteMs
+  const totalPipelineMs = synapseFetchMs + (hasCachedKeys ? keyAuthWarmMs : keyAuthColdMs) + aesDecryptMs + cacheWriteMs
 
   // Clean up
   await deleteStaging(cacheId)
@@ -632,12 +631,12 @@ export async function benchmarkDecryptionPipeline(
 
   return {
     synapseFetchMs,
-    litAuthColdMs,
-    litAuthWarmMs,
+    keyAuthColdMs,
+    keyAuthWarmMs,
     aesDecryptMs,
     cacheWriteMs,
     totalPipelineMs,
-    authFromCache: hasCachedSession,
+    authFromCache: hasCachedKeys,
   }
 }
 
@@ -838,7 +837,7 @@ export async function runBenchmarks(options: BenchmarkOptions = {}): Promise<Ben
       durationMs: decryptionPipeline.totalPipelineMs,
       metrics: {
         synapseFetchMs: decryptionPipeline.synapseFetchMs,
-        litAuthColdMs: decryptionPipeline.litAuthColdMs,
+        keyAuthColdMs: decryptionPipeline.keyAuthColdMs,
         aesDecryptMs: decryptionPipeline.aesDecryptMs,
         cacheWriteMs: decryptionPipeline.cacheWriteMs,
       },
@@ -1003,8 +1002,8 @@ export function logBenchmarkResults(results: BenchmarkResults): void {
   if (results.decryptionPipeline) {
     console.group('🔓 Decryption Pipeline')
     console.log(`Synapse Fetch: ${results.decryptionPipeline.synapseFetchMs.toFixed(2)}ms`)
-    console.log(`Lit Auth (cold): ${results.decryptionPipeline.litAuthColdMs.toFixed(2)}ms`)
-    console.log(`Lit Auth (warm): ${results.decryptionPipeline.litAuthWarmMs.toFixed(2)}ms`)
+    console.log(`Key Auth (cold): ${results.decryptionPipeline.keyAuthColdMs.toFixed(2)}ms`)
+    console.log(`Key Auth (warm): ${results.decryptionPipeline.keyAuthWarmMs.toFixed(2)}ms`)
     console.log(`AES Decrypt: ${results.decryptionPipeline.aesDecryptMs.toFixed(2)}ms`)
     console.log(`Cache Write: ${results.decryptionPipeline.cacheWriteMs.toFixed(2)}ms`)
     console.log(`Total: ${results.decryptionPipeline.totalPipelineMs.toFixed(2)}ms`)

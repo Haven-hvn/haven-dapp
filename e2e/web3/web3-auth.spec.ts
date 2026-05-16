@@ -124,35 +124,35 @@ test.describe('Web3 Authentication Flow', () => {
     });
   });
 
-  test.describe('Lit Protocol Integration', () => {
+  test.describe('Auth Integration', () => {
     test('should store signature in localStorage', async ({ page, gotoWithWeb3, mockWalletConnected, mockSignature }) => {
       await gotoWithWeb3('/library');
       await mockWalletConnected(TEST_WALLET.address, 1);
       
-      // Mock a signature (normally would be requested by Lit Protocol)
+      // Mock a signature (normally would be requested by Haven-AOL)
       const testSig = '0x' + 'b'.repeat(130);
       await mockSignature(testSig);
       
       // Verify signature was stored
       const storedSig = await page.evaluate(() => {
-        return localStorage.getItem('lit-auth-signature');
+        return localStorage.getItem('lit-auth-signature');  // legacy key
       });
       
       expect(storedSig).toContain(testSig);
     });
 
-    test('should have Lit auth storage available', async ({ page, gotoWithWeb3, mockWalletConnected }) => {
+    test('should have auth storage available', async ({ page, gotoWithWeb3, mockWalletConnected }) => {
       await gotoWithWeb3('/library');
       await mockWalletConnected(TEST_WALLET.address, 1);
       
-      // Check for Lit Protocol storage keys
-      const litStorage = await page.evaluate(() => {
+      // Check for auth-related storage keys
+      const authStorage = await page.evaluate(() => {
         const keys = Object.keys(localStorage);
-        return keys.filter(k => k.toLowerCase().includes('lit'));
+        return keys.filter(k => k.toLowerCase().includes('haven') || k.toLowerCase().includes('auth'));
       });
-      
-      // Should have some Lit-related storage
-      expect(litStorage.length).toBeGreaterThanOrEqual(0);
+
+      // Should have some auth-related storage
+      expect(authStorage.length).toBeGreaterThanOrEqual(0);
     });
   });
 

@@ -19,7 +19,7 @@ const queryClient = new QueryClient()
 // Set up metadata
 const metadata = {
   name: 'Haven - Decentralized Video Library',
-  description: 'Access your encrypted video collection from anywhere using your Web3 wallet. Secure, private, and decentralized video storage powered by IPFS, Filecoin, and Lit Protocol.',
+  description: 'Access your encrypted video collection from anywhere using your Web3 wallet. Secure, private, and decentralized video storage powered by IPFS, Filecoin, and Haven-AOL.',
   url: process.env.NEXT_PUBLIC_APP_URL || 'https://haven.video',
   icons: [process.env.NEXT_PUBLIC_APP_URL ? `${process.env.NEXT_PUBLIC_APP_URL}/icon.png` : 'https://haven.video/icon.png']
 }

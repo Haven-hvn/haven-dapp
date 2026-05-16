@@ -10,7 +10,7 @@
  * @module types/arkiv
  */
 
-import type { CidEncryptionMetadata, LitEncryptionMetadata } from './lit'
+import type { CidEncryptionMetadata, LitEncryptionMetadata } from './encryption'
 
 // ============================================================================
 // Raw Arkiv Entity Types
@@ -412,7 +412,7 @@ export class ArkivError extends Error {
 // ============================================================================
 
 /**
- * Parse Lit encryption metadata from JSON string.
+ * Parse legacy encryption metadata from JSON string.
  * 
  * @param metadataJson - JSON string from Arkiv payload
  * @returns Parsed LitEncryptionMetadata or null if invalid
