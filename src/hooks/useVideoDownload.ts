@@ -19,8 +19,9 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { useWalletClient } from 'wagmi'
 import { getVideo, hasVideo, putVideo } from '@/lib/video-cache'
 import { fetchFromIpfs } from '@/services/ipfsService'
-import { decryptContentKey, isHybridV1Metadata, getHavenAolErrorMessage } from '@/lib/haven-aol'
-import type { WalletClientLike } from '@/lib/haven-aol'
+import { decryptContentKey, decryptCidWithHavenAol, isHybridV1Metadata, getHavenAolErrorMessage } from '@/lib/haven-aol'
+import type { WalletClientLike, HybridV1EncryptionMetadata, GateMetadataJson } from '@/lib/haven-aol'
+import { base64ToUint8Array } from '@/lib/crypto'
 import { decryptChunkedFile, type ChunkedDecryptProgress } from '@/lib/chunked-decrypt'
 import type { Video } from '@/types'
 
@@ -257,13 +258,46 @@ export function useVideoDownload(): UseVideoDownloadReturn {
         throw new Error('Missing encryption metadata')
       }
 
-      // Step 1: Resolve CID
-      // For simplicity in download flow, use filecoinCid or decryptedCid
-      // (CID decryption via the player is the more common path)
-      const cid = video.decryptedCid || video.filecoinCid
+      // Step 1: Resolve CID (decrypt if needed)
+      let cid: string | undefined
+
+      if (video.decryptedCid) {
+        // Already decrypted (cached from a previous session)
+        cid = video.decryptedCid
+      } else if (video.cidEncryptionMetadata && video.encryptedCid) {
+        // Encrypted CID — must decrypt via Haven-AOL to get the real IPFS CID
+        updateStage('authenticating', undefined, 'Decrypting content address...')
+
+        const currentWalletForCid = walletClientRef.current
+        if (!currentWalletForCid) {
+          throw new Error('Please connect your wallet to download this video.')
+        }
+
+        const cidMeta = video.cidEncryptionMetadata as HybridV1EncryptionMetadata | GateMetadataJson
+        const encryptedCidBytes = base64ToUint8Array(video.encryptedCid)
+
+        const decryptedCid = await decryptCidWithHavenAol({
+          cidEncryptionMetadata: cidMeta,
+          encryptedCidData: encryptedCidBytes,
+          walletClient: currentWalletForCid as unknown as WalletClientLike,
+          onProgress: (msg) => {
+            if (isMountedRef.current) {
+              updateStage('authenticating', undefined, msg)
+            }
+          },
+          signal,
+        })
+
+        if (signal.aborted) throw new Error('Download cancelled')
+        cid = decryptedCid
+      } else {
+        // Fallback: use plain filecoinCid (non-encrypted CID path)
+        cid = video.filecoinCid
+      }
+
       if (!cid) {
         throw new Error(
-          'No downloadable CID available. Try playing the video first to decrypt the CID, then download.'
+          'No CID available for this video. The Arkiv entity may be missing encrypted_cid or filecoin_root_cid.'
         )
       }
 
