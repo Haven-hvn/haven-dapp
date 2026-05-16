@@ -15,9 +15,12 @@ export {
 // Video Service
 export {
   fetchAllVideos,
+  fetchLibraryVideos,
   fetchVideos,
   fetchVideoById,
   fetchVideoByIdWithCache,
+  pickMostRecentVideos,
+  LIBRARY_ARKIV_VIDEO_LIMIT,
 } from './videoService'
 
 export type { FetchVideosOptions } from './videoService'

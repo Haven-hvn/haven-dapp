@@ -263,8 +263,8 @@ export function useVideoSearch(
     ...initialOptions,
   })
 
-  // Get videos from cache
-  const { videos, isLoading, isError, error } = useVideos()
+  // Library: only the most recent Arkiv entity (not full history)
+  const { videos, isLoading, isError, error } = useVideos({ latestOnly: true })
 
   // Apply filters and sorting
   const filteredVideos = useMemo(() => {

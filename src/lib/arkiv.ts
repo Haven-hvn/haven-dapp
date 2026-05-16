@@ -17,6 +17,7 @@ import {
   type QueryReturnType,
   type PublicArkivClient,
 } from '@arkiv-network/sdk'
+import type { Hex } from 'viem'
 import { braga } from '@arkiv-network/sdk/chains'
 import { type Transport, type Chain } from 'viem'
 
@@ -272,6 +273,44 @@ export async function getAllEntitiesByOwner(
   }
   
   return allEntities
+}
+
+/**
+ * Get the single most recently created entity for an owner.
+ *
+ * Uses Arkiv query ordering by `$createdAtBlock` descending with a limit of 1
+ * so the library does not paginate through the full entity history.
+ */
+export async function getLatestEntityByOwner(
+  client: PublicArkivClient<Transport, Chain | undefined, undefined>,
+  ownerAddress: string
+): Promise<ArkivEntity | null> {
+  const owner = ownerAddress.toLowerCase() as Hex
+
+  try {
+    const result = await client
+      .buildQuery()
+      .ownedBy(owner)
+      .orderBy('$createdAtBlock', 'number', 'desc')
+      .withAttributes(true)
+      .withMetadata(true)
+      .withPayload(true)
+      .limit(1)
+      .fetch()
+
+    const entity = result.entities[0]
+    if (!entity) {
+      return null
+    }
+
+    return transformEntity(entity)
+  } catch (error) {
+    throw new ArkivError(
+      error instanceof Error ? error.message : 'Failed to fetch latest entity',
+      'FETCH_LATEST_ERROR',
+      error instanceof Error ? error : undefined
+    )
+  }
 }
 
 // ============================================================================

@@ -10,7 +10,11 @@ import { useEffect, useState, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAppKitAccount } from '@reown/appkit/react'
 import type { Video } from '../types/video'
-import { fetchAllVideos } from '../services/videoService'
+import {
+  fetchAllVideos,
+  fetchLibraryVideos,
+  pickMostRecentVideos,
+} from '../services/videoService'
 import { getVideoCacheService } from '../services/cacheService'
 
 // Query key factory for video queries
@@ -21,6 +25,13 @@ export const videoKeys = {
     [...videoKeys.lists(), address] as const,
   details: () => [...videoKeys.all, 'detail'] as const,
   detail: (id: string) => [...videoKeys.details(), id] as const,
+}
+
+export interface UseVideosOptions {
+  /**
+   * When true, only fetch the most recent Arkiv entity (used by the library page).
+   */
+  latestOnly?: boolean
 }
 
 // Hook return type
@@ -52,7 +63,8 @@ export interface UseVideosReturn {
  *
  * @returns UseVideosReturn with videos, loading states, and refetch function
  */
-export function useVideos(): UseVideosReturn {
+export function useVideos(options: UseVideosOptions = {}): UseVideosReturn {
+  const { latestOnly = false } = options
   const { address, isConnected } = useAppKitAccount()
   const [initialData, setInitialData] = useState<Video[] | undefined>(undefined)
 
@@ -64,20 +76,22 @@ export function useVideos(): UseVideosReturn {
         .getVideos()
         .then((cached) => {
           if (cached.length > 0) {
-            setInitialData(cached)
+            setInitialData(
+              latestOnly ? pickMostRecentVideos(cached) : cached
+            )
           }
         })
         .catch(() => {
           // Cache read failed, no initial data
         })
     }
-  }, [address])
+  }, [address, latestOnly])
 
   const query = useQuery({
-    queryKey: videoKeys.list(address),
+    queryKey: [...videoKeys.list(address), latestOnly ? 'latest' : 'all'] as const,
     queryFn: async () => {
       if (!address) throw new Error('Wallet not connected')
-      return fetchAllVideos(address) // Now cache-aware
+      return latestOnly ? fetchLibraryVideos(address) : fetchAllVideos(address)
     },
     enabled: isConnected && !!address,
     staleTime: 5 * 60 * 1000, // 5 minutes

@@ -64,6 +64,7 @@ export {
   getEntity,
   checkArkivConnection,
   getAllEntitiesByOwner,
+  getLatestEntityByOwner,
   parseEntityPayload,
   encodeEntityPayload,
   ArkivError,
