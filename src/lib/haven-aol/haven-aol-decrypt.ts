@@ -9,7 +9,7 @@
  * @module lib/haven-aol/haven-aol-decrypt
  */
 
-import { HttpAgent, AnonymousIdentity } from '@dfinity/agent'
+import { HttpAgent, AnonymousIdentity } from '@icp-sdk/core/agent'
 import {
   recoverVetKey,
   ibeDecryptAesKey,

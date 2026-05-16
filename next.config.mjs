@@ -29,9 +29,9 @@ const nextConfig = {
   // Webpack's resolve.fallback correctly only applies to client bundles.
   // Both dev and build use --webpack flag instead.
   
-  // Webpack configuration for @dfinity packages and browser polyfills
+  // Webpack configuration for @icp-sdk/core and browser polyfills
   webpack: (config, { isServer, webpack }) => {
-    // Fallback for Node.js modules that @dfinity/agent may reference
+    // Fallback for Node.js modules that @icp-sdk/core/agent may reference
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -80,10 +80,7 @@ const nextConfig = {
   // Transpile ICP/Haven-AOL packages
   transpilePackages: [
     'haven-aol',
-    '@dfinity/agent',
-    '@dfinity/candid',
-    '@dfinity/principal',
-    '@dfinity/vetkeys',
+    '@icp-sdk/core',
     '@filoz/synapse-sdk',
     '@filoz/synapse-core',
     '@web3-storage/data-segment',

@@ -13,7 +13,9 @@ import {
   buildGateRequestTypedData,
   parseSignatureHex,
 } from 'haven-aol'
-import type { TransportSecretKey } from '@dfinity/vetkeys'
+
+/** Ephemeral VetKD transport secret key (from haven-aol / vetkeys). */
+type TransportSecretKey = ReturnType<typeof createTransportKeyPair>['secretKey']
 import { getHavenAolConfig } from './haven-aol-client'
 import { getNextNonce, bumpNonce } from './haven-aol-nonce'
 import { HavenAolDecryptError } from './haven-aol-errors'

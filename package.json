@@ -31,11 +31,8 @@
   },
   "dependencies": {
     "@arkiv-network/sdk": "0.6.8",
-    "@dfinity/agent": "^2.2.0",
-    "@dfinity/candid": "^2.2.0",
-    "@dfinity/principal": "^2.2.0",
-    "@dfinity/vetkeys": "0.4.0",
     "@filoz/synapse-sdk": "0.41.0",
+    "@icp-sdk/core": "^5.4.0",
     "@radix-ui/react-dialog": "1.1.15",
     "@radix-ui/react-dropdown-menu": "2.1.16",
     "@radix-ui/react-slot": "1.2.4",
