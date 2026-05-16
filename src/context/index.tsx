@@ -36,8 +36,8 @@ export const modal = projectId
         analytics: false,
       },
       themeVariables: {
-        '--w3m-accent': '#3b82f6',
-      }
+        '--apkt-accent': '#3b82f6',
+      },
     })
   : null
 

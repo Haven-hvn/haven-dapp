@@ -6,7 +6,7 @@
  * Provides React hooks for interacting with the Arkiv blockchain storage.
  * Integrates with wagmi for wallet address management.
  * 
- * Uses @arkiv-network/sdk v0.5.3 for all Arkiv operations.
+ * Uses @arkiv-network/sdk for all Arkiv operations.
  * 
  * @module useArkivClient
  */

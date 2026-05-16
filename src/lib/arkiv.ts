@@ -2,7 +2,7 @@
  * Arkiv SDK Client Configuration
  * 
  * Provides a TypeScript client for querying Arkiv blockchain entities.
- * Uses @arkiv-network/sdk v0.5.3 with a public client for read-only operations.
+ * Uses @arkiv-network/sdk with a public client for read-only operations.
  * 
  * IMPORTANT: All Arkiv queries MUST go through the SDK, not via direct
  * HTTP calls or blockchain RPC. The SDK handles query formatting,
@@ -17,15 +17,15 @@ import {
   type QueryReturnType,
   type PublicArkivClient,
 } from '@arkiv-network/sdk'
-import { mendoza } from '@arkiv-network/sdk/chains'
+import { braga } from '@arkiv-network/sdk/chains'
 import { type Transport, type Chain } from 'viem'
 
 // ============================================================================
 // Configuration
 // ============================================================================
 
-const ARKIV_RPC_URL = process.env.NEXT_PUBLIC_ARKIV_RPC_URL || 
-  'https://mendoza.hoodi.arkiv.network/rpc'
+const ARKIV_RPC_URL = process.env.NEXT_PUBLIC_ARKIV_RPC_URL ||
+  'https://braga.hoodi.arkiv.network/rpc'
 
 // ============================================================================
 // Types
@@ -93,7 +93,7 @@ export class ArkivError extends Error {
  * This client is optimized for browser environments and read-only operations.
  * For read-only queries, no private key is required.
  * 
- * @returns A PublicArkivClient instance configured for the Mendoza chain
+ * @returns A PublicArkivClient instance configured for the Braga chain
  * 
  * @example
  * ```typescript
@@ -106,7 +106,7 @@ export function createArkivClient(): PublicArkivClient<Transport, Chain | undefi
   const transport = http(ARKIV_RPC_URL)
   
   return createPublicClient({
-    chain: mendoza,
+    chain: braga,
     transport,
   }) as PublicArkivClient<Transport, Chain | undefined, undefined>
 }

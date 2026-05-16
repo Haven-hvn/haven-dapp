@@ -61,6 +61,7 @@ export function getSynapseInstance(): ReturnType<typeof Synapse.create> {
 
   synapseInstance = Synapse.create({
     account: privateKeyToAccount(key),
+    source: 'haven-dapp',
     withCDN: typeof window === 'undefined'
       ? process.env.SYNAPSE_ENABLE_CDN === 'true'
       : false,

@@ -39,8 +39,8 @@ cp .env.local.example .env.local
 | `NEXT_PUBLIC_ALCHEMY_API_KEY` | Alchemy API key for RPC | - |
 | `NEXT_PUBLIC_ALCHEMY_RPC` | Custom Alchemy RPC URL | - |
 | `NEXT_PUBLIC_CHAIN_ID` | Default chain ID | 1 (Ethereum) |
-| `NEXT_PUBLIC_ARKIV_RPC_URL` | Arkiv RPC URL | `https://mendoza.hoodi.arkiv.network/rpc` |
-| `NEXT_PUBLIC_ARKIV_API_URL` | Arkiv HTTP API URL | `https://mendoza.hoodi.arkiv.network/api` |
+| `NEXT_PUBLIC_ARKIV_RPC_URL` | Arkiv RPC URL | `https://braga.hoodi.arkiv.network/rpc` |
+| `NEXT_PUBLIC_ARKIV_API_URL` | Arkiv HTTP API URL | `https://braga.hoodi.arkiv.network/api` |
 | `NEXT_PUBLIC_LIT_NETWORK` | Lit Protocol network | `naga-dev` |
 | `NEXT_PUBLIC_APP_URL` | Application URL | `https://haven.video` |
 
