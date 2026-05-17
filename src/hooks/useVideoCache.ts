@@ -33,6 +33,7 @@ import { requestPersistentStorageSilent, isPersisted } from '@/lib/storage-persi
 import { touchVideo } from '@/lib/cache-expiration'
 import { getVideoCacheService } from '@/services/cacheService'
 import { fetchFromIpfs } from '@/services/ipfsService'
+import { resolveSynapseDownloadCid } from '@/lib/download-cid'
 import { decryptContentKey, isGateMetadata, getHavenAolErrorMessage } from '@/lib/haven-aol'
 import type { WalletClientLike } from '@/lib/haven-aol'
 import { decryptChunkedStream, parseChunkedFileHeader, concatenateChunks } from '@/lib/chunked-decrypt'
@@ -230,7 +231,8 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
         if (!videoToLoad.isEncrypted) {
           updateStage('fetching')
 
-          const result = await fetchFromIpfs(videoToLoad.filecoinCid || '')
+          const downloadCid = resolveSynapseDownloadCid(videoToLoad)
+          const result = await fetchFromIpfs(downloadCid)
 
           if (signal.aborted) throw new Error('Loading cancelled')
 
@@ -281,46 +283,38 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
           return
         }
 
-        // Step 2: Resolve CID (decrypt if needed)
-        let cid: string | undefined
+        // Step 2: Decrypt root CID for metadata / VetKD (optional cache)
+        let decryptedRootCid: string | null =
+          videoToLoad.decryptedCid ?? null
 
-        if (videoToLoad.decryptedCid) {
-          cid = videoToLoad.decryptedCid
-        } else if (videoToLoad.cidEncryptionMetadata && videoToLoad.encryptedCid) {
+        if (
+          !decryptedRootCid &&
+          videoToLoad.cidEncryptionMetadata &&
+          videoToLoad.encryptedCid
+        ) {
           updateStage('decrypting-cid')
 
-          const decryptedCid = await decryptVideoCidRef.current(videoToLoad)
+          decryptedRootCid = await decryptVideoCidRef.current(videoToLoad)
 
           if (signal.aborted) throw new Error('Loading cancelled')
 
-          if (!decryptedCid) {
+          if (!decryptedRootCid) {
             throw new Error(
               'Failed to decrypt CID — wallet may not be connected or signature was rejected'
             )
           }
 
-          cid = decryptedCid
-
-          // Cache decrypted CID for future use
           try {
             const cacheService = getVideoCacheService(videoToLoad.owner)
-            await cacheService.updateDecryptedCid(videoToLoad.id, decryptedCid)
+            await cacheService.updateDecryptedCid(videoToLoad.id, decryptedRootCid)
           } catch { /* non-critical */ }
-        } else {
-          cid = videoToLoad.filecoinCid
         }
 
-        if (!cid) {
-          throw new Error(
-            'No CID available for video — encrypted_cid and cid_encryption_metadata ' +
-            'may be missing from Arkiv entity, or filecoin_root_cid is not set'
-          )
-        }
-
-        // Step 3: Fetch encrypted data from IPFS
+        // Step 3: Fetch encrypted bytes from Filecoin (Synapse needs piece CID, not root)
         updateStage('fetching')
 
-        const fetchResult = await fetchFromIpfs(cid)
+        const downloadCid = resolveSynapseDownloadCid(videoToLoad, decryptedRootCid)
+        const fetchResult = await fetchFromIpfs(downloadCid)
 
         if (signal.aborted) throw new Error('Loading cancelled')
 

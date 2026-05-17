@@ -72,6 +72,9 @@ export interface Video {
   // Filecoin storage
   /** Root CID for non-encrypted videos */
   filecoinCid?: string
+
+  /** Filecoin piece CID for Synapse download (payload `piece_cid`) */
+  pieceCid?: string
   
   /** Encrypted CID for encrypted videos */
   encryptedCid?: string

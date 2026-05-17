@@ -59,6 +59,7 @@ export function parseArkivEntityToVideo(entity: ArkivEntity): Video {
     duration: (data.duration as number) || 0,
 
     filecoinCid: (get('filecoin_root_cid') as string) || '',
+    pieceCid: (get('piece_cid') as string) || undefined,
     encryptedCid: (get('encrypted_cid') as string) || undefined,
 
     isEncrypted: Boolean(get('is_encrypted')),
