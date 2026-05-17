@@ -33,7 +33,8 @@ import { requestPersistentStorageSilent, isPersisted } from '@/lib/storage-persi
 import { touchVideo } from '@/lib/cache-expiration'
 import { getVideoCacheService } from '@/services/cacheService'
 import { fetchPinnedContent } from '@/services/ipfsService'
-import { decryptContentKey, isGateMetadata, getHavenAolErrorMessage } from '@/lib/haven-aol'
+import { decryptContentKey, isGateMetadata } from '@/lib/haven-aol'
+import { getPlaybackErrorMessage } from '@/lib/playback-errors'
 import type { WalletClientLike } from '@/lib/haven-aol'
 import { decryptChunkedStream, parseChunkedFileHeader, concatenateChunks } from '@/lib/chunked-decrypt'
 import type { ChunkedDecryptProgress } from '@/lib/chunked-decrypt'
@@ -418,8 +419,7 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
         const errorMessage = err instanceof Error ? err.message : 'Failed to load video'
         console.error('[useVideoCache] Loading failed:', err)
 
-        // Get user-friendly error message for Haven-AOL errors
-        const friendlyMessage = getHavenAolErrorMessage(err)
+        const friendlyMessage = getPlaybackErrorMessage(err)
 
         if (isMountedRef.current) {
           setError(new Error(friendlyMessage || errorMessage))

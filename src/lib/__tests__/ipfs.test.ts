@@ -27,7 +27,7 @@ describe('IpfsError', () => {
 describe('getIpfsErrorMessage', () => {
   it('maps known IpfsError codes', () => {
     expect(getIpfsErrorMessage(new IpfsError('x', 'INVALID_CID'))).toMatch(/Invalid content/)
-    expect(getIpfsErrorMessage(new IpfsError('x', 'ALL_GATEWAYS_FAILED'))).toMatch(/Synapse/)
+    expect(getIpfsErrorMessage(new IpfsError('x', 'ALL_GATEWAYS_FAILED'))).toMatch(/Filecoin storage/)
     expect(getIpfsErrorMessage(new IpfsError('x', 'ABORTED'))).toMatch(/cancelled/)
   })
 

@@ -127,6 +127,34 @@ export function mapGateError(gateError: unknown): HavenAolDecryptError {
   )
 }
 
+/**
+ * True when the wallet refused an EIP-712 signature (not Synapse/provider failures).
+ */
+export function isWalletSignatureRejection(error: Error): boolean {
+  const msg = error.message
+  const lower = msg.toLowerCase()
+
+  if (
+    lower.includes('synapse') ||
+    lower.includes('storagemanager') ||
+    lower.includes('provider retrieval') ||
+    lower.includes('promises rejected') ||
+    lower.includes('all provider retrieval')
+  ) {
+    return false
+  }
+
+  return (
+    lower.includes('user rejected') ||
+    lower.includes('user denied') ||
+    lower.includes('rejected the request') ||
+    lower.includes('request rejected') ||
+    lower.includes('action_rejected') ||
+    lower.includes('4001') ||
+    (error.name === 'UserRejectedRequestError')
+  )
+}
+
 // ============================================================================
 // User-Friendly Messages
 // ============================================================================
@@ -153,9 +181,13 @@ export function getHavenAolErrorMessage(error: unknown): string {
       }
     }
 
-    // Wallet rejection
-    if (msg.includes('rejected') || msg.includes('denied') || msg.includes('cancelled')) {
+    // Wallet rejection (avoid matching Synapse "promises rejected" / StorageManager errors)
+    if (isWalletSignatureRejection(error)) {
       return 'Signature request was rejected. Please approve the signature to decrypt the video.'
+    }
+
+    if (msg.includes('Loading cancelled') || msg.toLowerCase().includes('cancelled')) {
+      return 'Loading was cancelled.'
     }
 
     // Network errors
