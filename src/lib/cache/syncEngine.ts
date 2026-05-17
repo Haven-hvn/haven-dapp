@@ -18,16 +18,11 @@ import type { CacheSyncResult } from '../../types/cache'
 import { getVideoCacheService } from '../../services/cacheService'
 import { useCacheStore } from '../../stores/cacheStore'
 import { getExpirationTracker, markExpiredVideos } from './expirationTracker'
-import {
-  parseGateMetadata,
-  parseCidEncryptionMetadata,
-} from '../../lib/haven-aol'
+import { parseArkivEntityToVideo } from '../../lib/parse-arkiv-video'
 import {
   createArkivClient,
   getAllEntitiesByOwner as arkivGetAllEntitiesByOwner,
   checkArkivConnection,
-  parseEntityPayload,
-  type ArkivEntity,
 } from '../../lib/arkiv'
 import type { PublicArkivClient } from '@arkiv-network/sdk'
 import type { Transport, Chain } from 'viem'
@@ -41,112 +36,6 @@ function getClient(): PublicArkivClient<Transport, Chain | undefined, undefined>
     arkivClient = createArkivClient()
   }
   return arkivClient
-}
-
-// ── Entity Parsing ─────────────────────────────────────────────────
-
-/**
- * Parse an Arkiv entity into a Video object.
- * Converts the SDK entity format (key, attributes, payload) into our Video type.
- */
-function parseArkivEntity(entity: ArkivEntity): Video {
-  // Parse payload (base64 encoded JSON) for video metadata
-  const payloadData = parseEntityPayload<Record<string, unknown>>(entity.payload) || {}
-
-  // Merge attributes and payload data (payload takes precedence)
-  // Arkiv uses snake_case field names exclusively
-  const data: Record<string, unknown> = {
-    ...entity.attributes,
-    ...payloadData,
-  }
-
-  // Helper: look up a value by snake_case key
-  const get = (key: string): unknown => data[key]
-
-  const encryptionMeta =
-    parseGateMetadata(get('encryption_metadata')) ?? undefined
-
-  // Parse segment metadata (snake_case in payload)
-  const rawSegment = (get('segment_metadata') as Record<string, unknown>) || null
-  const segmentMetadata = rawSegment
-    ? {
-        startTimestamp: new Date(
-          (rawSegment.start_timestamp as string) || ''
-        ),
-        endTimestamp: rawSegment.end_timestamp
-          ? new Date(rawSegment.end_timestamp as string)
-          : undefined,
-        segmentIndex: (rawSegment.segment_index as number) ?? 0,
-        totalSegments: (rawSegment.total_segments as number) ?? 0,
-        mintId: (rawSegment.mint_id as string) ?? '',
-        recordingSessionId: rawSegment.recording_session_id as string | undefined,
-      }
-    : undefined
-
-  const vlmJsonCid = (get('vlm_json_cid') as string) || undefined
-
-  return {
-    // Identity
-    id: entity.key,
-    owner: (entity.owner || '').toLowerCase(),
-
-    // Content metadata
-    title: (data.title as string) || 'Untitled',
-    description: (data.description as string) || '',
-    duration: (data.duration as number) || 0,
-
-    // Storage CIDs
-    // encrypted_cid: Arkiv attribute — encrypted ciphertext of the root CID (NOT a usable IPFS CID!)
-    // filecoin_root_cid: Arkiv payload — the plain IPFS CID for non-encrypted videos
-    filecoinCid: (get('filecoin_root_cid') as string) || '',
-    encryptedCid: (get('encrypted_cid') as string) || undefined,
-
-    // Encryption (Arkiv attributes use is_encrypted as number 0/1)
-    isEncrypted: Boolean(get('is_encrypted')),
-    encryptionMetadata: encryptionMeta,
-
-    cidEncryptionMetadata:
-      parseCidEncryptionMetadata(get('cid_encryption_metadata')) ?? undefined,
-
-    contentMimeType: (get('content_mime_type') as string) || undefined,
-    originalHash: (get('original_hash') as string) || undefined,
-
-    // AI analysis
-    hasAiData: Boolean(get('has_ai_data') || vlmJsonCid),
-    vlmJsonCid,
-
-    // Minting
-    mintId: (get('mint_id') as string) || undefined,
-
-    // Source tracking
-    sourceUri: (get('source_uri') as string) || undefined,
-    creatorHandle: (get('creator_handle') as string) || undefined,
-
-    // Timestamps
-    createdAt: entity.created_at ? new Date(entity.created_at) : new Date(),
-    updatedAt: (get('updated_at') as string)
-      ? new Date(get('updated_at') as string)
-      : undefined,
-
-    // Variants for adaptive streaming (snake_case: codec_variants)
-    codecVariants: (get('codec_variants') as Video['codecVariants']) || undefined,
-
-    // Segment metadata
-    segmentMetadata,
-
-    // Content identification
-    phash: (get('phash') as string) || undefined,
-    analysisModel: (get('analysis_model') as string) || undefined,
-    cidHash: (get('cid_hash') as string) || undefined,
-
-    // Cache status - fresh from Arkiv is always 'active'
-    arkivStatus: 'active',
-
-    // Expiration tracking
-    expiresAtBlock: (get('expires_at_block') as number)
-      ? Number(get('expires_at_block'))
-      : undefined,
-  }
 }
 
 // ── Active Engine Management ───────────────────────────────────────
@@ -299,7 +188,7 @@ export class CacheSyncEngine {
       // 1. Fetch current videos from Arkiv
       const client = getClient()
       const entities = await arkivGetAllEntitiesByOwner(client, this.walletAddress)
-      const arkivVideos = entities.map(parseArkivEntity)
+      const arkivVideos = entities.map(parseArkivEntityToVideo)
 
       // 2. Sync with cache
       const cacheService = getVideoCacheService(this.walletAddress)

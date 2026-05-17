@@ -52,6 +52,7 @@ export async function videoToCachedVideo(
     mintId: video.mintId,
     sourceUri: video.sourceUri,
     creatorHandle: video.creatorHandle,
+    createdAtBlock: video.createdAtBlock,
 
     // Convert Date objects to timestamps for IndexedDB
     createdAt: typeof video.createdAt === 'number' ? video.createdAt : video.createdAt.getTime(),
@@ -121,6 +122,7 @@ export function cachedVideoToVideo(cached: CachedVideo): Video {
     mintId: cached.mintId,
     sourceUri: cached.sourceUri,
     creatorHandle: cached.creatorHandle,
+    createdAtBlock: cached.createdAtBlock,
 
     // Convert timestamps back to Date objects
     createdAt: new Date(cached.createdAt),

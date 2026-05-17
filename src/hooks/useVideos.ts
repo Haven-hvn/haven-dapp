@@ -94,9 +94,9 @@ export function useVideos(options: UseVideosOptions = {}): UseVideosReturn {
       return latestOnly ? fetchLibraryVideos(address) : fetchAllVideos(address)
     },
     enabled: isConnected && !!address,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    // Use cached data as placeholder while fetching
-    placeholderData: initialData,
+    staleTime: latestOnly ? 30_000 : 5 * 60 * 1000,
+    placeholderData: latestOnly ? undefined : initialData,
+    refetchOnMount: latestOnly ? 'always' : true,
     refetchOnWindowFocus: true,
   })
 

@@ -9,18 +9,14 @@
 
 import type { Video } from '../types/video'
 import { getVideoCacheService } from './cacheService'
-import {
-  parseGateMetadata,
-  parseCidEncryptionMetadata,
-} from '../lib/haven-aol'
+import { compareVideosByRecency } from '../lib/arkiv-recency'
+import { parseArkivEntityToVideo } from '../lib/parse-arkiv-video'
 import {
   createArkivClient,
   getAllEntitiesByOwner as arkivGetAllEntitiesByOwner,
   getLatestEntityByOwner as arkivGetLatestEntityByOwner,
   queryEntitiesByOwner as arkivQueryEntitiesByOwner,
   getEntity as arkivGetEntity,
-  parseEntityPayload,
-  type ArkivEntity,
 } from '../lib/arkiv'
 
 // ── Arkiv Client Singleton ──────────────────────────────────────────
@@ -34,124 +30,17 @@ function getClient() {
   return _client
 }
 
-// ── Entity Parsing ─────────────────────────────────────────────────
-
-/**
- * Parse an Arkiv entity into a Video object.
- * Converts the SDK entity format (key, attributes, payload) into our Video type.
- */
-function parseArkivEntity(entity: ArkivEntity): Video {
-  // Parse payload (base64 encoded JSON) for video metadata
-  const payloadData = parseEntityPayload<Record<string, unknown>>(entity.payload) || {}
-  
-  // Merge attributes and payload data (payload takes precedence)
-  // Arkiv uses snake_case field names exclusively
-  const data: Record<string, unknown> = {
-    ...entity.attributes,
-    ...payloadData,
-  }
-
-  // Helper: look up a value by snake_case key
-  const get = (key: string): unknown => data[key]
-
-  const encryptionMeta =
-    parseGateMetadata(get('encryption_metadata')) ?? undefined
-
-  // Parse segment metadata (snake_case in payload)
-  const rawSegment = (get('segment_metadata') as Record<string, unknown>) || null
-  const segmentMetadata = rawSegment
-    ? {
-        startTimestamp: new Date(
-          (rawSegment.start_timestamp as string) || ''
-        ),
-        endTimestamp: rawSegment.end_timestamp
-          ? new Date(rawSegment.end_timestamp as string)
-          : undefined,
-        segmentIndex: (rawSegment.segment_index as number) ?? 0,
-        totalSegments: (rawSegment.total_segments as number) ?? 0,
-        mintId: (rawSegment.mint_id as string) ?? '',
-        recordingSessionId: rawSegment.recording_session_id as string | undefined,
-      }
-    : undefined
-
-  const vlmJsonCid = (get('vlm_json_cid') as string) || undefined
-
-  return {
-    // Identity
-    id: entity.key,
-    owner: (entity.owner || '').toLowerCase(),
-
-    // Content metadata
-    title: (data.title as string) || 'Untitled',
-    description: (data.description as string) || '',
-    duration: (data.duration as number) || 0,
-
-    // Storage CIDs
-    // encrypted_cid: Arkiv attribute — encrypted ciphertext of the root CID (NOT a usable IPFS CID!)
-    //   Must be decrypted via cid_encryption_metadata + Haven-AOL to get the actual IPFS CID.
-    // filecoin_root_cid: Arkiv payload — the plain IPFS CID for non-encrypted videos
-    filecoinCid: (get('filecoin_root_cid') as string) || '',
-    encryptedCid: (get('encrypted_cid') as string) || undefined,
-
-    // Encryption (Arkiv attributes use is_encrypted as number 0/1)
-    isEncrypted: Boolean(get('is_encrypted')),
-    encryptionMetadata: encryptionMeta,
-
-    cidEncryptionMetadata:
-      parseCidEncryptionMetadata(get('cid_encryption_metadata')) ?? undefined,
-
-    contentMimeType: (get('content_mime_type') as string) || undefined,
-    originalHash: (get('original_hash') as string) || undefined,
-
-    // AI analysis
-    hasAiData: Boolean(get('has_ai_data') || vlmJsonCid),
-    vlmJsonCid,
-
-    // Minting
-    mintId: (get('mint_id') as string) || undefined,
-
-    // Source tracking
-    sourceUri: (get('source_uri') as string) || undefined,
-    creatorHandle: (get('creator_handle') as string) || undefined,
-
-    // Timestamps
-    createdAt: entity.created_at ? new Date(entity.created_at) : new Date(),
-    updatedAt: (get('updated_at') as string)
-      ? new Date(get('updated_at') as string)
-      : undefined,
-
-    // Variants for adaptive streaming (snake_case: codec_variants)
-    codecVariants: (get('codec_variants') as Video['codecVariants']) || undefined,
-
-    // Segment metadata
-    segmentMetadata,
-
-    // Content identification
-    phash: (get('phash') as string) || undefined,
-    analysisModel: (get('analysis_model') as string) || undefined,
-    cidHash: (get('cid_hash') as string) || undefined,
-
-    // Cache status - fresh from Arkiv is always 'active'
-    arkivStatus: 'active',
-
-    // Expiration tracking
-    expiresAtBlock: (get('expires_at_block') as number)
-      ? Number(get('expires_at_block'))
-      : undefined,
-  }
-}
-
 // ── Video Service Functions ────────────────────────────────────────
 
 /** Default number of videos returned for the library (most recent on Arkiv). */
 export const LIBRARY_ARKIV_VIDEO_LIMIT = 1
 
 /**
- * Return up to `limit` videos sorted by `createdAt` descending.
+ * Return up to `limit` videos sorted by `createdAtBlock` descending (then `createdAt`).
  */
 export function pickMostRecentVideos(videos: Video[], limit: number = LIBRARY_ARKIV_VIDEO_LIMIT): Video[] {
   return [...videos]
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .sort(compareVideosByRecency)
     .slice(0, limit)
 }
 
@@ -173,7 +62,7 @@ export async function fetchLibraryVideos(ownerAddress: string): Promise<Video[]>
       return pickMostRecentVideos(cachedVideos)
     }
 
-    const video = parseArkivEntity(entity)
+    const video = parseArkivEntityToVideo(entity)
 
     cacheService.syncWithArkiv([video]).catch(err => {
       console.warn('[VideoService] Cache sync failed:', err)
@@ -217,7 +106,7 @@ export async function fetchAllVideos(
     // 1. Fetch from Arkiv (primary source)
     const client = getClient()
     const entities = await arkivGetAllEntitiesByOwner(client, ownerAddress, maxResults)
-    const arkivVideos = entities.map(entity => parseArkivEntity(entity))
+    const arkivVideos = entities.map(entity => parseArkivEntityToVideo(entity))
 
     // 2. Sync to cache (write-through) — fire and forget, don't block return
     cacheService.syncWithArkiv(arkivVideos).catch(err => {
@@ -259,7 +148,7 @@ export async function fetchVideos(options: FetchVideosOptions): Promise<Video[]>
       maxResults,
       cursor,
     })
-    const arkivVideos = entities.map(entity => parseArkivEntity(entity))
+    const arkivVideos = entities.map(entity => parseArkivEntityToVideo(entity))
 
     // Write-through to cache
     cacheService.cacheVideos(arkivVideos).catch(err => {
@@ -294,7 +183,7 @@ export async function fetchVideoById(entityKey: string): Promise<Video | null> {
     const entity = await arkivGetEntity(client, entityKey)
 
     if (entity) {
-      const video = parseArkivEntity(entity)
+      const video = parseArkivEntityToVideo(entity)
 
       // Write-through to cache (need wallet address from the video)
       const cacheService = getVideoCacheService(video.owner)
@@ -337,7 +226,7 @@ export async function fetchVideoByIdWithCache(
     const entity = await arkivGetEntity(client, entityKey)
 
     if (entity) {
-      const video = parseArkivEntity(entity)
+      const video = parseArkivEntityToVideo(entity)
 
       // Warn if encrypted video is missing encrypted_cid attribute
       if (video.isEncrypted && !video.encryptedCid) {

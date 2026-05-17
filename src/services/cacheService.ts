@@ -9,6 +9,7 @@
  */
 
 import type { Video } from '../types/video'
+import { compareVideosByRecency } from '../lib/arkiv-recency'
 import type { CachedVideo, CacheStats, CacheSyncResult, CacheMetadataEntry } from '../types/cache'
 import {
   getAllCachedVideos,
@@ -311,7 +312,7 @@ export class VideoCacheService {
    * Get merged video list: cached + Arkiv, with Arkiv taking precedence
    * for active entities and cache filling in for expired ones.
    * @param arkivVideos - Array of Video objects from Arkiv
-   * @returns Unified array of Video objects sorted by createdAt descending
+   * @returns Unified array of Video objects sorted by createdAtBlock descending
    */
   async getMergedVideos(arkivVideos: Video[]): Promise<Video[]> {
     try {
@@ -336,13 +337,10 @@ export class VideoCacheService {
         videoMap.set(video.id, video)
       }
 
-      // Return sorted by createdAt descending
-      return Array.from(videoMap.values())
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      return Array.from(videoMap.values()).sort(compareVideosByRecency)
     } catch (error) {
       console.warn('[CacheService] Failed to get merged videos:', error)
-      // Fall back to just returning Arkiv videos
-      return arkivVideos.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      return [...arkivVideos].sort(compareVideosByRecency)
     }
   }
 

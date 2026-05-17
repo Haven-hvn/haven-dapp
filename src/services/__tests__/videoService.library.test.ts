@@ -25,28 +25,51 @@ vi.mock('../../lib/arkiv', async (importOriginal) => {
   }
 })
 
-function createMockArkivEntity(key: string, title: string) {
+vi.mock('../../lib/parse-arkiv-video', () => ({
+  parseArkivEntityToVideo: (entity: {
+    key: string
+    owner: string
+    attributes: { title?: string }
+    created_at_block: number
+  }) => ({
+    id: entity.key,
+    owner: entity.owner.toLowerCase(),
+    title: (entity.attributes.title as string) || 'Untitled',
+    description: '',
+    duration: 0,
+    isEncrypted: false,
+    hasAiData: false,
+    createdAt: new Date(entity.created_at_block),
+    createdAtBlock: entity.created_at_block,
+    arkivStatus: 'active' as const,
+  }),
+}))
+
+function createMockArkivEntity(key: string, title: string, createdAtBlock = 1000) {
   return {
     key,
     owner: TEST_WALLET,
     attributes: { title, is_encrypted: 0 },
     payload: '',
     content_type: 'application/json',
-    created_at: '1000',
+    created_at: String(createdAtBlock),
+    created_at_block: createdAtBlock,
   }
 }
 
 describe('pickMostRecentVideos', () => {
-  it('returns videos sorted by createdAt descending', () => {
+  it('returns videos sorted by createdAtBlock descending', () => {
     const older = createMockVideo({
       id: '0x1',
       title: 'Older',
-      createdAt: new Date('2024-01-01'),
+      createdAt: new Date('2025-01-01'),
+      createdAtBlock: 100,
     })
     const newer = createMockVideo({
       id: '0x2',
       title: 'Newer',
-      createdAt: new Date('2025-01-01'),
+      createdAt: new Date('2024-01-01'),
+      createdAtBlock: 9000,
     })
 
     const result = pickMostRecentVideos([older, newer])
@@ -114,12 +137,14 @@ describe('fetchLibraryVideos', () => {
     const older = createMockVideo({
       id: '0xold',
       owner: TEST_WALLET,
-      createdAt: new Date('2024-01-01'),
+      createdAt: new Date('2025-06-01'),
+      createdAtBlock: 100,
     })
     const newer = createMockVideo({
       id: '0xnew',
       owner: TEST_WALLET,
-      createdAt: new Date('2025-06-01'),
+      createdAt: new Date('2024-01-01'),
+      createdAtBlock: 9000,
     })
     await cacheService.cacheVideos([older, newer])
 

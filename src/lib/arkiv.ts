@@ -20,6 +20,10 @@ import {
 import type { Hex } from 'viem'
 import { braga } from '@arkiv-network/sdk/chains'
 import { type Transport, type Chain } from 'viem'
+import {
+  parseCreatedAtBlock,
+  pickLatestArkivEntity,
+} from './arkiv-recency'
 
 // ============================================================================
 // Configuration
@@ -41,7 +45,10 @@ export interface ArkivEntity {
   attributes: Record<string, unknown>
   payload: string // Base64 encoded JSON
   content_type: string
+  /** `$createdAtBlock` as decimal string (legacy wire field) */
   created_at: string
+  /** Arkiv creation block height — canonical recency key */
+  created_at_block: number
 }
 
 /**
@@ -298,12 +305,18 @@ export async function getLatestEntityByOwner(
       .limit(1)
       .fetch()
 
-    const entity = result.entities[0]
-    if (!entity) {
-      return null
+    const ordered = result.entities[0]
+    if (ordered) {
+      return transformEntity(ordered)
     }
 
-    return transformEntity(entity)
+    const fallback = await queryEntitiesByOwner(client, ownerAddress, {
+      maxResults: 100,
+      includePayload: true,
+      includeAttributes: true,
+      includeMetadata: true,
+    })
+    return pickLatestArkivEntity(fallback)
   } catch (error) {
     throw new ArkivError(
       error instanceof Error ? error.message : 'Failed to fetch latest entity',
@@ -348,6 +361,8 @@ function transformEntity(entity: Entity): ArkivEntity {
     (attributes.contentType as string) || 
     'application/octet-stream'
   
+  const createdAtBlock = parseCreatedAtBlock(entity.createdAtBlock)
+
   return {
     key: entity.key,
     owner: entity.owner || '',
@@ -355,6 +370,7 @@ function transformEntity(entity: Entity): ArkivEntity {
     payload,
     content_type: contentType,
     created_at: entity.createdAtBlock?.toString() || '',
+    created_at_block: createdAtBlock,
   }
 }
 

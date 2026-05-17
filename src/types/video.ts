@@ -40,8 +40,11 @@ export interface Video {
   /** Wallet address of the owner */
   owner: string
   
-  /** When the video was created */
+  /** When the video was created (display; prefer {@link createdAtBlock} for ordering) */
   createdAt: Date
+
+  /** Arkiv `$createdAtBlock` — canonical key for latest-entity selection */
+  createdAtBlock?: number
   
   /** When the video was last updated (optional) */
   updatedAt?: Date
