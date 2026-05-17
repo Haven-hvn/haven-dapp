@@ -31,6 +31,8 @@ export function createMockVideo(overrides?: Partial<Video>): Video {
 
     // Storage CIDs
     filecoinCid: 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi',
+    pieceCid:
+      'bafkzcibe2hzbcd4t6clvsb3mfrezyxl75gl3gzcsqi42dd27gktq4nk75rr62ciuaq',
     encryptedCid: undefined,
 
     // Encryption

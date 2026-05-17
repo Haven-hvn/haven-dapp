@@ -98,9 +98,6 @@ export interface Video {
   /** SHA-256 of plaintext before encryption (payload original_hash) */
   originalHash?: string
   
-  /** Decrypted CID (cached after first decryption to avoid re-decryption) */
-  decryptedCid?: string
-  
   // AI analysis
   /** Whether AI analysis data is available */
   hasAiData: boolean

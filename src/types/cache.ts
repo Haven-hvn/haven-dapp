@@ -209,20 +209,6 @@ export interface CachedVideo extends Omit<Video, 'createdAt' | 'updatedAt' | 'se
    */
   videoCachedAt?: number
 
-  // ========================================================================
-  // Decrypted CID Cache
-  // ========================================================================
-
-  /**
-   * Decrypted IPFS CID for encrypted videos.
-   * 
-   * When a video has `cidEncryptionMetadata`, the actual IPFS CID is encrypted.
-   * After the first successful decryption via Haven-AOL, the plaintext CID
-   * is stored here so subsequent loads skip the decryption step entirely.
-   * 
-   * Undefined if the CID has never been decrypted or the video is not encrypted.
-   */
-  decryptedCid?: string
 }
 
 // ============================================================================

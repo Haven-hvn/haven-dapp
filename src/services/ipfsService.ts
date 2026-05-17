@@ -1,20 +1,20 @@
 /**
  * Content Retrieval Service
- * 
- * Provides functions for fetching content using Synapse SDK for direct
- * client-side Filecoin Onchain Cloud retrieval. Includes progress tracking,
- * timeout handling, and error management.
- * 
+ *
+ * Fetches encrypted/plain bytes from Filecoin Onchain Cloud via Synapse using the
+ * Filecoin Pin piece CID from Arkiv (`piece_cid`).
+ *
  * @module services/ipfsService
  */
 
-import { 
+import {
   normalizeCid,
-  isValidCid,
   IpfsError,
   getIpfsErrorMessage,
 } from '@/lib/ipfs'
-import { downloadFromSynapse, SynapseError } from '@/lib/synapse'
+import { isFilecoinPieceCid, requirePieceCid } from '@/lib/download-cid'
+import { downloadFromSynapse } from '@/lib/synapse'
+import type { Video } from '@/types/video'
 
 // ============================================================================
 // Types
@@ -74,19 +74,13 @@ export interface StreamResult {
 // Utility Functions
 // ============================================================================
 
-/**
- * Sleep for a specified duration.
- */
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-/**
- * Check if an error is an abort error.
- */
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && (
-    error.name === 'AbortError' || 
+    error.name === 'AbortError' ||
     error.message.includes('aborted') ||
     error.message.includes('The operation was aborted')
   )
@@ -97,65 +91,52 @@ function isAbortError(error: unknown): boolean {
 // ============================================================================
 
 /**
- * Fetch content from Filecoin via Synapse SDK.
- * 
- * Downloads content directly in the browser using the Synapse SDK
- * (Filecoin Onchain Cloud). No IPFS gateways or server-side proxy needed.
- * 
- * @param cid - Content identifier (piece CID)
- * @param options - Fetch options
- * @returns Promise resolving to FetchResult
- * @throws IpfsError if retrieval fails
- * 
- * @example
- * ```typescript
- * const result = await fetchFromIpfs('baga6ea4seaq...')
- * console.log(`Fetched ${result.size} bytes via Synapse`)
- * 
- * // With progress tracking
- * const result = await fetchFromIpfs('baga6ea4seaq...', {
- *   onProgress: (downloaded, total) => {
- *     console.log(`Progress: ${downloaded}/${total}`)
- *   }
- * })
- * ```
+ * Fetch bytes for a video using its Arkiv `piece_cid` (Filecoin Pin + Synapse).
  */
-export async function fetchFromIpfs(
-  cid: string,
+export async function fetchPinnedContent(
+  video: Video,
   options: FetchOptions = {}
 ): Promise<FetchResult> {
-  // Validate CID
-  if (!isValidCid(cid)) {
-    throw new IpfsError(`Invalid CID: ${cid}`, 'INVALID_CID', cid)
+  return fetchPieceFromSynapse(requirePieceCid(video), options)
+}
+
+/**
+ * Download a Filecoin piece CID via Synapse (FOC warm storage / PDP).
+ */
+export async function fetchPieceFromSynapse(
+  pieceCid: string,
+  options: FetchOptions = {}
+): Promise<FetchResult> {
+  const normalizedCid = normalizeCid(pieceCid)
+  if (!isFilecoinPieceCid(normalizedCid)) {
+    throw new IpfsError(
+      `Expected Filecoin piece CID (bafkzcib…), got: ${pieceCid}`,
+      'INVALID_CID',
+      normalizedCid
+    )
   }
-  
-  const normalizedCid = normalizeCid(cid)
-  const maxRetries = options.retries || 3
-  const retryDelayMs = options.retryDelayMs || 1000
-  
-  // Check for abort before starting
+
+  const maxRetries = options.retries ?? 3
+  const retryDelayMs = options.retryDelayMs ?? 1000
+
   if (options.abortSignal?.aborted) {
     throw new IpfsError('Fetch aborted', 'ABORTED', normalizedCid)
   }
-  
+
   let lastError: Error | null = null
-  
+
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       if (options.abortSignal?.aborted) {
         throw new IpfsError('Fetch aborted', 'ABORTED', normalizedCid)
       }
-      
+
       const startTime = performance.now()
-      
-      // Download directly via Synapse SDK (runs in browser)
       const data = await downloadFromSynapse(normalizedCid)
-      
       const duration = performance.now() - startTime
-      
-      // Report final progress
+
       options.onProgress?.(data.byteLength, data.byteLength)
-      
+
       return {
         data,
         url: `synapse://${normalizedCid}`,
@@ -164,33 +145,30 @@ export async function fetchFromIpfs(
         duration,
       }
     } catch (error) {
-      // Handle abort — don't retry
       if (error instanceof IpfsError && error.code === 'ABORTED') {
         throw error
       }
       if (isAbortError(error)) {
         throw new IpfsError('Fetch aborted', 'ABORTED', normalizedCid)
       }
-      
+
       lastError = error instanceof Error ? error : new Error(String(error))
-      
+
       console.warn(
         `[ipfsService] Synapse attempt ${attempt + 1}/${maxRetries} failed:`,
         lastError.message
       )
-      
+
       if (options.abortSignal?.aborted) {
         throw new IpfsError('Fetch aborted', 'ABORTED', normalizedCid)
       }
-      
-      // Wait before retry (exponential backoff)
+
       if (attempt < maxRetries - 1) {
-        const delay = retryDelayMs * Math.pow(2, attempt)
-        await sleep(delay)
+        await sleep(retryDelayMs * Math.pow(2, attempt))
       }
     }
   }
-  
+
   throw new IpfsError(
     `Failed to fetch via Synapse after ${maxRetries} attempts. Last error: ${lastError?.message}`,
     'ALL_GATEWAYS_FAILED',
@@ -203,29 +181,21 @@ export async function fetchFromIpfs(
 // ============================================================================
 
 /**
- * Stream content from Synapse (for large files).
- * 
- * Downloads the full content via Synapse SDK and wraps it in a ReadableStream.
- * 
- * @param cid - Content identifier
- * @param options - Fetch options
- * @returns Promise resolving to StreamResult
- * @throws IpfsError if retrieval fails
+ * Stream content from Synapse (wraps full download in a ReadableStream).
  */
 export async function streamFromIpfs(
-  cid: string,
+  pieceCid: string,
   options: FetchOptions = {}
 ): Promise<StreamResult> {
-  const result = await fetchFromIpfs(cid, options)
-  
-  // Wrap the downloaded bytes in a ReadableStream
+  const result = await fetchPieceFromSynapse(pieceCid, options)
+
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(result.data)
       controller.close()
-    }
+    },
   })
-  
+
   return {
     stream,
     url: result.url,
@@ -235,16 +205,11 @@ export async function streamFromIpfs(
   }
 }
 
-// ============================================================================
-// Encrypted Data Fetching
-// ============================================================================
-
 /**
- * Fetch encrypted data for decryption.
- * Convenience wrapper with appropriate defaults for encrypted video content.
+ * Fetch encrypted CAR bytes for decryption (Synapse piece CID).
  */
 export async function fetchEncryptedData(
-  cid: string,
+  pieceCid: string,
   options: FetchOptions = {}
 ): Promise<FetchResult> {
   const encryptedOptions: FetchOptions = {
@@ -252,41 +217,37 @@ export async function fetchEncryptedData(
     retries: 3,
     ...options,
   }
-  
-  return fetchFromIpfs(cid, encryptedOptions)
+
+  return fetchPieceFromSynapse(pieceCid, encryptedOptions)
 }
 
-// ============================================================================
-// Batch Operations
-// ============================================================================
-
 /**
- * Fetch multiple CIDs in parallel with concurrency limit.
+ * Fetch multiple piece CIDs in parallel with concurrency limit.
  */
 export async function fetchMultiple(
-  cids: string[],
+  pieceCids: string[],
   options: FetchOptions = {},
   concurrency: number = 3
 ): Promise<(FetchResult | null)[]> {
-  const results: (FetchResult | null)[] = new Array(cids.length).fill(null)
-  
-  for (let i = 0; i < cids.length; i += concurrency) {
-    const batch = cids.slice(i, i + concurrency)
-    const batchPromises = batch.map(async (cid) => {
+  const results: (FetchResult | null)[] = new Array(pieceCids.length).fill(null)
+
+  for (let i = 0; i < pieceCids.length; i += concurrency) {
+    const batch = pieceCids.slice(i, i + concurrency)
+    const batchPromises = batch.map(async (pieceCid) => {
       try {
-        return await fetchFromIpfs(cid, options)
+        return await fetchPieceFromSynapse(pieceCid, options)
       } catch (error) {
-        console.error(`[ipfsService] Failed to fetch ${cid}:`, error)
+        console.error(`[ipfsService] Failed to fetch ${pieceCid}:`, error)
         return null
       }
     })
-    
+
     const batchResults = await Promise.all(batchPromises)
     batchResults.forEach((result, batchIndex) => {
       results[i + batchIndex] = result
     })
   }
-  
+
   return results
 }
 
@@ -294,4 +255,4 @@ export async function fetchMultiple(
 // Error Handling Exports
 // ============================================================================
 
-export { IpfsError, getIpfsErrorMessage, isValidCid }
+export { IpfsError, getIpfsErrorMessage }

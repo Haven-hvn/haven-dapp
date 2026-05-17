@@ -22,7 +22,7 @@
 
 import { hasVideo, putVideo, getCacheStorageEstimate } from './video-cache'
 import { hasCachedKey } from './aes-key-cache'
-import { fetchFromIpfs } from '@/services/ipfsService'
+import { fetchPinnedContent } from '@/services/ipfsService'
 import type { Video } from '@/types'
 
 // ============================================================================
@@ -614,14 +614,7 @@ async function executePrefetch(item: PrefetchItem): Promise<void> {
   // Update status
   item.status = 'fetching'
 
-  // Get the CID to fetch
-  const cid = video.encryptedCid || video.filecoinCid
-  if (!cid) {
-    throw new Error('No CID available for video')
-  }
-
-  // Fetch the encrypted data
-  const fetchResult = await fetchFromIpfs(cid, {
+  const fetchResult = await fetchPinnedContent(video, {
     abortSignal: signal,
   })
 

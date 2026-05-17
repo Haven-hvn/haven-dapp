@@ -43,13 +43,6 @@ const STAGE_CONFIG: Record<LoadingStage, {
     isIndeterminate: true,
     iconClass: 'text-blue-400',
   },
-  'decrypting-cid': {
-    icon: Key,
-    message: 'Please approve in your wallet...',
-    showProgress: true,
-    isIndeterminate: true,
-    iconClass: 'text-purple-400',
-  },
   'fetching': {
     icon: Download,
     message: 'Downloading encrypted video...',
@@ -109,7 +102,6 @@ function getIconBgClass(stage: LoadingStage): string {
     case 'checking-cache':
     case 'caching':
       return 'bg-blue-500/20'
-    case 'decrypting-cid':
     case 'fetching':
     case 'authenticating':
     case 'decrypting-key':
@@ -136,7 +128,7 @@ export function CacheAwareProgress({
   
   const Icon = config.icon
   const iconBgClass = getIconBgClass(stage)
-  const isSpinner = stage === 'checking-cache' || stage === 'authenticating' || stage === 'decrypting-cid'
+  const isSpinner = stage === 'checking-cache' || stage === 'authenticating'
 
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm z-10">
@@ -173,7 +165,7 @@ export function CacheAwareProgress({
         )}
         
         {/* Special message for stages that require wallet signature */}
-        {(stage === 'authenticating' || stage === 'decrypting-cid') && (
+        {stage === 'authenticating' && (
           <div className="mt-4 text-center">
             <p className="text-sm text-white/70 font-medium animate-pulse">
               Check your wallet for a signature request

@@ -27,13 +27,12 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useWalletClient } from 'wagmi'
 import { useServiceWorker } from './useServiceWorker'
 import { useProgressivePlayback } from './useProgressivePlayback'
-import { useCidDecryption } from './useCidDecryption'
 import { hasVideo, putVideo, deleteVideo, getVideoUrl } from '@/lib/video-cache'
+import { requirePieceCid } from '@/lib/download-cid'
 import { requestPersistentStorageSilent, isPersisted } from '@/lib/storage-persistence'
 import { touchVideo } from '@/lib/cache-expiration'
 import { getVideoCacheService } from '@/services/cacheService'
-import { fetchFromIpfs } from '@/services/ipfsService'
-import { resolveSynapseDownloadCid } from '@/lib/download-cid'
+import { fetchPinnedContent } from '@/services/ipfsService'
 import { decryptContentKey, isGateMetadata, getHavenAolErrorMessage } from '@/lib/haven-aol'
 import type { WalletClientLike } from '@/lib/haven-aol'
 import { decryptChunkedStream, parseChunkedFileHeader, concatenateChunks } from '@/lib/chunked-decrypt'
@@ -51,8 +50,7 @@ import type { Video } from '@/types'
  */
 export type LoadingStage =
   | 'checking-cache'    // Checking if video is in Cache API
-  | 'decrypting-cid'   // Decrypting encrypted CID via Haven-AOL
-  | 'fetching'         // Downloading encrypted data via IPFS
+  | 'fetching'         // Downloading encrypted data via Synapse (piece CID)
   | 'authenticating'   // Authenticating with Haven-AOL (EIP-712)
   | 'decrypting-key'   // Recovering AES key from ICP canister
   | 'streaming'        // Progressive decryption + playback in progress
@@ -107,7 +105,6 @@ export interface UseVideoCacheReturn {
 
 const PROGRESS_WEIGHTS: Record<LoadingStage, number> = {
   'checking-cache': 5,
-  'decrypting-cid': 15,
   fetching: 25,
   authenticating: 40,
   'decrypting-key': 55,
@@ -143,7 +140,6 @@ const PROGRESS_WEIGHTS: Record<LoadingStage, number> = {
 export function useVideoCache(video: Video | null): UseVideoCacheReturn {
   useServiceWorker()
   const { data: walletClient } = useWalletClient()
-  const { decryptCid: decryptVideoCid } = useCidDecryption()
   const progressive = useProgressivePlayback()
 
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
@@ -162,13 +158,8 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
   const abortControllerRef = useRef<AbortController | null>(null)
 
   // Refs for callbacks — breaks the dependency chain that causes infinite loops
-  const decryptVideoCidRef = useRef(decryptVideoCid)
   const walletClientRef = useRef(walletClient)
   const progressiveRef = useRef(progressive)
-
-  useEffect(() => {
-    decryptVideoCidRef.current = decryptVideoCid
-  }, [decryptVideoCid])
 
   useEffect(() => {
     walletClientRef.current = walletClient
@@ -227,12 +218,12 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
       setTotalChunks(0)
 
       try {
-        // Non-encrypted videos: fetch via IPFS, store in cache, serve via SW
+        // Non-encrypted videos: fetch via Synapse piece CID, store in cache, serve via SW
         if (!videoToLoad.isEncrypted) {
+          requirePieceCid(videoToLoad)
           updateStage('fetching')
 
-          const downloadCid = resolveSynapseDownloadCid(videoToLoad)
-          const result = await fetchFromIpfs(downloadCid)
+          const result = await fetchPinnedContent(videoToLoad)
 
           if (signal.aborted) throw new Error('Loading cancelled')
 
@@ -283,38 +274,12 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
           return
         }
 
-        // Step 2: Decrypt root CID for metadata / VetKD (optional cache)
-        let decryptedRootCid: string | null =
-          videoToLoad.decryptedCid ?? null
+        requirePieceCid(videoToLoad)
 
-        if (
-          !decryptedRootCid &&
-          videoToLoad.cidEncryptionMetadata &&
-          videoToLoad.encryptedCid
-        ) {
-          updateStage('decrypting-cid')
-
-          decryptedRootCid = await decryptVideoCidRef.current(videoToLoad)
-
-          if (signal.aborted) throw new Error('Loading cancelled')
-
-          if (!decryptedRootCid) {
-            throw new Error(
-              'Failed to decrypt CID — wallet may not be connected or signature was rejected'
-            )
-          }
-
-          try {
-            const cacheService = getVideoCacheService(videoToLoad.owner)
-            await cacheService.updateDecryptedCid(videoToLoad.id, decryptedRootCid)
-          } catch { /* non-critical */ }
-        }
-
-        // Step 3: Fetch encrypted bytes from Filecoin (Synapse needs piece CID, not root)
+        // Step 2: Fetch encrypted bytes from Synapse (Arkiv piece_cid)
         updateStage('fetching')
 
-        const downloadCid = resolveSynapseDownloadCid(videoToLoad, decryptedRootCid)
-        const fetchResult = await fetchFromIpfs(downloadCid)
+        const fetchResult = await fetchPinnedContent(videoToLoad)
 
         if (signal.aborted) throw new Error('Loading cancelled')
 

@@ -1,48 +1,37 @@
 /**
- * Tests for download-cid.ts
+ * Tests for download-cid.ts (Filecoin Pin piece CID)
  */
 
 import { describe, it, expect } from 'vitest'
-import {
-  isPieceCid,
-  isRootIpfsCid,
-  resolveSynapseDownloadCid,
-} from '../download-cid'
+import { isFilecoinPieceCid, requirePieceCid } from '../download-cid'
 import { createMockVideo } from '../cache/__tests__/fixtures'
 
-describe('isPieceCid', () => {
-  it('detects baga piece CIDs', () => {
-    expect(isPieceCid('baga6ea4seaqexample')).toBe(true)
+const PIECE = 'bafkzcibe2hzbcd4t6clvsb3mfrezyxl75gl3gzcsqi42dd27gktq4nk75rr62ciuaq'
+const ROOT = 'bafybeidounfsl4czdwgsodecmdzbe2vfac5mamr3k5vdpml2a6yrgwattu'
+
+describe('isFilecoinPieceCid', () => {
+  it('detects bafkzcib piece CIDs from filecoin-pin', () => {
+    expect(isFilecoinPieceCid(PIECE)).toBe(true)
   })
 
-  it('rejects root bafy CIDs', () => {
-    expect(isPieceCid('bafybeidounfsl4czdwgsodecmdzbe2vfac5mamr3k5vdpml2a6yrgwattu')).toBe(false)
-  })
-})
-
-describe('isRootIpfsCid', () => {
-  it('detects bafy and Qm roots', () => {
-    expect(isRootIpfsCid('bafybeidounfsl4czdwgsodecmdzbe2vfac5mamr3k5vdpml2a6yrgwattu')).toBe(true)
-    expect(isRootIpfsCid('QmTest123')).toBe(true)
+  it('does not treat bafy root as piece', () => {
+    expect(isFilecoinPieceCid(ROOT)).toBe(false)
   })
 })
 
-describe('resolveSynapseDownloadCid', () => {
-  it('prefers pieceCid on video', () => {
-    const video = createMockVideo({
-      pieceCid: 'baga6ea4seaqdownload',
-      filecoinCid: 'bafybeiroot',
-    })
-    expect(resolveSynapseDownloadCid(video, 'bafybeiroot')).toBe('baga6ea4seaqdownload')
+describe('requirePieceCid', () => {
+  it('returns normalized piece CID from video', () => {
+    const video = createMockVideo({ pieceCid: PIECE })
+    expect(requirePieceCid(video)).toBe(PIECE)
   })
 
-  it('throws when only root CID is available', () => {
-    const video = createMockVideo({
-      pieceCid: undefined,
-      filecoinCid: 'bafybeidounfsl4czdwgsodecmdzbe2vfac5mamr3k5vdpml2a6yrgwattu',
-    })
-    expect(() =>
-      resolveSynapseDownloadCid(video, 'bafybeidounfsl4czdwgsodecmdzbe2vfac5mamr3k5vdpml2a6yrgwattu')
-    ).toThrow(/piece CID/)
+  it('throws when piece_cid is missing', () => {
+    const video = createMockVideo({ pieceCid: undefined })
+    expect(() => requirePieceCid(video)).toThrow(/Missing piece_cid/)
+  })
+
+  it('throws when piece_cid is not a Filecoin piece CID', () => {
+    const video = createMockVideo({ pieceCid: ROOT })
+    expect(() => requirePieceCid(video)).toThrow(/Invalid piece_cid/)
   })
 })

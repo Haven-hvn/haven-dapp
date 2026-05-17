@@ -1,9 +1,9 @@
 /**
- * Resolve which CID to pass to Synapse for content download.
+ * Filecoin Pin piece CID helpers for Synapse download.
  *
- * Synapse `storage.download` requires a Filecoin **piece CID** (`baga…`).
- * Arkiv stores an encrypted **root** CID (`bafy…` / `Qm…`) in attributes;
- * decrypting it yields the root CID, which must not be used for Synapse fetch.
+ * Uploads via filecoin-pin produce a **piece CID** (`bafkzcib…`) stored on Arkiv as
+ * `piece_cid`. Haven retrieves encrypted CAR bytes only through
+ * `synapse.storage.download({ pieceCid })`.
  *
  * @module lib/download-cid
  */
@@ -11,54 +11,25 @@
 import type { Video } from '../types/video'
 import { normalizeCid } from './ipfs'
 
-/** Filecoin piece CIDs (CommP) used by Synapse storage.download. */
-export function isPieceCid(cid: string): boolean {
+/** Filecoin Piece CID (CommP) — `bafkzcib…` per FRC-0069 / filecoin-pin glossary. */
+export function isFilecoinPieceCid(cid: string): boolean {
   const normalized = normalizeCid(cid)
-  return normalized.startsWith('baga')
-}
-
-/** IPFS / aggregate root CIDs — not valid for Synapse piece download. */
-export function isRootIpfsCid(cid: string): boolean {
-  const normalized = normalizeCid(cid)
-  return (
-    normalized.startsWith('bafy') ||
-    normalized.startsWith('bafk') ||
-    normalized.startsWith('bafz') ||
-    normalized.startsWith('Qm')
-  )
+  return normalized.startsWith('bafkzcib') && normalized.length >= 59
 }
 
 /**
- * CID to pass to Synapse when fetching encrypted or plain content bytes.
- *
- * @throws Error when only a root CID is available (legacy uploads without `piece_cid` on Arkiv)
+ * Require a valid Filecoin piece CID on the video (Arkiv `piece_cid`).
  */
-export function resolveSynapseDownloadCid(
-  video: Video,
-  decryptedRootCid?: string | null
-): string {
-  if (video.pieceCid && isPieceCid(video.pieceCid)) {
-    return normalizeCid(video.pieceCid)
-  }
-
-  if (decryptedRootCid && isPieceCid(decryptedRootCid)) {
-    return normalizeCid(decryptedRootCid)
-  }
-
-  if (video.filecoinCid && isPieceCid(video.filecoinCid)) {
-    return normalizeCid(video.filecoinCid)
-  }
-
-  const rootHint = decryptedRootCid || video.filecoinCid
-  if (rootHint && isRootIpfsCid(rootHint)) {
+export function requirePieceCid(video: Video): string {
+  const raw = video.pieceCid?.trim()
+  if (!raw) {
     throw new Error(
-      'This video only has an IPFS root CID on Arkiv, not a Filecoin piece CID. ' +
-        'Re-upload with the latest haven-cli (stores piece_cid in the payload) to play via Synapse.'
+      'Missing piece_cid on Arkiv. Re-upload with haven-cli so the entity stores the Filecoin Pin piece CID for Synapse download.'
     )
   }
-
-  throw new Error(
-    'No Filecoin piece CID available for download. ' +
-      'Ensure the video was uploaded with haven-cli and includes piece_cid in the Arkiv payload.'
-  )
+  const cid = normalizeCid(raw)
+  if (!isFilecoinPieceCid(cid)) {
+    throw new Error(`Invalid piece_cid on Arkiv (expected bafkzcib…): ${raw}`)
+  }
+  return cid
 }

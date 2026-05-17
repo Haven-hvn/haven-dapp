@@ -84,8 +84,6 @@ export async function videoToCachedVideo(
     videoCacheStatus: 'not-cached',
     videoCachedAt: undefined,
 
-    // Preserve decrypted CID from existing cache entry
-    decryptedCid: existingCache?.decryptedCid ?? video.decryptedCid,
   }
 }
 
@@ -144,8 +142,6 @@ export function cachedVideoToVideo(cached: CachedVideo): Video {
     // Expiration tracking
     expiresAtBlock: cached.expiresAtBlock,
 
-    // Decrypted CID (from cache)
-    decryptedCid: cached.decryptedCid,
   }
 }
 

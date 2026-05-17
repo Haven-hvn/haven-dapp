@@ -10,13 +10,26 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { 
-  fetchFromIpfs, 
+import {
+  fetchPieceFromSynapse,
   streamFromIpfs,
-  type FetchOptions, 
+  type FetchOptions,
   type FetchResult,
 } from '@/services/ipfsService'
-import { IpfsError, getIpfsErrorMessage, isValidCid } from '@/lib/ipfs'
+import { IpfsError, getIpfsErrorMessage, normalizeCid } from '@/lib/ipfs'
+import { isFilecoinPieceCid } from '@/lib/download-cid'
+
+function assertPieceCid(cid: string): string {
+  const normalized = normalizeCid(cid)
+  if (!isFilecoinPieceCid(normalized)) {
+    throw new IpfsError(
+      `Expected Filecoin piece CID (bafkzcib…), got: ${cid}`,
+      'INVALID_CID',
+      normalized
+    )
+  }
+  return normalized
+}
 
 // ============================================================================
 // Types
@@ -262,23 +275,19 @@ export function useIpfsFetch(
     cid: string,
     fetchOptions?: FetchOptions
   ): Promise<Uint8Array | null> => {
-    // Validate CID
-    if (!isValidCid(cid)) {
-      const error = new IpfsError(
-        `Invalid CID: ${cid}`,
-        'INVALID_CID',
-        cid
-      )
-      
+    let pieceCid: string
+    try {
+      pieceCid = assertPieceCid(cid)
+    } catch (err) {
+      const error = err instanceof IpfsError ? err : new IpfsError(String(err), 'INVALID_CID', cid)
       if (isMountedRef.current) {
         setError(error)
         setErrorMessage(getIpfsErrorMessage(error))
       }
-      
       onError?.(error, cid)
       return null
     }
-    
+
     // Cancel any existing fetch
     abortControllerRef.current?.abort()
     abortControllerRef.current = new AbortController()
@@ -295,7 +304,7 @@ export function useIpfsFetch(
     startTimeRef.current = performance.now()
     
     try {
-      const result = await fetchFromIpfs(cid, {
+      const result = await fetchPieceFromSynapse(pieceCid, {
         ...fetchOptions,
         abortSignal: abortControllerRef.current.signal,
         onProgress: handleProgress,
@@ -359,23 +368,19 @@ export function useIpfsFetch(
     cid: string,
     fetchOptions?: FetchOptions
   ): Promise<ReadableStream<Uint8Array> | null> => {
-    // Validate CID
-    if (!isValidCid(cid)) {
-      const error = new IpfsError(
-        `Invalid CID: ${cid}`,
-        'INVALID_CID',
-        cid
-      )
-      
+    let pieceCid: string
+    try {
+      pieceCid = assertPieceCid(cid)
+    } catch (err) {
+      const error = err instanceof IpfsError ? err : new IpfsError(String(err), 'INVALID_CID', cid)
       if (isMountedRef.current) {
         setError(error)
         setErrorMessage(getIpfsErrorMessage(error))
       }
-      
       onError?.(error, cid)
       return null
     }
-    
+
     // Cancel any existing operation
     abortControllerRef.current?.abort()
     abortControllerRef.current = new AbortController()
@@ -389,7 +394,7 @@ export function useIpfsFetch(
     }
     
     try {
-      const result = await streamFromIpfs(cid, {
+      const result = await streamFromIpfs(pieceCid, {
         ...fetchOptions,
         abortSignal: abortControllerRef.current.signal,
       })

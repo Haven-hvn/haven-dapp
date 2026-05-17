@@ -18,16 +18,14 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useWalletClient } from 'wagmi'
 import { getVideo, hasVideo, putVideo } from '@/lib/video-cache'
-import { fetchFromIpfs } from '@/services/ipfsService'
+import { fetchPinnedContent } from '@/services/ipfsService'
 import {
   decryptContentKey,
-  decryptCidWithHavenAol,
   isGateMetadata,
   getHavenAolErrorMessage,
-  parseCidEncryptionMetadata,
 } from '@/lib/haven-aol'
 import type { WalletClientLike } from '@/lib/haven-aol'
-import { base64ToUint8Array } from '@/lib/crypto'
+import { requirePieceCid } from '@/lib/download-cid'
 import { decryptChunkedFile, type ChunkedDecryptProgress } from '@/lib/chunked-decrypt'
 import type { Video } from '@/types'
 
@@ -238,14 +236,12 @@ export function useVideoDownload(): UseVideoDownloadReturn {
       // Full pipeline: Fetch → Decrypt Key → Decrypt File → Download
       // =====================================================================
 
-      // Non-encrypted videos: just fetch and download
+      // Non-encrypted videos: fetch piece from Synapse and download
       if (!video.isEncrypted) {
+        requirePieceCid(video)
         updateStage('fetching')
 
-        const cid = video.filecoinCid
-        if (!cid) throw new Error('No CID available for this video')
-
-        const fetchResult = await fetchFromIpfs(cid)
+        const fetchResult = await fetchPinnedContent(video)
         if (signal.aborted) throw new Error('Download cancelled')
 
         updateStage('preparing')
@@ -264,64 +260,16 @@ export function useVideoDownload(): UseVideoDownloadReturn {
         throw new Error('Missing encryption metadata')
       }
 
-      // Step 1: Resolve CID (decrypt if needed)
-      let cid: string | undefined
+      requirePieceCid(video)
 
-      if (video.decryptedCid) {
-        // Already decrypted (cached from a previous session)
-        cid = video.decryptedCid
-      } else if (video.cidEncryptionMetadata && video.encryptedCid) {
-        // Encrypted CID — must decrypt via Haven-AOL to get the real IPFS CID
-        updateStage('authenticating', undefined, 'Decrypting content address...')
-
-        const currentWalletForCid = walletClientRef.current
-        if (!currentWalletForCid) {
-          throw new Error('Please connect your wallet to download this video.')
-        }
-
-        const cidMeta =
-          (video.cidEncryptionMetadata && isGateMetadata(video.cidEncryptionMetadata)
-            ? video.cidEncryptionMetadata
-            : parseCidEncryptionMetadata(video.cidEncryptionMetadata)) ?? null
-        if (!cidMeta) {
-          throw new Error('Invalid CID encryption metadata — expected Haven-AOL gate v1')
-        }
-        const encryptedCidBytes = base64ToUint8Array(video.encryptedCid)
-
-        const decryptedCid = await decryptCidWithHavenAol({
-          cidEncryptionMetadata: cidMeta,
-          encryptedCid: video.encryptedCid,
-          encryptedCidData: encryptedCidBytes,
-          walletClient: currentWalletForCid as unknown as WalletClientLike,
-          onProgress: (msg) => {
-            if (isMountedRef.current) {
-              updateStage('authenticating', undefined, msg)
-            }
-          },
-          signal,
-        })
-
-        if (signal.aborted) throw new Error('Download cancelled')
-        cid = decryptedCid
-      } else {
-        // Fallback: use plain filecoinCid (non-encrypted CID path)
-        cid = video.filecoinCid
-      }
-
-      if (!cid) {
-        throw new Error(
-          'No CID available for this video. The Arkiv entity may be missing encrypted_cid or filecoin_root_cid.'
-        )
-      }
-
-      // Step 2: Fetch encrypted data
+      // Step 1: Fetch encrypted CAR from Synapse (piece_cid)
       updateStage('fetching')
-      const fetchResult = await fetchFromIpfs(cid)
+      const fetchResult = await fetchPinnedContent(video, { abortSignal: signal })
       if (signal.aborted) throw new Error('Download cancelled')
 
       const encryptedData = fetchResult.data
 
-      // Step 3: Decrypt AES key via Haven-AOL
+      // Step 2: Decrypt AES key via Haven-AOL
       updateStage('authenticating')
 
       const currentWalletClient = walletClientRef.current
@@ -349,7 +297,7 @@ export function useVideoDownload(): UseVideoDownloadReturn {
 
       if (signal.aborted) throw new Error('Download cancelled')
 
-      // Step 4: Chunked AES decryption
+      // Step 3: Chunked AES decryption
       updateStage('decrypting-file')
 
       const onChunkProgress: ChunkedDecryptProgress = (chunkIdx, totalEst) => {
@@ -367,7 +315,7 @@ export function useVideoDownload(): UseVideoDownloadReturn {
 
       if (signal.aborted) throw new Error('Download cancelled')
 
-      // Step 5: Trigger browser download
+      // Step 4: Trigger browser download
       updateStage('preparing')
 
       const mimeType = video.contentMimeType || 'video/mp4'

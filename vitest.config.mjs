@@ -1,16 +1,15 @@
-import { dirname, join } from 'path'
-import { fileURLToPath } from 'url'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const root = dirname(fileURLToPath(import.meta.url))
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
-/** @type {import('vitest').UserConfig} */
 export default {
   test: {
     environment: 'node',
   },
   resolve: {
     alias: {
-      'haven-aol': join(root, 'haven-aol-main/packages/typescript/src/index.ts'),
+      '@': resolve(__dirname, 'src'),
     },
   },
 }

@@ -28,7 +28,7 @@ jest.mock('../aes-key-cache', () => ({
 }))
 
 jest.mock('@/services/ipfsService', () => ({
-  fetchFromIpfs: jest.fn().mockResolvedValue({ data: new Uint8Array([1, 2, 3]), size: 3, gateway: 'test' }),
+  fetchPinnedContent: jest.fn().mockResolvedValue({ data: new Uint8Array([1, 2, 3]), size: 3, gateway: 'test' }),
 }))
 
 describe('video-prefetch', () => {
