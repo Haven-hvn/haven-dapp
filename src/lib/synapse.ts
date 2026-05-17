@@ -2,8 +2,7 @@
  * Synapse SDK Utilities
  * 
  * Client-side module for retrieving data from Filecoin Onchain Cloud
- * via the Synapse SDK. Provides download functionality as a replacement
- * for direct IPFS HTTP gateway fetching.
+ * via the Synapse SDK (`storage.download` by Filecoin piece CID).
  * 
  * No private key or funded wallet is required — the SDK auto-generates
  * a throwaway key for initialization. Downloads of public data are free.

@@ -114,20 +114,11 @@ export {
 } from './crypto'
 
 
-// IPFS utilities
+// CID normalization and retrieval errors (bytes via Synapse)
 export {
-  getIpfsConfig,
-  buildIpfsUrl,
-  buildIpfsUrls,
-  buildIpfsPathUrl,
   normalizeCid,
-  isValidCid,
-  isGatewayHealthy,
-  getHealthyGateways,
   getIpfsErrorMessage,
   IpfsError,
-  IPFS_GATEWAYS,
-  type IpfsConfig,
 } from './ipfs'
 
 // Synapse SDK utilities (Filecoin Onchain Cloud retrieval)
@@ -139,23 +130,6 @@ export {
   SynapseError,
   type SynapseConfig,
 } from './synapse'
-
-// Media capabilities utilities
-export {
-  isMediaCapabilitiesSupported,
-  detectCodecSupport,
-  canPlayAv1,
-  canPlayH264,
-  canPlayVp9,
-  getBestCodecSync,
-  getMediaCapabilities,
-  checkCodecSupport,
-  formatCodecSupport,
-  createCodecConfig,
-  type CodecSupport,
-  type VideoCodec,
-  type MediaCapabilitiesResult,
-} from './mediaCapabilities'
 
 // Video Cache API wrapper
 export {

@@ -167,7 +167,7 @@ function getStagingFilename(videoId: string): string {
  * @example
  * ```typescript
  * // Stream from Synapse SDK to OPFS staging
- * const synapseStream = await streamFromIpfs(cid)
+ * const synapseStream = (await streamFromIpfs(pieceCid)).stream
  * const bytesWritten = await writeToStaging(video.id, synapseStream, (bytes) => {
  *   setProgress((bytes / estimatedSize) * 100)
  * })

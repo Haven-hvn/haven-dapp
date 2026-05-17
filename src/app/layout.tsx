@@ -124,8 +124,6 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="dns-prefetch" href="https://ipfs.io" />
-        <link rel="dns-prefetch" href="https://gateway.lighthouse.storage" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
