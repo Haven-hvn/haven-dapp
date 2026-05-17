@@ -8,7 +8,6 @@
  */
 
 import type { Video, VlmAnalysis, SegmentMetadata, VideoProcessingStatus } from './video'
-import type { LitEncryptionMetadata, CidEncryptionMetadata, AccessControlCondition } from './encryption'
 import type { ArkivEntity, ArkivPayload, ArkivAttributes, ArkivSegmentMetadata } from './arkiv'
 import type { VideoCardData, LibraryState, ViewMode, SortField, SortOrder } from './ui'
 
@@ -110,89 +109,6 @@ export function isVlmAnalysis(obj: unknown): obj is VlmAnalysis {
  */
 export function isVideoProcessingStatus(status: string): status is VideoProcessingStatus {
   return ['pending', 'uploading', 'encrypting', 'analyzing', 'storing', 'complete', 'failed'].includes(status)
-}
-
-// ============================================================================
-// Encryption Metadata Type Guards
-// ============================================================================
-
-/**
- * Check if a value is a valid LitEncryptionMetadata (hybrid-v1) object.
- * 
- * @param obj - Value to check
- * @returns True if obj is a valid LitEncryptionMetadata
- * 
- * @example
- * ```typescript
- * const metadata = JSON.parse(jsonString)
- * if (isLitEncryptionMetadata(metadata)) {
- *   // Safe to use metadata.encryptedKey, etc.
- * }
- * ```
- */
-export function isLitEncryptionMetadata(obj: unknown): obj is LitEncryptionMetadata {
-  if (typeof obj !== 'object' || obj === null) return false
-  
-  const m = obj as Record<string, unknown>
-  
-  return (
-    m.version === 'hybrid-v1' &&
-    typeof m.encryptedKey === 'string' &&
-    typeof m.keyHash === 'string' &&
-    typeof m.iv === 'string' &&
-    m.algorithm === 'AES-GCM' &&
-    m.keyLength === 256 &&
-    Array.isArray(m.accessControlConditions) &&
-    m.accessControlConditions.every(isAccessControlCondition) &&
-    typeof m.chain === 'string'
-  )
-}
-
-/**
- * Check if a value is a valid AccessControlCondition object.
- * 
- * @param obj - Value to check
- * @returns True if obj is a valid AccessControlCondition
- */
-export function isAccessControlCondition(obj: unknown): obj is AccessControlCondition {
-  if (typeof obj !== 'object' || obj === null) return false
-  
-  const c = obj as Record<string, unknown>
-  
-  const validStandardTypes = ['', 'ERC20', 'ERC721', 'ERC1155', 'PKPPermissions']
-  const validComparators = ['=', '>', '>=', '<', '<=', 'contains']
-  
-  return (
-    typeof c.contractAddress === 'string' &&
-    validStandardTypes.includes(c.standardContractType as string) &&
-    typeof c.chain === 'string' &&
-    typeof c.method === 'string' &&
-    Array.isArray(c.parameters) &&
-    typeof c.returnValueTest === 'object' &&
-    c.returnValueTest !== null &&
-    validComparators.includes((c.returnValueTest as Record<string, unknown>).comparator as string) &&
-    typeof (c.returnValueTest as Record<string, unknown>).value === 'string'
-  )
-}
-
-/**
- * Check if a value is a valid CidEncryptionMetadata object.
- * 
- * @param obj - Value to check
- * @returns True if obj is a valid CidEncryptionMetadata
- */
-export function isCidEncryptionMetadata(obj: unknown): obj is CidEncryptionMetadata {
-  if (typeof obj !== 'object' || obj === null) return false
-  
-  const m = obj as Record<string, unknown>
-  
-  return (
-    typeof m.ciphertext === 'string' &&
-    typeof m.dataToEncryptHash === 'string' &&
-    Array.isArray(m.accessControlConditions) &&
-    m.accessControlConditions.every(isAccessControlCondition) &&
-    typeof m.chain === 'string'
-  )
 }
 
 // ============================================================================
@@ -415,21 +331,6 @@ export function parseArkivPayloadSafe(payloadBase64: string):
 }
 
 /**
- * Parse legacy encryption metadata from JSON string.
- * 
- * @param metadataJson - JSON string containing LitEncryptionMetadata
- * @returns Parsed metadata or null if invalid
- */
-export function parseLitMetadata(metadataJson: string): LitEncryptionMetadata | null {
-  try {
-    const parsed = JSON.parse(metadataJson)
-    return isLitEncryptionMetadata(parsed) ? parsed : null
-  } catch {
-    return null
-  }
-}
-
-/**
  * Parse ISO 8601 date string to Date object.
  * Returns null if parsing fails.
  * 
@@ -463,23 +364,6 @@ export function parseDateSafe(dateString: string): Date | null {
 export function assertVideo(value: unknown, message?: string): asserts value is Video {
   if (!isVideo(value)) {
     throw new TypeError(message || 'Value is not a valid Video')
-  }
-}
-
-/**
- * Assert that a value is a valid LitEncryptionMetadata (hybrid-v1 format).
- * Throws if the value is not valid.
- * 
- * @param value - Value to check
- * @param message - Optional error message
- * @throws TypeError if value is not valid
- */
-export function assertLitEncryptionMetadata(
-  value: unknown, 
-  message?: string
-): asserts value is LitEncryptionMetadata {
-  if (!isLitEncryptionMetadata(value)) {
-    throw new TypeError(message || 'Value is not valid LitEncryptionMetadata')
   }
 }
 

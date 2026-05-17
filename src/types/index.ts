@@ -6,7 +6,6 @@
  * 
  * - auth: Authentication and user types
  * - arkiv: Arkiv blockchain entity types
- * - encryption: Legacy encryption types (for parsing existing Arkiv data)
  * - video: Video entity and metadata types
  * - ui: UI component and state types
  * - guards: Type guards for runtime validation
@@ -25,12 +24,6 @@ export * from './auth'
 // ============================================================================
 
 export * from './arkiv'
-
-// ============================================================================
-// Encryption Types (legacy format, used for Arkiv payload parsing)
-// ============================================================================
-
-export * from './encryption'
 
 // ============================================================================
 // Video Entity Types
