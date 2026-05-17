@@ -15,10 +15,9 @@ import type { Video } from '@/types'
 import {
   decryptContentKey,
   getHavenAolErrorMessage,
-  isHybridV1Metadata,
+  isGateMetadata,
+  parseCidEncryptionMetadata,
   type WalletClientLike,
-  type HybridV1EncryptionMetadata,
-  type GateMetadataJson,
 } from '@/lib/haven-aol'
 import { base64ToUint8Array } from '@/lib/crypto'
 
@@ -222,11 +221,19 @@ export function useCidDecryption(
       // Decrypt the CID using Haven-AOL
       updateProgress('authenticating', 'Sign with your wallet to decrypt CID...')
 
-      // Get the AES key for CID decryption
-      // Type narrowing: cidEncryptionMetadata may be legacy CidEncryptionMetadata or EncryptionMetadata
-      const cidMeta = video.cidEncryptionMetadata as HybridV1EncryptionMetadata | GateMetadataJson
+      const cidMeta =
+        (video.cidEncryptionMetadata && isGateMetadata(video.cidEncryptionMetadata)
+          ? video.cidEncryptionMetadata
+          : parseCidEncryptionMetadata(video.cidEncryptionMetadata)) ?? null
+      if (!cidMeta) {
+        throw new Error(
+          'Invalid CID encryption metadata — expected Haven-AOL gate v1 (version: 1)'
+        )
+      }
+
       const { aesKey } = await decryptContentKey({
         encryptionMetadata: cidMeta,
+        encryptedCid: video.encryptedCid,
         walletClient: currentWalletClient as unknown as WalletClientLike,
         onProgress: (msg) => {
           updateProgress('decrypting', msg)
@@ -242,18 +249,8 @@ export function useCidDecryption(
       // The encryptedCid from Arkiv is the ciphertext (base64 encoded or raw)
       const encryptedCidBytes = base64ToUint8Array(video.encryptedCid)
 
-      // Get IV from CID metadata
-      let iv: Uint8Array
-      if (isHybridV1Metadata(video.cidEncryptionMetadata)) {
-        iv = base64ToUint8Array(video.cidEncryptionMetadata.iv)
-      } else {
-        // First 12 bytes are IV
-        iv = encryptedCidBytes.slice(0, 12)
-      }
-
-      const ciphertext = isHybridV1Metadata(video.cidEncryptionMetadata)
-        ? encryptedCidBytes
-        : encryptedCidBytes.slice(12)
+      const iv = encryptedCidBytes.slice(0, 12)
+      const ciphertext = encryptedCidBytes.slice(12)
 
       // AES-GCM decrypt (copy to fresh ArrayBuffer to satisfy TypeScript BufferSource requirement)
       const toBuffer = (u: Uint8Array): ArrayBuffer => {

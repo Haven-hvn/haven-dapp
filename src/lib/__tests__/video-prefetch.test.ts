@@ -43,10 +43,14 @@ describe('video-prefetch', () => {
     hasAiData: false,
     encryptedCid: 'QmTest123',
     encryptionMetadata: {
-      keyHash: 'key-1',
-      iv: 'dGVzdGl2',
-      originalMimeType: 'video/mp4',
+      version: 1 as const,
+      cid: 'bafytest',
+      chain: 'EthMainnet' as const,
+      tokenAddress: '0x' + '11'.repeat(20),
+      threshold: '1',
+      encryptedAesKey: 'key-1'.padEnd(32, '0'),
     },
+    contentMimeType: 'video/mp4',
   }
 
   const mockNonEncryptedVideo = {

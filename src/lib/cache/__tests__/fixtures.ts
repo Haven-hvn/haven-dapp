@@ -175,16 +175,27 @@ export function createMinimalVideo(overrides?: Partial<Video>): Video {
 /**
  * Create a Video with all optional fields populated
  */
+export function createMockGateMetadata(
+  overrides: Partial<import('@/lib/haven-aol').GateMetadataJson> = {}
+): import('@/lib/haven-aol').GateMetadataJson {
+  return {
+    version: 1,
+    cid: 'bafytest',
+    chain: 'EthMainnet',
+    tokenAddress: '0x' + 'ab'.repeat(20),
+    threshold: '1',
+    encryptedAesKey: 'mock-encrypted-aes-key-b64',
+    ...overrides,
+  }
+}
+
 export function createFullVideo(overrides?: Partial<Video>): Video {
   return createMockVideo({
     description: 'Full video with all fields',
     encryptedCid: 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdl',
     isEncrypted: true,
-    encryptionMetadata: {
-      encryptedSymmetricKey: '0x1234567890abcdef',
-      accessControlConditions: [],
-      chain: 'ethereum',
-    },
+    encryptionMetadata: createMockGateMetadata(),
+    contentMimeType: 'video/mp4',
     hasAiData: true,
     vlmJsonCid: 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdm',
     mintId: 'mint-123',
@@ -209,11 +220,8 @@ export function createFullCachedVideo(overrides?: Partial<CachedVideo>): CachedV
     description: 'Full cached video with all fields',
     encryptedCid: 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdl',
     isEncrypted: true,
-    encryptionMetadata: {
-      encryptedSymmetricKey: '0x1234567890abcdef',
-      accessControlConditions: [],
-      chain: 'ethereum',
-    },
+    encryptionMetadata: createMockGateMetadata(),
+    contentMimeType: 'video/mp4',
     hasAiData: true,
     vlmJsonCid: 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdm',
     mintId: 'mint-123',

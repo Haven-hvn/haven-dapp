@@ -19,8 +19,14 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { useWalletClient } from 'wagmi'
 import { getVideo, hasVideo, putVideo } from '@/lib/video-cache'
 import { fetchFromIpfs } from '@/services/ipfsService'
-import { decryptContentKey, decryptCidWithHavenAol, isHybridV1Metadata, getHavenAolErrorMessage } from '@/lib/haven-aol'
-import type { WalletClientLike, HybridV1EncryptionMetadata, GateMetadataJson } from '@/lib/haven-aol'
+import {
+  decryptContentKey,
+  decryptCidWithHavenAol,
+  isGateMetadata,
+  getHavenAolErrorMessage,
+  parseCidEncryptionMetadata,
+} from '@/lib/haven-aol'
+import type { WalletClientLike } from '@/lib/haven-aol'
 import { base64ToUint8Array } from '@/lib/crypto'
 import { decryptChunkedFile, type ChunkedDecryptProgress } from '@/lib/chunked-decrypt'
 import type { Video } from '@/types'
@@ -273,11 +279,18 @@ export function useVideoDownload(): UseVideoDownloadReturn {
           throw new Error('Please connect your wallet to download this video.')
         }
 
-        const cidMeta = video.cidEncryptionMetadata as HybridV1EncryptionMetadata | GateMetadataJson
+        const cidMeta =
+          (video.cidEncryptionMetadata && isGateMetadata(video.cidEncryptionMetadata)
+            ? video.cidEncryptionMetadata
+            : parseCidEncryptionMetadata(video.cidEncryptionMetadata)) ?? null
+        if (!cidMeta) {
+          throw new Error('Invalid CID encryption metadata — expected Haven-AOL gate v1')
+        }
         const encryptedCidBytes = base64ToUint8Array(video.encryptedCid)
 
         const decryptedCid = await decryptCidWithHavenAol({
           cidEncryptionMetadata: cidMeta,
+          encryptedCid: video.encryptedCid,
           encryptedCidData: encryptedCidBytes,
           walletClient: currentWalletForCid as unknown as WalletClientLike,
           onProgress: (msg) => {
@@ -314,6 +327,10 @@ export function useVideoDownload(): UseVideoDownloadReturn {
       const currentWalletClient = walletClientRef.current
       if (!currentWalletClient) {
         throw new Error('Please connect your wallet to download this video.')
+      }
+
+      if (!isGateMetadata(video.encryptionMetadata)) {
+        throw new Error('Invalid content encryption metadata — expected Haven-AOL gate v1')
       }
 
       const { aesKey } = await decryptContentKey({
@@ -353,9 +370,7 @@ export function useVideoDownload(): UseVideoDownloadReturn {
       // Step 5: Trigger browser download
       updateStage('preparing')
 
-      const mimeType = isHybridV1Metadata(video.encryptionMetadata)
-        ? (video.encryptionMetadata.originalMimeType || 'video/mp4')
-        : 'video/mp4'
+      const mimeType = video.contentMimeType || 'video/mp4'
 
       const blob = new Blob([plaintext as BlobPart], { type: mimeType })
       triggerBrowserDownload(blob, filename)

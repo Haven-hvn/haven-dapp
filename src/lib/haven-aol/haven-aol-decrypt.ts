@@ -21,12 +21,8 @@ import {
 import { getHavenAolConfig } from './haven-aol-client'
 import { createSignedGateRequest, retryWithBumpedNonce, type WalletClientLike } from './haven-aol-auth'
 import {
-  toGateMetadataJson,
-  resolveDerivationCid,
-  isHybridV1Metadata,
   isGateMetadata,
   normalizeGateMetadataForDerivation,
-  type HybridV1EncryptionMetadata,
   type GateMetadataJson,
 } from './haven-aol-metadata'
 import { HavenAolDecryptError, mapGateError } from './haven-aol-errors'
@@ -40,8 +36,8 @@ import { getCachedKey, setCachedKey, getVideoIdFromMetadata } from '../aes-key-c
  * Options for decrypting the AES content key.
  */
 export interface DecryptContentKeyOptions {
-  /** The encryption metadata (hybrid-v1 or gate format) */
-  encryptionMetadata: HybridV1EncryptionMetadata | GateMetadataJson
+  /** Haven-AOL gate v1 metadata from Arkiv */
+  encryptionMetadata: GateMetadataJson
   /** The encrypted_cid attribute from Arkiv (for derivation) */
   encryptedCid?: string
   /** The wallet client for signing */
@@ -66,10 +62,12 @@ export interface DecryptContentKeyResult {
  * Options for CID decryption via Haven-AOL.
  */
 export interface DecryptCidOptions {
-  /** The CID encryption metadata */
-  cidEncryptionMetadata: HybridV1EncryptionMetadata | GateMetadataJson
+  /** Haven-AOL gate v1 metadata for the CID layer */
+  cidEncryptionMetadata: GateMetadataJson
   /** The encrypted CID bytes (base64 or raw) */
   encryptedCidData: Uint8Array
+  /** The encrypted_cid attribute from Arkiv (for VetKD derivation) */
+  encryptedCid?: string
   /** The wallet client for signing */
   walletClient: WalletClientLike
   /** Progress callback */
@@ -87,7 +85,7 @@ export interface DecryptCidOptions {
  *
  * Full flow:
  * 1. Check AES key cache
- * 2. Build gate metadata JSON from hybrid-v1 or use native gate format
+ * 2. Validate gate metadata JSON
  * 3. Sign EIP-712 gate request with wallet
  * 4. Call ICP canister for encrypted VetKD key
  * 5. Recover VetKD key with ephemeral transport key
@@ -109,11 +107,9 @@ export async function decryptContentKey(
   }
 
   // Step 0: Check AES key cache
-  const videoId = getVideoIdFromMetadata(
-    isHybridV1Metadata(encryptionMetadata)
-      ? encryptionMetadata
-      : { keyHash: encryptionMetadata.encryptedAesKey?.slice(0, 32) }
-  )
+  const videoId = getVideoIdFromMetadata({
+    keyHash: encryptionMetadata.encryptedAesKey.slice(0, 32),
+  })
   if (videoId) {
     const cached = getCachedKey(videoId)
     if (cached) {
@@ -122,24 +118,17 @@ export async function decryptContentKey(
     }
   }
 
-  // Step 1: Build gate metadata JSON
-  onProgress?.('Preparing gate metadata...')
-  let gateMetadataJson: string
-
-  if (isGateMetadata(encryptionMetadata)) {
-    gateMetadataJson = JSON.stringify(
-      normalizeGateMetadataForDerivation(encryptionMetadata)
-    )
-  } else if (isHybridV1Metadata(encryptionMetadata)) {
-    // Convert from hybrid-v1
-    const derivationCid = resolveDerivationCid(encryptedCid, encryptionMetadata.originalHash)
-    gateMetadataJson = toGateMetadataJson(encryptionMetadata, derivationCid)
-  } else {
+  if (!isGateMetadata(encryptionMetadata)) {
     throw new HavenAolDecryptError(
-      'Invalid encryption metadata format',
+      'Invalid encryption metadata — expected Haven-AOL gate v1 (version: 1)',
       'METADATA_INVALID'
     )
   }
+
+  onProgress?.('Preparing gate metadata...')
+  const gateMetadataJson = JSON.stringify(
+    normalizeGateMetadataForDerivation(encryptionMetadata)
+  )
 
   if (signal?.aborted) {
     throw new HavenAolDecryptError('Decryption cancelled', 'CANCELLED')
@@ -240,10 +229,8 @@ export async function decryptContentKey(
   onProgress?.('Key decrypted successfully')
 
   // Step 10: Cache the AES key
-  if (videoId && isHybridV1Metadata(encryptionMetadata)) {
-    const { base64ToUint8Array } = await import('../crypto')
-    const iv = base64ToUint8Array(encryptionMetadata.iv)
-    setCachedKey(videoId, aesKey, iv)
+  if (videoId) {
+    setCachedKey(videoId, aesKey, new Uint8Array(12))
   }
 
   return { aesKey, fromCache: false }
@@ -262,11 +249,19 @@ export async function decryptContentKey(
 export async function decryptCidWithHavenAol(
   options: DecryptCidOptions
 ): Promise<string> {
-  const { cidEncryptionMetadata, encryptedCidData, walletClient, onProgress, signal } = options
+  const {
+    cidEncryptionMetadata,
+    encryptedCidData,
+    encryptedCid,
+    walletClient,
+    onProgress,
+    signal,
+  } = options
 
   // Decrypt the CID encryption key
   const { aesKey } = await decryptContentKey({
     encryptionMetadata: cidEncryptionMetadata,
+    encryptedCid,
     walletClient,
     onProgress,
     signal,

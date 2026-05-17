@@ -23,7 +23,6 @@
 import { hasVideo, putVideo, getCacheStorageEstimate } from './video-cache'
 import { hasCachedKey } from './aes-key-cache'
 import { fetchFromIpfs } from '@/services/ipfsService'
-import { isHybridV1Metadata } from '@/lib/haven-aol'
 import type { Video } from '@/types'
 
 // ============================================================================
@@ -637,14 +636,11 @@ async function executePrefetch(item: PrefetchItem): Promise<void> {
     return
   }
 
-  const hybridMeta =
-    video.encryptionMetadata && isHybridV1Metadata(video.encryptionMetadata)
-      ? video.encryptionMetadata
-      : undefined
+  const gateMeta = video.encryptionMetadata
 
-  // For encrypted videos, we need to decrypt
-  // Check if we have the key cached first
-  const hasKey = hybridMeta?.keyHash ? hasCachedKey(hybridMeta.keyHash) : false
+  const hasKey = gateMeta?.encryptedAesKey
+    ? hasCachedKey(gateMeta.encryptedAesKey.slice(0, 32))
+    : false
 
   if (!hasKey) {
     // We don't have the key cached - decryption would require a wallet signature
@@ -663,13 +659,14 @@ async function executePrefetch(item: PrefetchItem): Promise<void> {
     throw new Error('Prefetch cancelled')
   }
 
-  // Get the cached key
-  const keyHash = hybridMeta?.keyHash
-  if (!keyHash) {
-    throw new Error('No key hash in encryption metadata')
+  if (!gateMeta) {
+    throw new Error('Missing gate encryption metadata')
   }
 
-  const cachedKeyResult = await import('./aes-key-cache').then(m => m.getCachedKey(keyHash))
+  const cacheKey = gateMeta.encryptedAesKey.slice(0, 32)
+  const cachedKeyResult = await import('./aes-key-cache').then((m) =>
+    m.getCachedKey(cacheKey)
+  )
   if (!cachedKeyResult) {
     throw new Error('Cached key not found')
   }
@@ -678,9 +675,8 @@ async function executePrefetch(item: PrefetchItem): Promise<void> {
     throw new Error('Prefetch cancelled')
   }
 
-  // Decrypt and cache
-  const iv = base64ToUint8Array(hybridMeta.iv)
-  const mimeType = hybridMeta.originalMimeType || 'video/mp4'
+  const iv = cachedKeyResult.iv
+  const mimeType = video.contentMimeType || 'video/mp4'
 
   await aesDecryptToCache(
     fetchResult.data,

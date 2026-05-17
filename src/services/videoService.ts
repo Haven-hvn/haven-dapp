@@ -10,6 +10,10 @@
 import type { Video } from '../types/video'
 import { getVideoCacheService } from './cacheService'
 import {
+  parseGateMetadata,
+  parseCidEncryptionMetadata,
+} from '../lib/haven-aol'
+import {
   createArkivClient,
   getAllEntitiesByOwner as arkivGetAllEntitiesByOwner,
   getLatestEntityByOwner as arkivGetLatestEntityByOwner,
@@ -33,50 +37,6 @@ function getClient() {
 // ── Entity Parsing ─────────────────────────────────────────────────
 
 /**
- * Parse cid_encryption_metadata from Arkiv payload.
- *
- * The haven-player stores this as a JSON-serialized encryption metadata object
- * with field names: encryptedKey, keyHash, accessControlConditions, chain.
- * Haven-dapp's CidEncryptionMetadata type uses: ciphertext, dataToEncryptHash.
- * This function handles JSON parsing and field name mapping.
- */
-function parseCidEncryptionMetadata(raw: unknown): Video['cidEncryptionMetadata'] {
-  if (!raw) return undefined
-
-  let parsed: Record<string, unknown>
-  if (typeof raw === 'string') {
-    try {
-      parsed = JSON.parse(raw)
-    } catch {
-      return undefined
-    }
-  } else if (typeof raw === 'object' && raw !== null) {
-    parsed = raw as Record<string, unknown>
-  } else {
-    return undefined
-  }
-
-  // Map from legacy format (haven-player) to CidEncryptionMetadata format (haven-dapp)
-  // haven-player stores: { encryptedKey, keyHash, accessControlConditions, chain, version, ... }
-  // haven-dapp expects: { ciphertext, dataToEncryptHash, accessControlConditions, chain }
-  const ciphertext = (parsed.ciphertext as string) || (parsed.encryptedKey as string) || ''
-  const dataToEncryptHash = (parsed.dataToEncryptHash as string) || (parsed.keyHash as string) || ''
-  const accessControlConditions = parsed.accessControlConditions as Video['cidEncryptionMetadata'] extends { accessControlConditions: infer T } ? T : never
-  const chain = (parsed.chain as string) || 'yellowstone'
-
-  if (!ciphertext || !dataToEncryptHash) {
-    return undefined
-  }
-
-  return {
-    ciphertext,
-    dataToEncryptHash,
-    accessControlConditions: accessControlConditions || [],
-    chain,
-  }
-}
-
-/**
  * Parse an Arkiv entity into a Video object.
  * Converts the SDK entity format (key, attributes, payload) into our Video type.
  */
@@ -94,16 +54,8 @@ function parseArkivEntity(entity: ArkivEntity): Video {
   // Helper: look up a value by snake_case key
   const get = (key: string): unknown => data[key]
 
-  let encryptionMeta: Video['encryptionMetadata'] = undefined
-
-  const rawEncMeta = get('encryption_metadata')
-  if (rawEncMeta) {
-    if (typeof rawEncMeta === 'string') {
-      try { encryptionMeta = JSON.parse(rawEncMeta) } catch { /* ignore */ }
-    } else {
-      encryptionMeta = rawEncMeta as Video['encryptionMetadata']
-    }
-  }
+  const encryptionMeta =
+    parseGateMetadata(get('encryption_metadata')) ?? undefined
 
   // Parse segment metadata (snake_case in payload)
   const rawSegment = (get('segment_metadata') as Record<string, unknown>) || null
@@ -145,10 +97,11 @@ function parseArkivEntity(entity: ArkivEntity): Video {
     isEncrypted: Boolean(get('is_encrypted')),
     encryptionMetadata: encryptionMeta,
 
-    // CID encryption metadata — stored as JSON string in Arkiv payload, uses legacy
-    // field names (encryptedKey/keyHash) which must be mapped to CidEncryptionMetadata format
-    // (ciphertext/dataToEncryptHash) for use with decryptCid()
-    cidEncryptionMetadata: parseCidEncryptionMetadata(get('cid_encryption_metadata')),
+    cidEncryptionMetadata:
+      parseCidEncryptionMetadata(get('cid_encryption_metadata')) ?? undefined,
+
+    contentMimeType: (get('content_mime_type') as string) || undefined,
+    originalHash: (get('original_hash') as string) || undefined,
 
     // AI analysis
     hasAiData: Boolean(get('has_ai_data') || vlmJsonCid),

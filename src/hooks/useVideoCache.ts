@@ -33,7 +33,7 @@ import { requestPersistentStorageSilent, isPersisted } from '@/lib/storage-persi
 import { touchVideo } from '@/lib/cache-expiration'
 import { getVideoCacheService } from '@/services/cacheService'
 import { fetchFromIpfs } from '@/services/ipfsService'
-import { decryptContentKey, isHybridV1Metadata, getHavenAolErrorMessage } from '@/lib/haven-aol'
+import { decryptContentKey, isGateMetadata, getHavenAolErrorMessage } from '@/lib/haven-aol'
 import type { WalletClientLike } from '@/lib/haven-aol'
 import { decryptChunkedStream, parseChunkedFileHeader, concatenateChunks } from '@/lib/chunked-decrypt'
 import type { ChunkedDecryptProgress } from '@/lib/chunked-decrypt'
@@ -336,8 +336,14 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
           throw new Error('Please connect your wallet to decrypt this video.')
         }
 
+        if (!isGateMetadata(videoToLoad.encryptionMetadata)) {
+          throw new Error(
+            'Invalid content encryption metadata — expected Haven-AOL gate v1 (version: 1)'
+          )
+        }
+
         const { aesKey } = await decryptContentKey({
-          encryptionMetadata: videoToLoad.encryptionMetadata!,
+          encryptionMetadata: videoToLoad.encryptionMetadata,
           encryptedCid: videoToLoad.encryptedCid,
           walletClient: currentWalletClient as unknown as WalletClientLike,
           onProgress: (msg) => {
@@ -355,9 +361,7 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
         if (signal.aborted) throw new Error('Loading cancelled')
 
         // Step 5: Initialize progressive playback
-        const mimeType = isHybridV1Metadata(videoToLoad.encryptionMetadata!)
-          ? (videoToLoad.encryptionMetadata!.originalMimeType || 'video/mp4')
-          : 'video/mp4'
+        const mimeType = videoToLoad.contentMimeType || 'video/mp4'
 
         await progressiveRef.current.initialize(mimeType)
 

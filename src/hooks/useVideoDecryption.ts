@@ -13,7 +13,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useAccount, useWalletClient } from 'wagmi'
 import type { Video } from '@/types'
-import { decryptContentKey, getHavenAolErrorMessage, isHybridV1Metadata } from '@/lib/haven-aol'
+import { decryptContentKey, getHavenAolErrorMessage, isGateMetadata } from '@/lib/haven-aol'
 import { checkLargeFileSupport } from '@/lib/crypto'
 import { decryptChunkedToCache, type ChunkedDecryptProgress } from '@/lib/chunked-decrypt'
 import { createBufferLifecycle } from '@/lib/buffer-lifecycle'
@@ -335,6 +335,10 @@ export function useVideoDecryption(
       // Step 2: Decrypt AES key using Haven-AOL
       updateProgress('authenticating', 'Sign with your wallet to decrypt...')
 
+      if (!isGateMetadata(video.encryptionMetadata)) {
+        throw new Error('Invalid encryption metadata — expected Haven-AOL gate v1 (version: 1)')
+      }
+
       const { aesKey } = await decryptContentKey({
         encryptionMetadata: video.encryptionMetadata,
         encryptedCid: video.encryptedCid,
@@ -357,9 +361,7 @@ export function useVideoDecryption(
       // Step 3: Decrypt file using AES and write directly to Cache API
       updateProgress('decrypting-file', 'Decrypting and caching video...')
 
-      const mimeType = isHybridV1Metadata(video.encryptionMetadata)
-        ? (video.encryptionMetadata.originalMimeType || 'video/mp4')
-        : 'video/mp4'
+      const mimeType = video.contentMimeType || 'video/mp4'
 
       // Chunked decryption — handles per-chunk IV derivation and sequential
       // AES-GCM decryption of the haven-cli streaming format:

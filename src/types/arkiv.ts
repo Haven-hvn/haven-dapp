@@ -10,7 +10,7 @@
  * @module types/arkiv
  */
 
-import type { CidEncryptionMetadata } from './encryption'
+import type { GateMetadataJson } from '@/lib/haven-aol'
 
 // ============================================================================
 // Raw Arkiv Entity Types
@@ -216,10 +216,10 @@ export interface ArkivPayload {
    * CID encryption metadata.
    * Used when the CID itself is encrypted for privacy.
    */
-  cid_encryption_metadata?: CidEncryptionMetadata
+  cid_encryption_metadata?: GateMetadataJson
 
   /**
-   * Content encryption metadata (Haven-AOL gate or hybrid-v1 from haven-cli).
+   * Content encryption metadata (Haven-AOL gate v1 from haven-cli).
    * Stored as JSON string or object in the entity payload.
    */
   encryption_metadata?: string | Record<string, unknown>

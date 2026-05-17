@@ -7,14 +7,10 @@
  * @module types/video
  */
 
-import type { CidEncryptionMetadata } from './encryption'
-import type { HybridV1EncryptionMetadata, GateMetadataJson } from '@/lib/haven-aol'
+import type { GateMetadataJson } from '@/lib/haven-aol'
 
-/**
- * Haven-AOL encryption metadata — either hybrid-v1 (from haven-cli)
- * or native gate format (version 1).
- */
-export type EncryptionMetadata = HybridV1EncryptionMetadata | GateMetadataJson
+/** Haven-AOL gate v1 metadata (Arkiv encryption_metadata / cid_encryption_metadata). */
+export type EncryptionMetadata = GateMetadataJson
 
 // ============================================================================
 // Core Video Types
@@ -84,11 +80,17 @@ export interface Video {
   /** Whether the video content is encrypted */
   isEncrypted: boolean
   
-  /** Haven-AOL / hybrid-v1 encryption metadata (for encrypted videos) */
+  /** Haven-AOL gate v1 metadata for content decryption */
   encryptionMetadata?: EncryptionMetadata
 
-  /** CID encryption metadata (when CID itself is encrypted) */
-  cidEncryptionMetadata?: CidEncryptionMetadata | EncryptionMetadata
+  /** Haven-AOL gate v1 metadata for encrypted_cid decryption */
+  cidEncryptionMetadata?: EncryptionMetadata
+
+  /** Original MIME type (payload content_mime_type) */
+  contentMimeType?: string
+
+  /** SHA-256 of plaintext before encryption (payload original_hash) */
+  originalHash?: string
   
   /** Decrypted CID (cached after first decryption to avoid re-decryption) */
   decryptedCid?: string
