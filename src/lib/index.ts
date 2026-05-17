@@ -129,6 +129,7 @@ export {
   getSynapseErrorMessage,
   SynapseError,
   type SynapseConfig,
+  type SynapseDownloadOptions,
 } from './synapse'
 
 // Video Cache API wrapper

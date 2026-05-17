@@ -7,10 +7,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   fetchPieceFromSynapse,
+  fetchPinnedContent,
   streamFromIpfs,
   fetchEncryptedData,
   fetchMultiple,
 } from '../ipfsService'
+import type { Video } from '@/types/video'
 import { IpfsError } from '@/lib/ipfs'
 
 vi.mock('@/lib/synapse', () => ({
@@ -29,6 +31,22 @@ import { downloadFromSynapse } from '@/lib/synapse'
 
 const PIECE =
   'bafkzcibe2hzbcd4t6clvsb3mfrezyxl75gl3gzcsqi42dd27gktq4nk75rr62ciuaq'
+
+const OWNER = '0xb24ca10fb6907a2d94b0dc5dbea6b5e379d19ffd'
+
+function testVideo(overrides: Partial<Video> = {}): Video {
+  return {
+    id: '0x1',
+    owner: OWNER,
+    title: 'Test',
+    duration: 60,
+    createdAt: new Date(),
+    isEncrypted: true,
+    hasAiData: false,
+    pieceCid: PIECE,
+    ...overrides,
+  }
+}
 
 Object.defineProperty(global, 'performance', {
   value: {
@@ -58,7 +76,15 @@ describe('ipfsService', () => {
       expect(result.data).toEqual(mockData)
       expect(result.gateway).toBe('synapse')
       expect(result.size).toBe(5)
-      expect(downloadFromSynapse).toHaveBeenCalledWith(PIECE)
+      expect(downloadFromSynapse).toHaveBeenCalledWith(PIECE, undefined)
+    })
+
+    it('should pass catalogOwner to downloadFromSynapse', async () => {
+      vi.mocked(downloadFromSynapse).mockResolvedValueOnce(mockData)
+
+      await fetchPieceFromSynapse(PIECE, { catalogOwner: OWNER })
+
+      expect(downloadFromSynapse).toHaveBeenCalledWith(PIECE, { catalogOwner: OWNER })
     })
 
     it('should retry on failure', async () => {
@@ -119,13 +145,25 @@ describe('ipfsService', () => {
     })
   })
 
+  describe('fetchPinnedContent', () => {
+    const mockData = new Uint8Array([1, 2, 3])
+
+    it('should pass video owner as catalogOwner', async () => {
+      vi.mocked(downloadFromSynapse).mockResolvedValueOnce(mockData)
+
+      await fetchPinnedContent(testVideo())
+
+      expect(downloadFromSynapse).toHaveBeenCalledWith(PIECE, { catalogOwner: OWNER })
+    })
+  })
+
   describe('fetchEncryptedData', () => {
     it('should fetch via Synapse with encrypted defaults', async () => {
       vi.mocked(downloadFromSynapse).mockResolvedValueOnce(new Uint8Array([1]))
 
       await fetchEncryptedData(PIECE)
 
-      expect(downloadFromSynapse).toHaveBeenCalledWith(PIECE)
+      expect(downloadFromSynapse).toHaveBeenCalledWith(PIECE, undefined)
     })
   })
 

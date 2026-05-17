@@ -34,6 +34,11 @@ export interface FetchOptions {
   abortSignal?: AbortSignal
   /** Initial delay between retries in milliseconds */
   retryDelayMs?: number
+  /**
+   * Arkiv entity owner for owner-aware Synapse resolution.
+   * When omitted, `fetchPinnedContent` supplies `video.owner`.
+   */
+  catalogOwner?: string
 }
 
 /**
@@ -97,7 +102,15 @@ export async function fetchPinnedContent(
   video: Video,
   options: FetchOptions = {}
 ): Promise<FetchResult> {
-  return fetchPieceFromSynapse(requirePieceCid(video), options)
+  const pieceCid = requirePieceCid(video)
+  const catalogOwner =
+    options.catalogOwner?.trim() ||
+    (video.owner?.trim().length ? video.owner.trim() : undefined)
+
+  return fetchPieceFromSynapse(pieceCid, {
+    ...options,
+    catalogOwner,
+  })
 }
 
 /**
@@ -118,6 +131,7 @@ export async function fetchPieceFromSynapse(
 
   const maxRetries = options.retries ?? 3
   const retryDelayMs = options.retryDelayMs ?? 1000
+  const catalogOwner = options.catalogOwner?.trim() || undefined
 
   if (options.abortSignal?.aborted) {
     throw new IpfsError('Fetch aborted', 'ABORTED', normalizedCid)
@@ -132,7 +146,10 @@ export async function fetchPieceFromSynapse(
       }
 
       const startTime = performance.now()
-      const data = await downloadFromSynapse(normalizedCid)
+      const data = await downloadFromSynapse(
+        normalizedCid,
+        catalogOwner != null ? { catalogOwner } : undefined
+      )
       const duration = performance.now() - startTime
 
       options.onProgress?.(data.byteLength, data.byteLength)
@@ -156,7 +173,8 @@ export async function fetchPieceFromSynapse(
 
       console.warn(
         `[ipfsService] Synapse attempt ${attempt + 1}/${maxRetries} failed:`,
-        lastError.message
+        lastError.message,
+        { pieceCid: normalizedCid, catalogOwner: catalogOwner ?? '(none)' }
       )
 
       if (options.abortSignal?.aborted) {
