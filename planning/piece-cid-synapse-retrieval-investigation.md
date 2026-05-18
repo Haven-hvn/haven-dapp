@@ -175,6 +175,33 @@ Optional: `storage.download({ pieceCid, providerAddress })` only if you **choose
 
 **haven-cli “download worked”** uses **IPFS root CID** via gateway in `synapse-wrapper.download` — **unrelated** to dapp `piece_cid` / Synapse playback.
 
+### 3.7 Origin retrieval: no HTTP Range (playback implication)
+
+**Constraint:** Public **IPFS gateways** and **Filecoin Beam (FilBeam)** URLs used by Synapse resolvers do **not** support reliable `Range: bytes=…` → `206 Partial Content`. Clients must **GET the full object** (or fail). This is an infrastructure limitation, not a haven-dapp choice.
+
+**What that rules out for first-time playback:**
+
+- Play-while-downloading from FilBeam / gateway (no byte-range fetch of “first N MB of CAR”)
+- Seeking in the `<video>` element against the **remote** URL before the full encrypted piece is local
+- Skipping download of trailing CAR bytes when only the haven `.encrypted` payload is needed
+
+**What the dapp does instead (`useVideoCache` + `piece-download.ts`):**
+
+| Stage | Behavior |
+|-------|----------|
+| Network | Single `fetch` GET; body **streams on the wire** for PieceCID validation + progress UI, but the implementation **buffers the full piece** in memory before decrypt |
+| Extract | Reassemble UnixFS from the CAR (`unixfs-car.ts` / `encrypted-payload.ts`) — chunk boundaries may span CAR blocks |
+| Decrypt + play | Haven-AOL chunked decrypt (~1 MB plaintext chunks) → **MediaSource Extensions** (`useProgressivePlayback`) so playback can start after **chunk 0** decrypt, while later chunks still decrypt |
+| Replay | Full plaintext in **Cache API**; service worker can serve **`206` + `Content-Range`** for seeking on **cached** blobs only (`video-cache.ts` sets `Accept-Ranges: bytes`) |
+
+**Summary:** “Streaming” in the product means **decrypt-and-feed to MSE after the encrypted blob is fully downloaded**, not HTTP streaming from the pin. Time-to-first-frame on large pieces (~80 MB+) is still dominated by **full piece download + CAR extraction**, then improved by progressive decrypt.
+
+**Implications for future work (without origin ranges):**
+
+- Smaller pieces or split artifacts (metadata vs payload) reduce wait before decrypt
+- Aggressive local cache is the main UX win on repeat views
+- True play-before-download-complete needs a **different retrieval layer** (range-capable CDN/API) or **multiple segment CIDs** (HLS/DASH-style), not FilBeam/gateway range requests as they exist today
+
 ---
 
 ## 4. Upload: intended vs. likely actual
@@ -313,6 +340,9 @@ Depends on Phase A for new content; legacy rows need re-upload.
 | Gateway `download` (IPFS) | `haven-cli/js-services/synapse-wrapper.ts` (~890+) |
 | Upload step | `haven-cli/haven_cli/pipeline/steps/upload_step.py` |
 | Dapp Synapse | `haven-dapp/src/lib/synapse.ts` |
+| Dapp piece download | `haven-dapp/src/lib/piece-download.ts` |
+| Dapp playback hook | `haven-dapp/src/hooks/useVideoCache.ts` |
+| Dapp MSE progressive | `haven-dapp/src/hooks/useProgressivePlayback.ts` |
 | Dapp fetch | `haven-dapp/src/services/ipfsService.ts` |
 | Diagnostic script | `haven-dapp/scripts/diagnose-piece-retrieval.mts` |
 | `StorageManager.download` | `@filoz/synapse-sdk` → `storage/manager.ts` |

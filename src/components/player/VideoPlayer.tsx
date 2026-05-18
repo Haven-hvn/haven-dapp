@@ -81,9 +81,9 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
   const showProgress = isLoading && !isStreaming && !error
   
   return (
-    <div className="flex flex-col h-screen bg-black">
+    <div className="flex flex-col h-dvh min-h-0 overflow-hidden bg-black">
       {/* Header */}
-      <div className="flex items-center justify-between p-3 sm:p-4 border-b border-white/10 safe-area-x">
+      <div className="flex shrink-0 items-center justify-between p-3 sm:p-4 border-b border-white/10 safe-area-x">
         <Link 
           href="/library"
           className="flex items-center gap-2 text-white/80 hover:text-white transition-colors touch-manipulation min-h-[44px]"
@@ -142,9 +142,8 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
         </div>
       </div>
       
-      {/* Video container */}
-      <div className="flex-1 relative flex items-center justify-center">
-        {/* Error overlay */}
+      {/* Video container — min-h-0 so flex child shrinks with viewport */}
+      <div className="flex-1 min-h-0 min-w-0 relative flex items-center justify-center overflow-hidden">
         {error && (
           <ErrorOverlay
             presentation={
@@ -185,7 +184,7 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
       </div>
       
       {/* Video info */}
-      <div className="p-3 sm:p-4 border-t border-white/10 safe-area-x safe-area-bottom overflow-y-auto">
+      <div className="shrink-0 p-3 sm:p-4 border-t border-white/10 safe-area-x safe-area-bottom overflow-y-auto max-h-[30vh]">
         <h1 className="text-base sm:text-lg font-semibold text-white">{video.title}</h1>
         {video.description && (
           <p className="text-white/60 mt-1 text-sm">{video.description}</p>

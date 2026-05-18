@@ -19,7 +19,7 @@ interface PlayerLayoutProps {
 
 export function PlayerLayout({ children }: PlayerLayoutProps) {
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-dvh h-dvh overflow-hidden bg-black">
       {children}
     </div>
   )

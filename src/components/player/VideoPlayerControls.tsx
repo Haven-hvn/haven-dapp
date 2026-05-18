@@ -238,7 +238,7 @@ export function VideoPlayerControls({ src, title, poster }: VideoPlayerControlsP
   return (
     <div 
       ref={containerRef}
-      className="relative w-full h-full group"
+      className="relative w-full h-full max-w-full max-h-full min-h-0 min-w-0 group"
       onMouseMove={() => setShowControls(true)}
       onMouseLeave={() => isPlaying && !isTouchDevice() && setShowControls(false)}
     >
@@ -246,7 +246,7 @@ export function VideoPlayerControls({ src, title, poster }: VideoPlayerControlsP
         ref={videoRef}
         src={src}
         poster={poster}
-        className="w-full h-full object-contain"
+        className="w-full h-full max-w-full max-h-full object-contain"
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={() => {
           const video = videoRef.current
