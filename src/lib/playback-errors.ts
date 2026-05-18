@@ -6,6 +6,7 @@
  * @module lib/playback-errors
  */
 
+import { EncryptedPayloadError } from './encrypted-payload'
 import { getHavenAolErrorMessage, HavenAolDecryptError } from './haven-aol/haven-aol-errors'
 import { IpfsError, getIpfsErrorMessage } from './ipfs'
 import {
@@ -136,6 +137,13 @@ export function getPlaybackErrorPresentation(error: unknown): PlaybackErrorPrese
     )
   }
 
+  if (error instanceof EncryptedPayloadError) {
+    return storagePresentation(
+      'Unexpected download format',
+      error.message
+    )
+  }
+
   if (error instanceof IpfsError) {
     const message = getIpfsErrorMessage(error)
     if (error.code === 'ABORTED') {
@@ -180,6 +188,18 @@ export function getPlaybackErrorPresentation(error: unknown): PlaybackErrorPrese
         showEncryptedNote: false,
       }
     }
+    if (
+      lower.includes('claims') &&
+      lower.includes('exceeds maximum allowed chunk size')
+    ) {
+      return storagePresentation(
+        'Unexpected download format',
+        'The Filecoin download does not look like a haven-cli encrypted video (chunk header mismatch). ' +
+          'This often means the piece is still CAR-wrapped or the upload was not encrypted with streaming format. ' +
+          'Try re-uploading with the current haven-cli.'
+      )
+    }
+
     if (lower.includes('mediasource open timed out')) {
       return {
         category: 'unknown',

@@ -226,7 +226,7 @@ function readChunkRecord(data: Uint8Array, offset: number): ChunkRecord | null {
     throw new Error(
       `Chunk ${chunkIndex} claims ${chunkLength} bytes — ` +
       `exceeds maximum allowed chunk size (${MAX_CHUNK_SIZE} bytes). ` +
-      'File may be corrupted.'
+      'The download may be a CAR container or non-chunked ciphertext; haven-cli streaming encrypt was expected.'
     )
   }
 

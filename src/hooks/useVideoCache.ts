@@ -37,6 +37,7 @@ import { decryptContentKey, isGateMetadata } from '@/lib/haven-aol'
 import { isPlaybackCancellation, toPlaybackLoadError } from '@/lib/playback-errors'
 import type { WalletClientLike } from '@/lib/haven-aol'
 import { decryptChunkedStream, parseChunkedFileHeader, concatenateChunks } from '@/lib/chunked-decrypt'
+import { extractHavenEncryptedPayload } from '@/lib/encrypted-payload'
 import type { ChunkedDecryptProgress } from '@/lib/chunked-decrypt'
 import { createBufferLifecycle } from '@/lib/buffer-lifecycle'
 import type { Video } from '@/types'
@@ -288,7 +289,7 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
 
         if (signal.aborted) throw new Error('Loading cancelled')
 
-        const encryptedData = fetchResult.data
+        const encryptedData = extractHavenEncryptedPayload(fetchResult.data)
         const lifecycle = createBufferLifecycle()
         lifecycle.track('encrypted', encryptedData)
 

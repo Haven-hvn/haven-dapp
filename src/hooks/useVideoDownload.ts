@@ -18,6 +18,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useWalletClient } from 'wagmi'
 import { getVideo, hasVideo, putVideo } from '@/lib/video-cache'
+import { extractHavenEncryptedPayload } from '@/lib/encrypted-payload'
 import { fetchPinnedContent } from '@/services/ipfsService'
 import {
   decryptContentKey,
@@ -267,7 +268,7 @@ export function useVideoDownload(): UseVideoDownloadReturn {
       const fetchResult = await fetchPinnedContent(video, { abortSignal: signal })
       if (signal.aborted) throw new Error('Download cancelled')
 
-      const encryptedData = fetchResult.data
+      const encryptedData = extractHavenEncryptedPayload(fetchResult.data)
 
       // Step 2: Decrypt AES key via Haven-AOL
       updateStage('authenticating')
