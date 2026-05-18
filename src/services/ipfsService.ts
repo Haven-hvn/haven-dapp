@@ -146,10 +146,10 @@ export async function fetchPieceFromSynapse(
       }
 
       const startTime = performance.now()
-      const data = await downloadFromSynapse(
-        normalizedCid,
-        catalogOwner != null ? { catalogOwner } : undefined
-      )
+      const data = await downloadFromSynapse(normalizedCid, {
+        ...(catalogOwner != null ? { catalogOwner } : {}),
+        ...(options.abortSignal != null ? { signal: options.abortSignal } : {}),
+      })
       const duration = performance.now() - startTime
 
       options.onProgress?.(data.byteLength, data.byteLength)

@@ -36,9 +36,10 @@ export function classifyRetrievalFailure(raw: string): SynapseErrorCode {
     return 'CDN_RAIL_MISMATCH'
   }
   if (
-    m.includes('no provider found') ||
+    m.includes('no provider') ||
     m.includes('all provider retrieval') ||
-    m.includes('promises rejected')
+    m.includes('promises rejected') ||
+    m.includes('all piece url resolvers failed')
   ) {
     return 'PIECE_NOT_FOUND'
   }
@@ -61,7 +62,11 @@ export function classifyRetrievalFailure(raw: string): SynapseErrorCode {
   if (m.includes('timeout') || m.includes('timed out')) {
     return 'TIMEOUT'
   }
-  if (m.includes('abort') || m.includes('cancelled')) {
+  if (
+    m.includes('bodystreambuffer was aborted') ||
+    m.includes('aborted') ||
+    m.includes('cancelled')
+  ) {
     return 'ABORTED'
   }
 
@@ -83,7 +88,8 @@ const SYNAPSE_USER_MESSAGES: Record<SynapseErrorCode, string> = {
     'Your browser could not reach Filecoin storage. Check your internet connection, disable restrictive extensions, and try again.',
   TIMEOUT:
     'Downloading from Filecoin timed out. The network may be slow — try again in a minute.',
-  ABORTED: 'Playback was cancelled.',
+  ABORTED:
+    'The Filecoin download was interrupted. Try playing the video again without switching pages.',
   DOWNLOAD_FAILED:
     'Could not download this video from Filecoin storage. Confirm the haven-cli upload finished successfully, then try again.',
 }

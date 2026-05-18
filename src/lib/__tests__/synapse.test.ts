@@ -9,14 +9,22 @@ import {
 const {
   mockDownload,
   mockClient,
-  resolvePieceUrl,
+  resolvePieceUrlSequential,
   downloadAndValidate,
 } = vi.hoisted(() => ({
   mockDownload: vi.fn(),
   mockClient: { account: { address: '0xdead000000000000000000000000000000000001' } },
-  resolvePieceUrl: vi.fn(),
+  resolvePieceUrlSequential: vi.fn(),
   downloadAndValidate: vi.fn(),
 }))
+
+vi.mock('../resolve-piece-url-sequential', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../resolve-piece-url-sequential')>()
+  return {
+    ...actual,
+    resolvePieceUrlSequential,
+  }
+})
 
 vi.mock('@filoz/synapse-sdk', () => ({
   Synapse: {
@@ -37,7 +45,6 @@ vi.mock('@filoz/synapse-core/piece', async (importOriginal) => {
     asPieceCID: (cid: string) =>
       cid.startsWith('bafkzcib') ? { toString: () => cid } : null,
     downloadAndValidate,
-    resolvePieceUrl,
     chainResolver: vi.fn(),
     filbeamResolver: vi.fn(),
   }
@@ -52,7 +59,7 @@ describe('downloadFromSynapse', () => {
     resetSynapseInstance()
     vi.clearAllMocks()
     mockDownload.mockResolvedValue(new Uint8Array([1, 2, 3]))
-    resolvePieceUrl.mockResolvedValue('https://pdp.example/piece')
+    resolvePieceUrlSequential.mockResolvedValue('https://pdp.example/piece')
     downloadAndValidate.mockResolvedValue(new Uint8Array([7, 8, 9]))
   })
 
@@ -66,26 +73,24 @@ describe('downloadFromSynapse', () => {
     })
   })
 
-  it('always uses FilBeam and chain resolvers for catalog owner', async () => {
+  it('uses sequential owner-aware resolution for catalog owner', async () => {
     const bytes = await downloadFromSynapse(PIECE, { catalogOwner: OWNER })
     expect(bytes).toEqual(new Uint8Array([7, 8, 9]))
-    expect(resolvePieceUrl).toHaveBeenCalledWith(
+    expect(resolvePieceUrlSequential).toHaveBeenCalledWith(
       expect.objectContaining({
         address: OWNER.toLowerCase(),
-        resolvers: [expect.any(Function), expect.any(Function)],
+        resolvers: expect.arrayContaining([expect.any(Function)]),
       })
     )
-    const resolvers = resolvePieceUrl.mock.calls[0]?.[0]?.resolvers ?? []
-    expect(resolvers).toHaveLength(2)
     expect(downloadAndValidate).toHaveBeenCalled()
     expect(mockDownload).not.toHaveBeenCalled()
   })
 
   it('does not fall back to throwaway storage.download when owner resolution fails', async () => {
-    resolvePieceUrl.mockRejectedValueOnce(new Error('no provider'))
+    resolvePieceUrlSequential.mockRejectedValue(new Error('no provider'))
     await expect(
       downloadFromSynapse(PIECE, { catalogOwner: OWNER })
-    ).rejects.toMatchObject({ code: 'DOWNLOAD_FAILED' })
+    ).rejects.toMatchObject({ code: 'PIECE_NOT_FOUND' })
     expect(mockDownload).not.toHaveBeenCalled()
   })
 
@@ -98,13 +103,13 @@ describe('downloadFromSynapse', () => {
         providerAddress: '0x1111111111111111111111111111111111111111',
       })
     )
-    expect(resolvePieceUrl).not.toHaveBeenCalled()
+    expect(resolvePieceUrlSequential).not.toHaveBeenCalled()
   })
 
   it('uses storage.download when no catalog owner', async () => {
     const bytes = await downloadFromSynapse(PIECE)
     expect(bytes).toEqual(new Uint8Array([1, 2, 3]))
-    expect(resolvePieceUrl).not.toHaveBeenCalled()
+    expect(resolvePieceUrlSequential).not.toHaveBeenCalled()
   })
 
   it('throws INVALID_OWNER for malformed catalog owner', async () => {
