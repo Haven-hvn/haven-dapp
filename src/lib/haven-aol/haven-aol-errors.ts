@@ -88,8 +88,8 @@ export function mapGateError(gateError: unknown): HavenAolDecryptError {
 
   if ('NonceAlreadyUsed' in err) {
     return new HavenAolDecryptError(
-      'This decrypt request was already submitted to the network (nonce replay protection). ' +
-        'The app should retry with the next nonce automatically — if you were asked to sign many times, refresh and try again once.',
+      'This decrypt request was already submitted (nonce replay protection). ' +
+        'Try playing the video again — you should only need one wallet signature.',
       'NONCE_ALREADY_USED'
     )
   }

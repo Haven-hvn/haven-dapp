@@ -19,8 +19,7 @@ import {
   parseGateMetadata,
 } from 'haven-aol'
 import { getHavenAolConfig } from './haven-aol-client'
-import { commitNonceUsed } from './haven-aol-nonce'
-import { createSignedGateRequest, retryWithBumpedNonce, type WalletClientLike } from './haven-aol-auth'
+import { createSignedGateRequest, retryWithFreshGateNonce, type WalletClientLike } from './haven-aol-auth'
 import {
   isGateMetadata,
   normalizeGateMetadataForDerivation,
@@ -204,10 +203,9 @@ async function decryptContentKeyImpl(
     evmAddress: walletClient.account.address,
   }
 
-  /** Canister stores nonce before other checks; +1 retry per collision (not +10). */
-  const MAX_NONCE_ATTEMPTS = 8
+  /** Random nonces collide rarely; one resign on NonceAlreadyUsed is enough. */
+  const MAX_NONCE_ATTEMPTS = 3
   let result: Awaited<ReturnType<typeof requestDecryptionKey>> | null = null
-  const walletAddress = walletClient.account.address
 
   for (let attempt = 0; attempt < MAX_NONCE_ATTEMPTS; attempt++) {
     if (signal?.aborted) {
@@ -224,17 +222,14 @@ async function decryptContentKeyImpl(
     })
 
     if (!('err' in result)) {
-      commitNonceUsed(walletAddress, signedRequest.nonce)
       break
     }
 
     const errObj = result.err as Record<string, unknown>
-    // Canister marks nonce used before signature/balance checks (haven-aol main.mo).
-    commitNonceUsed(walletAddress, signedRequest.nonce)
 
     if ('NonceAlreadyUsed' in errObj && attempt < MAX_NONCE_ATTEMPTS - 1) {
-      onProgress?.('Decrypt session syncing — please sign once more…')
-      signedRequest = await retryWithBumpedNonce(walletClient, signedRequest.nonce)
+      onProgress?.('Nonce collision — please sign once more…')
+      signedRequest = await retryWithFreshGateNonce(walletClient)
       continue
     }
 
@@ -243,8 +238,7 @@ async function decryptContentKeyImpl(
 
   if (result == null || 'err' in result) {
     throw new HavenAolDecryptError(
-      'Could not obtain a decryption key — the decrypt session is ahead of this browser. ' +
-        'Try again once; if it persists, clear site data for this app or contact support.',
+      'Could not obtain a decryption key after multiple attempts. Please try again.',
       'NONCE_ALREADY_USED'
     )
   }

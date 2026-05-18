@@ -1,14 +1,10 @@
 /**
- * Library video fetch tests — most recent Arkiv entity only.
+ * Library video fetch tests — full Arkiv list for library pagination.
  */
 
 import 'fake-indexeddb/auto'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import {
-  fetchLibraryVideos,
-  pickMostRecentVideos,
-  LIBRARY_ARKIV_VIDEO_LIMIT,
-} from '../videoService'
+import { fetchLibraryVideos, pickMostRecentVideos } from '../videoService'
 import { getVideoCacheService, clearServiceInstances } from '../cacheService'
 import { deleteDatabase } from '../../lib/cache'
 import { createMockVideo } from '../../lib/cache/__tests__/fixtures'
@@ -21,7 +17,7 @@ vi.mock('../../lib/arkiv', async (importOriginal) => {
   return {
     ...actual,
     createArkivClient: vi.fn(() => ({})),
-    getLatestEntityByOwner: vi.fn(),
+    getAllEntitiesByOwner: vi.fn(),
   }
 })
 
@@ -74,7 +70,7 @@ describe('pickMostRecentVideos', () => {
 
     const result = pickMostRecentVideos([older, newer])
 
-    expect(result).toHaveLength(LIBRARY_ARKIV_VIDEO_LIMIT)
+    expect(result).toHaveLength(2)
     expect(result[0].id).toBe('0x2')
   })
 
@@ -98,7 +94,7 @@ describe('fetchLibraryVideos', () => {
     } catch {
       // ignore
     }
-    vi.mocked(arkivModule.getLatestEntityByOwner).mockReset()
+    vi.mocked(arkivModule.getAllEntitiesByOwner).mockReset()
   })
 
   afterEach(async () => {
@@ -111,28 +107,28 @@ describe('fetchLibraryVideos', () => {
     vi.restoreAllMocks()
   })
 
-  it('returns a single video from Arkiv when entity exists', async () => {
-    vi.mocked(arkivModule.getLatestEntityByOwner).mockResolvedValue(
-      createMockArkivEntity('0xlatest', 'Latest Upload')
-    )
+  it('returns all videos from Arkiv when entities exist', async () => {
+    vi.mocked(arkivModule.getAllEntitiesByOwner).mockResolvedValue([
+      createMockArkivEntity('0x1', 'First', 100),
+      createMockArkivEntity('0x2', 'Second', 200),
+    ])
 
     const videos = await fetchLibraryVideos(TEST_WALLET)
 
-    expect(arkivModule.getLatestEntityByOwner).toHaveBeenCalledOnce()
-    expect(videos).toHaveLength(1)
-    expect(videos[0].id).toBe('0xlatest')
-    expect(videos[0].title).toBe('Latest Upload')
+    expect(arkivModule.getAllEntitiesByOwner).toHaveBeenCalledOnce()
+    expect(videos).toHaveLength(2)
+    expect(videos.map((v) => v.id).sort()).toEqual(['0x1', '0x2'])
   })
 
   it('returns empty array when Arkiv has no entities and cache is empty', async () => {
-    vi.mocked(arkivModule.getLatestEntityByOwner).mockResolvedValue(null)
+    vi.mocked(arkivModule.getAllEntitiesByOwner).mockResolvedValue([])
 
     const videos = await fetchLibraryVideos(TEST_WALLET)
 
     expect(videos).toHaveLength(0)
   })
 
-  it('falls back to most recent cached video when Arkiv fails', async () => {
+  it('falls back to cached videos when Arkiv fails', async () => {
     const cacheService = getVideoCacheService(TEST_WALLET)
     const older = createMockVideo({
       id: '0xold',
@@ -148,18 +144,18 @@ describe('fetchLibraryVideos', () => {
     })
     await cacheService.cacheVideos([older, newer])
 
-    vi.mocked(arkivModule.getLatestEntityByOwner).mockRejectedValue(
+    vi.mocked(arkivModule.getAllEntitiesByOwner).mockRejectedValue(
       new Error('Network error')
     )
 
     const videos = await fetchLibraryVideos(TEST_WALLET)
 
-    expect(videos).toHaveLength(1)
-    expect(videos[0].id).toBe('0xnew')
+    expect(videos).toHaveLength(2)
+    expect(videos.map((v) => v.id).sort()).toEqual(['0xnew', '0xold'])
   })
 
   it('throws when Arkiv fails and cache is empty', async () => {
-    vi.mocked(arkivModule.getLatestEntityByOwner).mockRejectedValue(
+    vi.mocked(arkivModule.getAllEntitiesByOwner).mockRejectedValue(
       new Error('Network error')
     )
 

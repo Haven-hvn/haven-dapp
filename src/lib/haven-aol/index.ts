@@ -7,7 +7,11 @@
 export { getHavenAolConfig, isHavenAolConfigValid } from './haven-aol-client'
 export type { HavenAolConfig } from './haven-aol-client'
 
-export { createSignedGateRequest, retryWithBumpedNonce } from './haven-aol-auth'
+export {
+  createSignedGateRequest,
+  retryWithFreshGateNonce,
+  retryWithBumpedNonce,
+} from './haven-aol-auth'
 export type { SignedGateRequest, WalletClientLike } from './haven-aol-auth'
 
 export { decryptContentKey, decryptCidWithHavenAol } from './haven-aol-decrypt'
@@ -35,9 +39,10 @@ export {
 export type { HavenAolErrorCode } from './haven-aol-errors'
 
 export {
+  createRandomGateNonce,
+  clearNonce,
   getNextNonce,
   bumpNonce,
-  clearNonce,
   getCurrentNonce,
   commitNonceUsed,
   nonceAfterCollision,

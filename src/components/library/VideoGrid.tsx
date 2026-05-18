@@ -10,7 +10,15 @@
  * @module components/library/VideoGrid
  */
 
-import { useState, Suspense, lazy, useMemo, useCallback } from "react";
+import { useState, Suspense, lazy, useMemo, useCallback, useEffect } from "react";
+import {
+  LIBRARY_PAGE_SIZE,
+  clampPage,
+  getPageCount,
+  getPageItemRange,
+  slicePage,
+} from "@/lib/pagination";
+import { LibraryPagination } from "./LibraryPagination";
 import { useRouter } from "next/navigation";
 import { useVideoSearch } from "@/hooks/useVideoSearch";
 import { useCacheStatus } from "@/hooks/useCacheStatus";
@@ -72,6 +80,7 @@ export function VideoGrid() {
   const [filters, setFilters] = useState<VideoFilters>({});
   const [sortBy] = useState<VideoSortField>("date");
   const [sortOrder] = useState<SortOrder>("desc");
+  const [page, setPage] = useState(1);
 
   const router = useRouter();
 
@@ -96,7 +105,37 @@ export function VideoGrid() {
     sortOrder,
   });
 
-  // Get encrypted video IDs for cache status check
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, filters, sortBy, sortOrder]);
+
+  const totalPages = useMemo(
+    () => getPageCount(filteredCount, LIBRARY_PAGE_SIZE),
+    [filteredCount]
+  );
+
+  const currentPage = useMemo(
+    () => clampPage(page, totalPages),
+    [page, totalPages]
+  );
+
+  useEffect(() => {
+    if (page !== currentPage) {
+      setPage(currentPage);
+    }
+  }, [page, currentPage]);
+
+  const paginatedVideos = useMemo(
+    () => slicePage(videos, currentPage, LIBRARY_PAGE_SIZE),
+    [videos, currentPage]
+  );
+
+  const pageRange = useMemo(
+    () => getPageItemRange(filteredCount, currentPage, LIBRARY_PAGE_SIZE),
+    [filteredCount, currentPage]
+  );
+
+  // Encrypted IDs for cache status (filtered set; badges only shown on current page)
   const encryptedVideoIds = useMemo(() => {
     return videos.filter((v) => v.isEncrypted).map((v) => v.id);
   }, [videos]);
@@ -163,10 +202,18 @@ export function VideoGrid() {
       {/* Results count and cache stats */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
         <div className="text-sm text-muted-foreground">
-          {filteredCount === totalCount ? (
-            `${totalCount} video${totalCount !== 1 ? "s" : ""}`
+          {filteredCount === 0 ? (
+            "No videos"
+          ) : filteredCount === totalCount ? (
+            <>
+              Showing {pageRange.start}–{pageRange.end} of {totalCount} video
+              {totalCount !== 1 ? "s" : ""}
+            </>
           ) : (
-            `${filteredCount} of ${totalCount} videos`
+            <>
+              Showing {pageRange.start}–{pageRange.end} of {filteredCount} (
+              {totalCount} total)
+            </>
           )}
         </div>
         
@@ -187,14 +234,14 @@ export function VideoGrid() {
         <Suspense
           fallback={
             <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-              {Array.from({ length: 8 }).map((_, i) => (
+              {Array.from({ length: LIBRARY_PAGE_SIZE }).map((_, i) => (
                 <VideoCardSkeleton key={i} />
               ))}
             </div>
           }
         >
           <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-            {videos.map((video) => (
+            {paginatedVideos.map((video) => (
               <VideoCard 
                 key={video.id} 
                 video={video} 
@@ -206,7 +253,7 @@ export function VideoGrid() {
         </Suspense>
       ) : (
         <div className="space-y-2">
-          {videos.map((video) => (
+          {paginatedVideos.map((video) => (
             <VideoListItem 
               key={video.id} 
               video={video} 
@@ -214,6 +261,14 @@ export function VideoGrid() {
             />
           ))}
         </div>
+      )}
+
+      {totalPages > 1 && filteredCount > 0 && (
+        <LibraryPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setPage}
+        />
       )}
 
       {/* Empty search results */}

@@ -1,171 +1,85 @@
 /**
- * Haven-AOL Nonce Management
+ * Haven-AOL gate request nonces (EIP-712 `uint256`).
  *
- * Monotonic per-wallet nonces for EIP-712 gate requests (scoped on the
- * canister by EIP-712 domain + GateRequest type — see haven-aol `main.mo`).
- *
- * The canister records a nonce as used before signature/balance checks, so
- * the client must never reuse a nonce and should advance by +1 on collision.
+ * The ICP canister only requires that each nonce is unused within the
+ * EIP-712 domain + GateRequest scope (replay protection). A random 256-bit
+ * value avoids localStorage sync and multi-signature retry ladders.
  *
  * @module lib/haven-aol/haven-aol-nonce
  */
 
-// ============================================================================
-// Constants
-// ============================================================================
+const LEGACY_STORAGE_KEY_PREFIX = 'haven-aol-nonce'
 
-const STORAGE_KEY_PREFIX = 'haven-aol-nonce'
+const UINT256_MAX =
+  0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffn
 
-// ============================================================================
-// In-Memory State
-// ============================================================================
+/**
+ * Cryptographically random nonce in [1, 2^256-1] for EIP-712 GateRequest.
+ */
+export function createRandomGateNonce(): bigint {
+  const bytes = new Uint8Array(32)
+  crypto.getRandomValues(bytes)
 
-/** Highest nonce issued or accepted for this wallet (lowercase address key). */
-const nonceMap = new Map<string, bigint>()
-
-// ============================================================================
-// Core Functions
-// ============================================================================
-
-function storageKey(address: string): string {
-  return address.toLowerCase()
-}
-
-function readStoredNonce(address: string): bigint {
-  const key = storageKey(address)
-  const inMemory = nonceMap.get(key)
-  if (inMemory !== undefined) {
-    return inMemory
+  let value = 0n
+  for (const byte of bytes) {
+    value = (value << 8n) | BigInt(byte)
   }
-  return loadNonceFromStorage(key) ?? 0n
-}
 
-function writeStoredNonce(address: string, value: bigint): void {
-  const key = storageKey(address)
-  nonceMap.set(key, value)
-  saveNonceToStorage(key, value)
-}
-
-/**
- * Record that `usedNonce` was consumed on the canister (success or error after
- * the canister accepted the nonce).
- */
-export function commitNonceUsed(address: string, usedNonce: bigint): void {
-  const key = storageKey(address)
-  const stored = readStoredNonce(address)
-  if (usedNonce > stored) {
-    writeStoredNonce(key, usedNonce)
+  if (value === 0n) {
+    return createRandomGateNonce()
   }
+
+  return value
 }
 
 /**
- * Get the next nonce for a wallet address.
- *
- * Returns a monotonically increasing value persisted in localStorage.
- */
-export function getNextNonce(address: string): bigint {
-  const key = storageKey(address)
-  const current = readStoredNonce(address)
-  const next = current + 1n
-  writeStoredNonce(key, next)
-  return next
-}
-
-/**
- * Pick the next nonce after `NonceAlreadyUsed` for `collidedNonce`.
- *
- * Uses +1 from the collided value and never moves backward vs local state.
- */
-export function nonceAfterCollision(address: string, collidedNonce: bigint): bigint {
-  const stored = readStoredNonce(address)
-  const next = collidedNonce >= stored ? collidedNonce + 1n : stored + 1n
-  writeStoredNonce(storageKey(address), next - 1n)
-  return next
-}
-
-/**
- * @deprecated Prefer {@link nonceAfterCollision}. Kept for compatibility; bumps by +1 only.
- */
-export function bumpNonce(address: string): bigint {
-  const stored = readStoredNonce(address)
-  return nonceAfterCollision(address, stored)
-}
-
-/**
- * Clear nonce state for a wallet address.
+ * Clear legacy monotonic nonce entries from localStorage (pre-random migration).
  */
 export function clearNonce(address?: string): void {
-  if (address) {
-    const key = storageKey(address)
-    nonceMap.delete(key)
-    removeNonceFromStorage(key)
-  } else {
-    nonceMap.clear()
-    clearAllNoncesFromStorage()
+  if (typeof window === 'undefined') {
+    return
   }
-}
-
-/**
- * Get the highest tracked nonce without incrementing.
- */
-export function getCurrentNonce(address: string): bigint | null {
-  const stored = readStoredNonce(address)
-  return stored > 0n ? stored : null
-}
-
-// ============================================================================
-// Storage Helpers
-// ============================================================================
-
-function getStorageKey(address: string): string {
-  return `${STORAGE_KEY_PREFIX}-${address}`
-}
-
-function loadNonceFromStorage(address: string): bigint | null {
-  if (typeof window === 'undefined') return null
 
   try {
-    const stored = localStorage.getItem(getStorageKey(address))
-    if (stored) {
-      return BigInt(stored)
+    if (address) {
+      localStorage.removeItem(`${LEGACY_STORAGE_KEY_PREFIX}-${address.toLowerCase()}`)
+      return
     }
-  } catch {
-    // localStorage not available or invalid value
-  }
-  return null
-}
 
-function saveNonceToStorage(address: string, nonce: bigint): void {
-  if (typeof window === 'undefined') return
-
-  try {
-    localStorage.setItem(getStorageKey(address), nonce.toString())
-  } catch {
-    // localStorage not available or full
-  }
-}
-
-function removeNonceFromStorage(address: string): void {
-  if (typeof window === 'undefined') return
-
-  try {
-    localStorage.removeItem(getStorageKey(address))
-  } catch {
-    // localStorage not available
-  }
-}
-
-function clearAllNoncesFromStorage(): void {
-  if (typeof window === 'undefined') return
-
-  try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const key = localStorage.key(i)
-      if (key?.startsWith(STORAGE_KEY_PREFIX)) {
+      if (key?.startsWith(LEGACY_STORAGE_KEY_PREFIX)) {
         localStorage.removeItem(key)
       }
     }
   } catch {
-    // localStorage not available
+    // localStorage unavailable
   }
 }
+
+/** @deprecated Use {@link createRandomGateNonce}. */
+export function getNextNonce(_address: string): bigint {
+  return createRandomGateNonce()
+}
+
+/** @deprecated Use {@link createRandomGateNonce}. */
+export function bumpNonce(_address: string): bigint {
+  return createRandomGateNonce()
+}
+
+/** @deprecated Use {@link createRandomGateNonce}. */
+export function nonceAfterCollision(_address: string, _collidedNonce: bigint): bigint {
+  return createRandomGateNonce()
+}
+
+/** @deprecated No longer tracked with random nonces. */
+export function commitNonceUsed(_address: string, _usedNonce: bigint): void {
+  // no-op
+}
+
+/** @deprecated No longer tracked with random nonces. */
+export function getCurrentNonce(_address: string): bigint | null {
+  return null
+}
+
+export { UINT256_MAX }

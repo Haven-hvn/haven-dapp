@@ -14,7 +14,6 @@ import { parseArkivEntityToVideo } from '../lib/parse-arkiv-video'
 import {
   createArkivClient,
   getAllEntitiesByOwner as arkivGetAllEntitiesByOwner,
-  getLatestEntityByOwner as arkivGetLatestEntityByOwner,
   queryEntitiesByOwner as arkivQueryEntitiesByOwner,
   getEntity as arkivGetEntity,
 } from '../lib/arkiv'
@@ -32,54 +31,19 @@ function getClient() {
 
 // ── Video Service Functions ────────────────────────────────────────
 
-/** Default number of videos returned for the library (most recent on Arkiv). */
-export const LIBRARY_ARKIV_VIDEO_LIMIT = 1
-
 /**
  * Return up to `limit` videos sorted by `createdAtBlock` descending (then `createdAt`).
  */
-export function pickMostRecentVideos(videos: Video[], limit: number = LIBRARY_ARKIV_VIDEO_LIMIT): Video[] {
-  return [...videos]
-    .sort(compareVideosByRecency)
-    .slice(0, limit)
+export function pickMostRecentVideos(videos: Video[], limit?: number): Video[] {
+  const sorted = [...videos].sort(compareVideosByRecency)
+  return limit === undefined ? sorted : sorted.slice(0, limit)
 }
 
 /**
- * Fetch only the most recent video for an owner (library view).
- *
- * Loads a single entity from Arkiv (newest by `$createdAtBlock`). On Arkiv
- * failure, falls back to the newest video in the local cache.
+ * Fetch all videos for the library (Arkiv + cached expired entries).
  */
 export async function fetchLibraryVideos(ownerAddress: string): Promise<Video[]> {
-  const cacheService = getVideoCacheService(ownerAddress)
-
-  try {
-    const client = getClient()
-    const entity = await arkivGetLatestEntityByOwner(client, ownerAddress)
-
-    if (!entity) {
-      const cachedVideos = await cacheService.getVideos()
-      return pickMostRecentVideos(cachedVideos)
-    }
-
-    const video = parseArkivEntityToVideo(entity)
-
-    cacheService.syncWithArkiv([video]).catch(err => {
-      console.warn('[VideoService] Cache sync failed:', err)
-    })
-
-    return [video]
-  } catch (arkivError) {
-    console.warn('[VideoService] Arkiv latest fetch error:', arkivError)
-
-    const cachedVideos = await cacheService.getVideos()
-    const recent = pickMostRecentVideos(cachedVideos)
-    if (recent.length > 0) {
-      return recent
-    }
-
-    throw arkivError
-  }
+  return fetchAllVideos(ownerAddress)
 }
 
 /**

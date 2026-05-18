@@ -17,7 +17,7 @@ import {
 /** Ephemeral VetKD transport secret key (from haven-aol / vetkeys). */
 type TransportSecretKey = ReturnType<typeof createTransportKeyPair>['secretKey']
 import { getHavenAolConfig } from './haven-aol-client'
-import { commitNonceUsed, getNextNonce, nonceAfterCollision } from './haven-aol-nonce'
+import { createRandomGateNonce } from './haven-aol-nonce'
 import { HavenAolDecryptError } from './haven-aol-errors'
 
 // ============================================================================
@@ -62,27 +62,17 @@ export interface WalletClientLike {
 // Core Auth Flow
 // ============================================================================
 
-/**
- * Create a signed gate request using the connected wallet.
- *
- * This function:
- * 1. Generates ephemeral transport keys for VetKD
- * 2. Builds EIP-712 typed data for the gate request
- * 3. Prompts the user to sign with their wallet
- * 4. Returns all parameters needed for canister call
- *
- * @param walletClient - The viem wallet client from wagmi
- * @returns SignedGateRequest with all parameters for decryption
- * @throws HavenAolDecryptError on signing failure
- */
 export interface CreateSignedGateRequestOptions {
   /**
-   * Explicit nonce (retry after canister `NonceAlreadyUsed`).
-   * When omitted, allocates the next monotonic nonce for this wallet.
+   * Explicit nonce (retry after rare canister `NonceAlreadyUsed`).
+   * When omitted, a random 256-bit nonce is generated.
    */
   nonce?: bigint
 }
 
+/**
+ * Create a signed gate request using the connected wallet.
+ */
 export async function createSignedGateRequest(
   walletClient: WalletClientLike,
   options?: CreateSignedGateRequestOptions
@@ -97,14 +87,9 @@ export async function createSignedGateRequest(
     )
   }
 
-  // 1. Generate ephemeral transport key pair
   const { secretKey, publicKey } = createTransportKeyPair()
+  const nonce = options?.nonce ?? createRandomGateNonce()
 
-  // 2. Nonce (monotonic per wallet; scoped on canister by EIP-712 domain)
-  const nonce = options?.nonce ?? getNextNonce(address)
-  commitNonceUsed(address, nonce)
-
-  // 3. Build EIP-712 typed data
   const typedData = buildGateRequestTypedData({
     evmAddress: address,
     transportPublicKey: publicKey,
@@ -113,7 +98,6 @@ export async function createSignedGateRequest(
     eip712VerifyingContract: config.eip712VerifyingContract,
   })
 
-  // 4. Sign with wallet
   let signatureHex: string
   try {
     signatureHex = await walletClient.signTypedData({
@@ -136,7 +120,6 @@ export async function createSignedGateRequest(
     )
   }
 
-  // 5. Parse signature
   const signature = parseSignatureHex(signatureHex)
 
   return {
@@ -150,12 +133,20 @@ export async function createSignedGateRequest(
 }
 
 /**
- * Retry signing with the next nonce after a canister `NonceAlreadyUsed` error.
+ * Re-sign with a fresh random nonce (after rare `NonceAlreadyUsed` from the canister).
+ */
+export async function retryWithFreshGateNonce(
+  walletClient: WalletClientLike
+): Promise<SignedGateRequest> {
+  return createSignedGateRequest(walletClient, { nonce: createRandomGateNonce() })
+}
+
+/**
+ * @deprecated Use {@link retryWithFreshGateNonce}.
  */
 export async function retryWithBumpedNonce(
   walletClient: WalletClientLike,
-  collidedNonce: bigint
+  _collidedNonce?: bigint
 ): Promise<SignedGateRequest> {
-  const nextNonce = nonceAfterCollision(walletClient.account.address, collidedNonce)
-  return createSignedGateRequest(walletClient, { nonce: nextNonce })
+  return retryWithFreshGateNonce(walletClient)
 }
