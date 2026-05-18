@@ -32,7 +32,10 @@ import { requirePieceCid } from '@/lib/download-cid'
 import { requestPersistentStorageSilent, isPersisted } from '@/lib/storage-persistence'
 import { touchVideo } from '@/lib/cache-expiration'
 import { getVideoCacheService } from '@/services/cacheService'
-import { fetchPinnedContent } from '@/services/ipfsService'
+import {
+  DEFAULT_PIECE_DOWNLOAD_TIMEOUT_MS,
+  fetchPinnedContent,
+} from '@/services/ipfsService'
 import { decryptContentKey, isGateMetadata } from '@/lib/haven-aol'
 import { isPlaybackCancellation, toPlaybackLoadError } from '@/lib/playback-errors'
 import type { WalletClientLike } from '@/lib/haven-aol'
@@ -107,14 +110,17 @@ export interface UseVideoCacheReturn {
 
 const PROGRESS_WEIGHTS: Record<LoadingStage, number> = {
   'checking-cache': 5,
-  fetching: 25,
-  authenticating: 40,
-  'decrypting-key': 55,
-  streaming: 70,   // 70-95 mapped from chunk progress
+  authenticating: 12,
+  'decrypting-key': 22,
+  fetching: 30,   // 30-58 mapped from byte progress during piece download
+  streaming: 58,   // 58-95 mapped from chunk decrypt progress
   caching: 95,
   ready: 100,
   error: 0,
 }
+
+const FETCH_PROGRESS_START = PROGRESS_WEIGHTS.fetching
+const FETCH_PROGRESS_END = 58
 
 // ============================================================================
 // Hook
@@ -128,7 +134,7 @@ const PROGRESS_WEIGHTS: Record<LoadingStage, number> = {
  *
  * 1. Check if video is in Cache API
  * 2. Cache HIT: serve instantly via Service Worker
- * 3. Cache MISS: fetch → decrypt key → progressive playback (immediate) → cache (background)
+ * 3. Cache MISS: wallet/key → fetch piece → progressive playback → cache (background)
  *
  * Progressive playback means:
  * - Video starts playing after the FIRST chunk decrypts (~1MB, sub-second)
@@ -280,20 +286,9 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
 
         requirePieceCid(videoToLoad)
 
-        // Step 2: Fetch encrypted bytes from Synapse (Arkiv piece_cid)
-        updateStage('fetching')
-
-        const fetchResult = await fetchPinnedContent(videoToLoad, {
-          abortSignal: signal,
-        })
-
-        if (signal.aborted) throw new Error('Loading cancelled')
-
-        const encryptedData = await extractHavenEncryptedPayload(fetchResult.data)
         const lifecycle = createBufferLifecycle()
-        lifecycle.track('encrypted', encryptedData)
 
-        // Step 4: Decrypt AES key via Haven-AOL
+        // Step 2: Wallet / Haven-AOL key (does not require the piece download)
         updateStage('authenticating')
 
         const currentWalletClient = walletClientRef.current
@@ -322,6 +317,32 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
         })
 
         lifecycle.track('aesKey', aesKey)
+
+        if (signal.aborted) throw new Error('Loading cancelled')
+
+        // Step 3: Fetch encrypted CAR from Synapse (after wallet is ready)
+        updateStage('fetching')
+
+        const fetchResult = await fetchPinnedContent(videoToLoad, {
+          abortSignal: signal,
+          timeout: DEFAULT_PIECE_DOWNLOAD_TIMEOUT_MS,
+          onProgress: (downloaded, total) => {
+            if (!isMountedRef.current) return
+            if (total > 0) {
+              const ratio = Math.min(1, downloaded / total)
+              updateStage(
+                'fetching',
+                FETCH_PROGRESS_START +
+                  Math.round(ratio * (FETCH_PROGRESS_END - FETCH_PROGRESS_START))
+              )
+            }
+          },
+        })
+
+        if (signal.aborted) throw new Error('Loading cancelled')
+
+        const encryptedData = await extractHavenEncryptedPayload(fetchResult.data)
+        lifecycle.track('encrypted', encryptedData)
 
         if (signal.aborted) throw new Error('Loading cancelled')
 
@@ -355,8 +376,12 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
           if (isMountedRef.current) {
             setChunksDecrypted(chunkIdx + 1)
             setTotalChunks(totalEst)
-            // Map chunk progress to 70-95% range
-            const pct = Math.min(95, 70 + Math.round(((chunkIdx + 1) / totalEst) * 25))
+            // Map chunk progress to 58-95% range
+            const pct = Math.min(
+              95,
+              PROGRESS_WEIGHTS.streaming +
+                Math.round(((chunkIdx + 1) / totalEst) * (95 - PROGRESS_WEIGHTS.streaming))
+            )
             setProgress(pct)
           }
         }

@@ -13,8 +13,12 @@ import {
   getIpfsErrorMessage,
 } from '@/lib/ipfs'
 import { isFilecoinPieceCid, requirePieceCid } from '@/lib/download-cid'
+import { linkAbortSignal } from '@/lib/abort-signal'
 import { downloadFromSynapse, SynapseError } from '@/lib/synapse'
 import type { Video } from '@/types/video'
+
+/** Large CAR pieces (~1 GiB FOC limit); FilBeam often omits Content-Length. */
+export const DEFAULT_PIECE_DOWNLOAD_TIMEOUT_MS = 15 * 60 * 1000
 
 // ============================================================================
 // Types
@@ -132,8 +136,10 @@ export async function fetchPieceFromSynapse(
   const maxRetries = options.retries ?? 3
   const retryDelayMs = options.retryDelayMs ?? 1000
   const catalogOwner = options.catalogOwner?.trim() || undefined
+  const timeoutMs = options.timeout ?? DEFAULT_PIECE_DOWNLOAD_TIMEOUT_MS
+  const downloadSignal = linkAbortSignal(options.abortSignal, timeoutMs)
 
-  if (options.abortSignal?.aborted) {
+  if (downloadSignal.aborted) {
     throw new IpfsError('Fetch aborted', 'ABORTED', normalizedCid)
   }
 
@@ -141,7 +147,7 @@ export async function fetchPieceFromSynapse(
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      if (options.abortSignal?.aborted) {
+      if (downloadSignal.aborted) {
         throw new IpfsError('Fetch aborted', 'ABORTED', normalizedCid)
       }
 
@@ -150,7 +156,8 @@ export async function fetchPieceFromSynapse(
         normalizedCid,
         {
           ...(catalogOwner != null ? { catalogOwner } : {}),
-          ...(options.abortSignal != null ? { signal: options.abortSignal } : {}),
+          signal: downloadSignal,
+          onProgress: options.onProgress,
         }
       )
       const duration = performance.now() - startTime
@@ -180,7 +187,7 @@ export async function fetchPieceFromSynapse(
         { pieceCid: normalizedCid, catalogOwner: catalogOwner ?? '(none)' }
       )
 
-      if (options.abortSignal?.aborted) {
+      if (downloadSignal.aborted) {
         throw new IpfsError('Fetch aborted', 'ABORTED', normalizedCid)
       }
 
@@ -238,7 +245,7 @@ export async function fetchEncryptedData(
   options: FetchOptions = {}
 ): Promise<FetchResult> {
   const encryptedOptions: FetchOptions = {
-    timeout: 60000,
+    timeout: DEFAULT_PIECE_DOWNLOAD_TIMEOUT_MS,
     retries: 3,
     ...options,
   }

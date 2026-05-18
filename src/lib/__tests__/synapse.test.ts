@@ -10,12 +10,16 @@ const {
   mockDownload,
   mockClient,
   resolvePieceUrl,
-  downloadAndValidate,
+  streamDownloadAndValidatePiece,
 } = vi.hoisted(() => ({
   mockDownload: vi.fn(),
   mockClient: { account: { address: '0xdead000000000000000000000000000000000001' } },
   resolvePieceUrl: vi.fn(),
-  downloadAndValidate: vi.fn(),
+  streamDownloadAndValidatePiece: vi.fn(),
+}))
+
+vi.mock('@/lib/piece-download', () => ({
+  streamDownloadAndValidatePiece,
 }))
 
 vi.mock('@filoz/synapse-sdk', () => ({
@@ -36,7 +40,6 @@ vi.mock('@filoz/synapse-core/piece', async (importOriginal) => {
     ...actual,
     asPieceCID: (cid: string) =>
       cid.startsWith('bafkzcib') ? { toString: () => cid } : null,
-    downloadAndValidate,
     resolvePieceUrl,
     chainResolver: vi.fn(),
     filbeamResolver: vi.fn(),
@@ -53,7 +56,7 @@ describe('downloadFromSynapse', () => {
     vi.clearAllMocks()
     mockDownload.mockResolvedValue(new Uint8Array([1, 2, 3]))
     resolvePieceUrl.mockResolvedValue('https://pdp.example/piece')
-    downloadAndValidate.mockResolvedValue(new Uint8Array([7, 8, 9]))
+    streamDownloadAndValidatePiece.mockResolvedValue(new Uint8Array([7, 8, 9]))
   })
 
   afterEach(() => {
@@ -77,7 +80,12 @@ describe('downloadFromSynapse', () => {
     )
     const resolvers = resolvePieceUrl.mock.calls[0]?.[0]?.resolvers ?? []
     expect(resolvers).toHaveLength(2)
-    expect(downloadAndValidate).toHaveBeenCalled()
+    expect(streamDownloadAndValidatePiece).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: 'https://pdp.example/piece',
+        expectedPieceCid: PIECE,
+      })
+    )
     expect(mockDownload).not.toHaveBeenCalled()
   })
 
@@ -99,6 +107,19 @@ describe('downloadFromSynapse', () => {
       })
     )
     expect(resolvePieceUrl).not.toHaveBeenCalled()
+  })
+
+  it('forwards signal and onProgress to stream download', async () => {
+    const signal = new AbortController().signal
+    const onProgress = vi.fn()
+    await downloadFromSynapse(PIECE, {
+      catalogOwner: OWNER,
+      signal,
+      onProgress,
+    })
+    expect(streamDownloadAndValidatePiece).toHaveBeenCalledWith(
+      expect.objectContaining({ signal, onProgress })
+    )
   })
 
   it('uses storage.download when no catalog owner', async () => {

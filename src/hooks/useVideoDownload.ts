@@ -19,7 +19,10 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { useWalletClient } from 'wagmi'
 import { getVideo, hasVideo, putVideo } from '@/lib/video-cache'
 import { extractHavenEncryptedPayload } from '@/lib/encrypted-payload'
-import { fetchPinnedContent } from '@/services/ipfsService'
+import {
+  DEFAULT_PIECE_DOWNLOAD_TIMEOUT_MS,
+  fetchPinnedContent,
+} from '@/services/ipfsService'
 import {
   decryptContentKey,
   isGateMetadata,
@@ -84,14 +87,17 @@ export interface UseVideoDownloadReturn {
 const STAGE_PROGRESS: Record<DownloadStage, number> = {
   'idle': 0,
   'checking-cache': 5,
-  'fetching': 20,
-  'authenticating': 40,
-  'decrypting-key': 55,
-  'decrypting-file': 70,   // 70-95 based on chunk progress
+  'authenticating': 15,
+  'decrypting-key': 28,
+  'fetching': 35,   // 35-60 during piece download
+  'decrypting-file': 60,   // 60-95 based on chunk progress
   'preparing': 95,
   'complete': 100,
   'error': 0,
 }
+
+const DOWNLOAD_FETCH_PROGRESS_START = STAGE_PROGRESS.fetching
+const DOWNLOAD_FETCH_PROGRESS_END = 60
 
 const STAGE_MESSAGES: Record<DownloadStage, string> = {
   'idle': '',
@@ -263,14 +269,7 @@ export function useVideoDownload(): UseVideoDownloadReturn {
 
       requirePieceCid(video)
 
-      // Step 1: Fetch encrypted CAR from Synapse (piece_cid)
-      updateStage('fetching')
-      const fetchResult = await fetchPinnedContent(video, { abortSignal: signal })
-      if (signal.aborted) throw new Error('Download cancelled')
-
-      const encryptedData = await extractHavenEncryptedPayload(fetchResult.data)
-
-      // Step 2: Decrypt AES key via Haven-AOL
+      // Step 1: Decrypt AES key via Haven-AOL (before large piece download)
       updateStage('authenticating')
 
       const currentWalletClient = walletClientRef.current
@@ -298,12 +297,35 @@ export function useVideoDownload(): UseVideoDownloadReturn {
 
       if (signal.aborted) throw new Error('Download cancelled')
 
+      // Step 2: Fetch encrypted CAR from Synapse (piece_cid)
+      updateStage('fetching')
+      const fetchResult = await fetchPinnedContent(video, {
+        abortSignal: signal,
+        timeout: DEFAULT_PIECE_DOWNLOAD_TIMEOUT_MS,
+        onProgress: (downloaded, total) => {
+          if (!isMountedRef.current || total <= 0) return
+          const ratio = Math.min(1, downloaded / total)
+          const pct =
+            DOWNLOAD_FETCH_PROGRESS_START +
+            Math.round(ratio * (DOWNLOAD_FETCH_PROGRESS_END - DOWNLOAD_FETCH_PROGRESS_START))
+          setProgress(pct)
+          setProgressMessage(`Downloading encrypted file… ${Math.round(ratio * 100)}%`)
+        },
+      })
+      if (signal.aborted) throw new Error('Download cancelled')
+
+      const encryptedData = await extractHavenEncryptedPayload(fetchResult.data)
+
       // Step 3: Chunked AES decryption
       updateStage('decrypting-file')
 
       const onChunkProgress: ChunkedDecryptProgress = (chunkIdx, totalEst) => {
         if (isMountedRef.current && totalEst > 0) {
-          const pct = Math.min(95, 70 + Math.round(((chunkIdx + 1) / totalEst) * 25))
+          const pct = Math.min(
+            95,
+            STAGE_PROGRESS['decrypting-file'] +
+              Math.round(((chunkIdx + 1) / totalEst) * (95 - STAGE_PROGRESS['decrypting-file']))
+          )
           setProgress(pct)
           setProgressMessage(`Decrypting chunk ${chunkIdx + 1}/${totalEst}...`)
         }

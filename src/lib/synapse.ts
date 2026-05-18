@@ -15,11 +15,11 @@ import { Synapse } from '@filoz/synapse-sdk'
 import {
   asPieceCID,
   chainResolver,
-  downloadAndValidate,
   filbeamResolver,
   resolvePieceUrl,
   type resolvePieceUrl as ResolvePieceUrlTypes,
 } from '@filoz/synapse-core/piece'
+import { streamDownloadAndValidatePiece } from './piece-download'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import {
   classifyRetrievalFailure,
@@ -57,6 +57,8 @@ export interface SynapseDownloadOptions {
   withCDN?: boolean
   /** Cancel in-flight resolution/download */
   signal?: AbortSignal
+  /** Bytes received / expected (expected from Content-Length or PieceCID size) */
+  onProgress?: (downloaded: number, total: number) => void
 }
 
 export class SynapseError extends Error {
@@ -150,7 +152,7 @@ async function downloadForCatalogOwner(
   synapse: SynapseInstance,
   pieceCid: string,
   catalogOwner: string,
-  options?: Pick<SynapseDownloadOptions, 'withCDN' | 'signal'>
+  options?: Pick<SynapseDownloadOptions, 'withCDN' | 'signal' | 'onProgress'>
 ): Promise<Uint8Array> {
   const parsed = asPieceCID(pieceCid)
   if (parsed == null) {
@@ -178,9 +180,11 @@ async function downloadForCatalogOwner(
     throw new SynapseError('Download aborted', 'ABORTED', pieceCid)
   }
 
-  return downloadAndValidate({
-    expectedPieceCid: parsed,
+  return streamDownloadAndValidatePiece({
+    expectedPieceCid: pieceCid,
     url,
+    signal: options?.signal,
+    onProgress: options?.onProgress,
   })
 }
 

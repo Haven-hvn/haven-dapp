@@ -76,7 +76,10 @@ describe('ipfsService', () => {
       expect(result.data).toEqual(mockData)
       expect(result.gateway).toBe('synapse')
       expect(result.size).toBe(5)
-      expect(downloadFromSynapse).toHaveBeenCalledWith(PIECE, undefined)
+      expect(downloadFromSynapse).toHaveBeenCalledWith(
+        PIECE,
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      )
     })
 
     it('should pass catalogOwner to downloadFromSynapse', async () => {
@@ -84,7 +87,13 @@ describe('ipfsService', () => {
 
       await fetchPieceFromSynapse(PIECE, { catalogOwner: OWNER })
 
-      expect(downloadFromSynapse).toHaveBeenCalledWith(PIECE, { catalogOwner: OWNER })
+      expect(downloadFromSynapse).toHaveBeenCalledWith(
+        PIECE,
+        expect.objectContaining({
+          catalogOwner: OWNER,
+          signal: expect.any(AbortSignal),
+        })
+      )
     })
 
     it('should retry on failure', async () => {
@@ -153,7 +162,13 @@ describe('ipfsService', () => {
 
       await fetchPinnedContent(testVideo())
 
-      expect(downloadFromSynapse).toHaveBeenCalledWith(PIECE, { catalogOwner: OWNER })
+      expect(downloadFromSynapse).toHaveBeenCalledWith(
+        PIECE,
+        expect.objectContaining({
+          catalogOwner: OWNER,
+          signal: expect.any(AbortSignal),
+        })
+      )
     })
   })
 
@@ -163,7 +178,10 @@ describe('ipfsService', () => {
 
       await fetchEncryptedData(PIECE)
 
-      expect(downloadFromSynapse).toHaveBeenCalledWith(PIECE, undefined)
+      expect(downloadFromSynapse).toHaveBeenCalledWith(
+        PIECE,
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      )
     })
   })
 
