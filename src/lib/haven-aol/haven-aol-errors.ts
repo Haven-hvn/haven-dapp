@@ -88,7 +88,7 @@ export function mapGateError(gateError: unknown): HavenAolDecryptError {
 
   if ('NonceAlreadyUsed' in err) {
     return new HavenAolDecryptError(
-      'Nonce already used. Retrying with a new nonce...',
+      'Decrypt session is out of sync with the network. Try playing the video again.',
       'NONCE_ALREADY_USED'
     )
   }

@@ -55,6 +55,8 @@ export interface SynapseDownloadOptions {
   providerAddress?: `0x${string}`
   /** Override CDN for this download */
   withCDN?: boolean
+  /** Cancel in-flight resolution/download */
+  signal?: AbortSignal
 }
 
 export class SynapseError extends Error {
@@ -148,7 +150,7 @@ async function downloadForCatalogOwner(
   synapse: SynapseInstance,
   pieceCid: string,
   catalogOwner: string,
-  _options?: Pick<SynapseDownloadOptions, 'withCDN'>
+  options?: Pick<SynapseDownloadOptions, 'withCDN' | 'signal'>
 ): Promise<Uint8Array> {
   const parsed = asPieceCID(pieceCid)
   if (parsed == null) {
@@ -159,13 +161,22 @@ async function downloadForCatalogOwner(
     )
   }
 
+  if (options?.signal?.aborted) {
+    throw new SynapseError('Download aborted', 'ABORTED', pieceCid)
+  }
+
   const owner = normalizeCatalogOwner(catalogOwner)
   const url = await resolvePieceUrl({
     address: owner,
     client: synapse.client,
     pieceCid: parsed,
     resolvers: PIECE_URL_RESOLVERS,
+    signal: options?.signal,
   })
+
+  if (options?.signal?.aborted) {
+    throw new SynapseError('Download aborted', 'ABORTED', pieceCid)
+  }
 
   return downloadAndValidate({
     expectedPieceCid: parsed,

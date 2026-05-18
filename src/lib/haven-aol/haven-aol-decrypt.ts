@@ -157,45 +157,50 @@ export async function decryptContentKey(
     await agent.fetchRootKey()
   }
 
-  // Step 5: Request decryption key from canister
-  let result = await requestDecryptionKey(agent, config.canisterId, {
+  const gateRequestBase = {
     chain: metadata.chain,
     tokenAddress: metadata.tokenAddress,
     threshold: metadata.threshold,
     cid: metadata.cid,
     evmAddress: walletClient.account.address,
-    transportPublicKey: signedRequest.transportPublicKey,
-    nonce: signedRequest.nonce,
-    signature: signedRequest.signature,
-    eip712ChainId: signedRequest.eip712ChainId,
-    eip712VerifyingContract: signedRequest.eip712VerifyingContract,
-  })
-
-  // Handle NonceAlreadyUsed with retry
-  if ('err' in result) {
-    const errObj = result.err as Record<string, unknown>
-    if ('NonceAlreadyUsed' in errObj) {
-      onProgress?.('Nonce conflict, retrying...')
-      signedRequest = await retryWithBumpedNonce(walletClient)
-
-      result = await requestDecryptionKey(agent, config.canisterId, {
-        chain: metadata.chain,
-        tokenAddress: metadata.tokenAddress,
-        threshold: metadata.threshold,
-        cid: metadata.cid,
-        evmAddress: walletClient.account.address,
-        transportPublicKey: signedRequest.transportPublicKey,
-        nonce: signedRequest.nonce,
-        signature: signedRequest.signature,
-        eip712ChainId: signedRequest.eip712ChainId,
-        eip712VerifyingContract: signedRequest.eip712VerifyingContract,
-      })
-    }
   }
 
-  // Check for errors
-  if ('err' in result) {
+  const MAX_NONCE_ATTEMPTS = 5
+  let result: Awaited<ReturnType<typeof requestDecryptionKey>> | null = null
+
+  for (let attempt = 0; attempt < MAX_NONCE_ATTEMPTS; attempt++) {
+    if (signal?.aborted) {
+      throw new HavenAolDecryptError('Decryption cancelled', 'CANCELLED')
+    }
+
+    result = await requestDecryptionKey(agent, config.canisterId, {
+      ...gateRequestBase,
+      transportPublicKey: signedRequest.transportPublicKey,
+      nonce: signedRequest.nonce,
+      signature: signedRequest.signature,
+      eip712ChainId: signedRequest.eip712ChainId,
+      eip712VerifyingContract: signedRequest.eip712VerifyingContract,
+    })
+
+    if (!('err' in result)) {
+      break
+    }
+
+    const errObj = result.err as Record<string, unknown>
+    if ('NonceAlreadyUsed' in errObj && attempt < MAX_NONCE_ATTEMPTS - 1) {
+      onProgress?.('Nonce conflict, retrying...')
+      signedRequest = await retryWithBumpedNonce(walletClient)
+      continue
+    }
+
     throw mapGateError(result.err)
+  }
+
+  if (result == null || 'err' in result) {
+    throw new HavenAolDecryptError(
+      'Could not obtain a decryption key after multiple attempts.',
+      'NONCE_ALREADY_USED'
+    )
   }
 
   if (signal?.aborted) {

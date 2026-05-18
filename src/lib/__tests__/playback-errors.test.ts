@@ -4,6 +4,7 @@ import { SynapseError } from '../synapse'
 import {
   getPlaybackErrorMessage,
   getPlaybackErrorPresentation,
+  isPlaybackCancellation,
   PlaybackLoadError,
   toPlaybackLoadError,
 } from '../playback-errors'
@@ -63,6 +64,22 @@ describe('getPlaybackErrorPresentation', () => {
     )
     expect(wallet.showEncryptedNote).toBe(true)
     expect(wallet.title).toBe('Wallet required')
+  })
+})
+
+describe('isPlaybackCancellation', () => {
+  it('treats fetch abort and decrypt cancel as non-errors', () => {
+    expect(isPlaybackCancellation(new Error('Loading cancelled'))).toBe(true)
+    expect(isPlaybackCancellation(new IpfsError('Fetch aborted', 'ABORTED'))).toBe(true)
+    expect(
+      isPlaybackCancellation(new HavenAolDecryptError('x', 'CANCELLED'))
+    ).toBe(true)
+    expect(
+      isPlaybackCancellation(new SynapseError('x', 'ABORTED'))
+    ).toBe(true)
+    expect(
+      isPlaybackCancellation(new SynapseError('x', 'NETWORK_ERROR'))
+    ).toBe(false)
   })
 })
 

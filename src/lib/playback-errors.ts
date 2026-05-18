@@ -98,6 +98,25 @@ function havenAolPresentation(message: string, code: string): PlaybackErrorPrese
 }
 
 /**
+ * True when loading was cancelled or superseded (not a user-visible failure).
+ */
+export function isPlaybackCancellation(error: unknown): boolean {
+  if (error instanceof Error && error.message === 'Loading cancelled') {
+    return true
+  }
+  if (error instanceof IpfsError && error.code === 'ABORTED') {
+    return true
+  }
+  if (error instanceof SynapseError && error.code === 'ABORTED') {
+    return true
+  }
+  if (error instanceof HavenAolDecryptError && error.code === 'CANCELLED') {
+    return true
+  }
+  return false
+}
+
+/**
  * Resolve a playback pipeline error to structured UI copy.
  */
 export function getPlaybackErrorPresentation(error: unknown): PlaybackErrorPresentation {

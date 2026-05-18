@@ -148,7 +148,10 @@ export async function fetchPieceFromSynapse(
       const startTime = performance.now()
       const data = await downloadFromSynapse(
         normalizedCid,
-        catalogOwner != null ? { catalogOwner } : undefined
+        {
+          ...(catalogOwner != null ? { catalogOwner } : {}),
+          ...(options.abortSignal != null ? { signal: options.abortSignal } : {}),
+        }
       )
       const duration = performance.now() - startTime
 

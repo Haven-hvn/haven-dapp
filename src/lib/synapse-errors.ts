@@ -61,7 +61,11 @@ export function classifyRetrievalFailure(raw: string): SynapseErrorCode {
   if (m.includes('timeout') || m.includes('timed out')) {
     return 'TIMEOUT'
   }
-  if (m.includes('abort') || m.includes('cancelled')) {
+  if (
+    m.includes('abort') ||
+    m.includes('cancelled') ||
+    m.includes('fetch aborted')
+  ) {
     return 'ABORTED'
   }
 

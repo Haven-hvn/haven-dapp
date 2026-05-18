@@ -34,7 +34,7 @@ import { touchVideo } from '@/lib/cache-expiration'
 import { getVideoCacheService } from '@/services/cacheService'
 import { fetchPinnedContent } from '@/services/ipfsService'
 import { decryptContentKey, isGateMetadata } from '@/lib/haven-aol'
-import { toPlaybackLoadError } from '@/lib/playback-errors'
+import { isPlaybackCancellation, toPlaybackLoadError } from '@/lib/playback-errors'
 import type { WalletClientLike } from '@/lib/haven-aol'
 import { decryptChunkedStream, parseChunkedFileHeader, concatenateChunks } from '@/lib/chunked-decrypt'
 import type { ChunkedDecryptProgress } from '@/lib/chunked-decrypt'
@@ -224,7 +224,9 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
           requirePieceCid(videoToLoad)
           updateStage('fetching')
 
-          const result = await fetchPinnedContent(videoToLoad)
+          const result = await fetchPinnedContent(videoToLoad, {
+            abortSignal: signal,
+          })
 
           if (signal.aborted) throw new Error('Loading cancelled')
 
@@ -280,7 +282,9 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
         // Step 2: Fetch encrypted bytes from Synapse (Arkiv piece_cid)
         updateStage('fetching')
 
-        const fetchResult = await fetchPinnedContent(videoToLoad)
+        const fetchResult = await fetchPinnedContent(videoToLoad, {
+          abortSignal: signal,
+        })
 
         if (signal.aborted) throw new Error('Loading cancelled')
 
@@ -411,8 +415,7 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
           updateStage('ready')
         }
       } catch (err) {
-        // Handle cancellation gracefully
-        if (err instanceof Error && err.message === 'Loading cancelled') {
+        if (isPlaybackCancellation(err)) {
           return
         }
 
