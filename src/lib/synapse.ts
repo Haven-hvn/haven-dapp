@@ -115,9 +115,7 @@ export function getSynapseInstance(): SynapseInstance {
   const key = generatePrivateKey()
 
   const cdnEnv =
-    typeof window === 'undefined'
-      ? process.env.SYNAPSE_ENABLE_CDN
-      : import.meta.env.VITE_SYNAPSE_ENABLE_CDN
+    process.env.NEXT_PUBLIC_SYNAPSE_ENABLE_CDN ?? process.env.SYNAPSE_ENABLE_CDN
 
   synapseInstance = Synapse.create({
     account: privateKeyToAccount(key),
