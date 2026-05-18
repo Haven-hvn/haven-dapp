@@ -180,6 +180,17 @@ export function getPlaybackErrorPresentation(error: unknown): PlaybackErrorPrese
         showEncryptedNote: false,
       }
     }
+    if (lower.includes('mediasource open timed out')) {
+      return {
+        category: 'unknown',
+        title: 'Player setup timed out',
+        message:
+          'The video downloaded from Filecoin but the browser player did not start in time. Try again, or use Chrome/Edge on desktop.',
+        hint: 'Very large files may need a moment after download before playback begins.',
+        showEncryptedNote: false,
+      }
+    }
+
     if (
       lower.includes('synapse') ||
       lower.includes('filecoin') ||

@@ -324,21 +324,20 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
 
         if (signal.aborted) throw new Error('Loading cancelled')
 
-        // Step 5: Initialize progressive playback
+        // Step 5: Initialize progressive playback (mount <video> before sourceopen)
         const mimeType = videoToLoad.contentMimeType || 'video/mp4'
 
-        await progressiveRef.current.initialize(mimeType)
+        await progressiveRef.current.initialize(mimeType, (playbackUrl) => {
+          if (isMountedRef.current) {
+            setVideoUrl(playbackUrl)
+            setIsStreaming(true)
+          }
+        })
 
         if (signal.aborted) throw new Error('Loading cancelled')
 
         // Step 6: Start progressive decryption → MediaSource feeding
         updateStage('streaming')
-
-        if (isMountedRef.current) {
-          setIsStreaming(true)
-          // Set the video URL immediately — playback starts after first chunk
-          setVideoUrl(progressiveRef.current.url)
-        }
 
         // Parse header to get estimated chunk count
         const header = parseChunkedFileHeader(encryptedData)

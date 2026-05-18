@@ -77,8 +77,10 @@ export interface UseProgressivePlaybackReturn {
    * Call this before appending any chunks.
    *
    * @param mimeType - The MIME type + codec string (e.g., 'video/mp4; codecs="avc1.42E01E"')
+   * @param onUrlReady - Called synchronously with the blob URL so the parent can mount
+   *   `<video src>` before waiting for MediaSource `sourceopen`.
    */
-  initialize: (mimeType: string) => Promise<void>
+  initialize: (mimeType: string, onUrlReady?: (url: string) => void) => Promise<void>
 
   /**
    * Append a decrypted chunk to the playback buffer.
@@ -318,10 +320,34 @@ export function useProgressivePlayback(): UseProgressivePlaybackReturn {
     }
   }, [])
 
+  const MEDIA_SOURCE_OPEN_TIMEOUT_MS = 30_000
+
+  const attachSourceBuffer = useCallback(
+    (mediaSource: MediaSource, normalizedType: string, objectUrl: string) => {
+      const sb = mediaSource.addSourceBuffer(normalizedType)
+      sourceBufferRef.current = sb
+
+      if ('mode' in sb) {
+        try {
+          sb.mode = 'sequence'
+        } catch {
+          // Some browsers don't support setting mode; that's OK
+        }
+      }
+
+      if (isMountedRef.current) {
+        setUrl(objectUrl)
+        setIsProgressive(true)
+        setState('buffering')
+      }
+    },
+    []
+  )
+
   /**
    * Initialize the progressive playback pipeline.
    */
-  const initialize = useCallback(async (mimeType: string) => {
+  const initialize = useCallback(async (mimeType: string, onUrlReady?: (url: string) => void) => {
     if (!isMountedRef.current) return
 
     setState('initializing')
@@ -350,53 +376,65 @@ export function useProgressivePlayback(): UseProgressivePlaybackReturn {
     const mediaSource = new MSConstructor()
     mediaSourceRef.current = mediaSource
 
-    // Create blob URL
+    // Blob URL must be on a <video> element before sourceopen fires.
     const objectUrl = URL.createObjectURL(mediaSource)
     blobUrlRef.current = objectUrl
+    setUrl(objectUrl)
+    onUrlReady?.(objectUrl)
 
-    // Wait for MediaSource to open
+    // Let React commit <video src={objectUrl}> before waiting for sourceopen.
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve())
+      })
+    })
+
+    const openMediaSource = (): void => {
+      try {
+        attachSourceBuffer(mediaSource, normalizedType, objectUrl)
+      } catch (err) {
+        throw err instanceof Error ? err : new Error('Failed to add SourceBuffer')
+      }
+    }
+
+    if (mediaSource.readyState === 'open') {
+      openMediaSource()
+      return
+    }
+
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
-        reject(new Error('MediaSource open timed out after 10s'))
-      }, 10000)
+        reject(
+          new Error(
+            `MediaSource open timed out after ${MEDIA_SOURCE_OPEN_TIMEOUT_MS / 1000}s`
+          )
+        )
+      }, MEDIA_SOURCE_OPEN_TIMEOUT_MS)
 
-      mediaSource.addEventListener('sourceopen', () => {
-        clearTimeout(timeout)
-
-        try {
-          // Add source buffer with the codec type
-          const sb = mediaSource.addSourceBuffer(normalizedType)
-          sourceBufferRef.current = sb
-
-          // Set mode to 'sequence' for streaming append
-          // This tells the browser chunks are sequential and don't have
-          // their own timestamps (they follow the previous chunk)
-          if ('mode' in sb) {
-            try {
-              sb.mode = 'sequence'
-            } catch {
-              // Some browsers don't support setting mode; that's OK
-            }
+      mediaSource.addEventListener(
+        'sourceopen',
+        () => {
+          clearTimeout(timeout)
+          try {
+            openMediaSource()
+            resolve()
+          } catch (err) {
+            reject(err instanceof Error ? err : new Error('Failed to add SourceBuffer'))
           }
+        },
+        { once: true }
+      )
 
-          if (isMountedRef.current) {
-            setUrl(objectUrl)
-            setIsProgressive(true)
-            setState('buffering')
-          }
-
-          resolve()
-        } catch (err) {
-          reject(err instanceof Error ? err : new Error('Failed to add SourceBuffer'))
-        }
-      }, { once: true })
-
-      mediaSource.addEventListener('error', () => {
-        clearTimeout(timeout)
-        reject(new Error('MediaSource error during initialization'))
-      }, { once: true })
+      mediaSource.addEventListener(
+        'error',
+        () => {
+          clearTimeout(timeout)
+          reject(new Error('MediaSource error during initialization'))
+        },
+        { once: true }
+      )
     })
-  }, [])
+  }, [attachSourceBuffer])
 
   /**
    * Append a decrypted chunk to the playback buffer.
