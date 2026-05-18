@@ -18,15 +18,11 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useWalletClient } from 'wagmi'
 import { getVideo, hasVideo, putVideo } from '@/lib/video-cache'
-import { extractHavenEncryptedPayload } from '@/lib/encrypted-payload'
+import { prepareEncryptedContentInputs } from '@/lib/encrypted-playback-prepare'
 import {
   DEFAULT_PIECE_DOWNLOAD_TIMEOUT_MS,
   fetchPinnedContent,
 } from '@/services/ipfsService'
-import {
-  decryptContentKey,
-  isGateMetadata,
-} from '@/lib/haven-aol'
 import { toPlaybackLoadError } from '@/lib/playback-errors'
 import type { WalletClientLike } from '@/lib/haven-aol'
 import { requirePieceCid } from '@/lib/download-cid'
@@ -262,47 +258,34 @@ export function useVideoDownload(): UseVideoDownloadReturn {
         return
       }
 
-      // Encrypted video: needs wallet + decryption
-      if (!video.encryptionMetadata) {
-        throw new Error('Missing encryption metadata')
-      }
-
       requirePieceCid(video)
-
-      // Step 1: Decrypt AES key via Haven-AOL (before large piece download)
-      updateStage('authenticating')
 
       const currentWalletClient = walletClientRef.current
       if (!currentWalletClient) {
         throw new Error('Please connect your wallet to download this video.')
       }
 
-      if (!isGateMetadata(video.encryptionMetadata)) {
-        throw new Error('Invalid content encryption metadata — expected Haven-AOL gate v1')
-      }
+      updateStage('authenticating')
 
-      const { aesKey } = await decryptContentKey({
-        encryptionMetadata: video.encryptionMetadata,
-        encryptedCid: video.encryptedCid,
+      const { aesKey, encryptedData } = await prepareEncryptedContentInputs({
+        video,
         walletClient: currentWalletClient as unknown as WalletClientLike,
-        onProgress: (msg) => {
-          if (isMountedRef.current) {
-            if (msg.includes('key') || msg.includes('Key') || msg.includes('network')) {
-              updateStage('decrypting-key', undefined, 'Recovering decryption key...')
-            }
+        signal,
+        abortParallel: () => abortControllerRef.current?.abort(),
+        timeoutMs: DEFAULT_PIECE_DOWNLOAD_TIMEOUT_MS,
+        onKeyProgress: (msg) => {
+          if (!isMountedRef.current) return
+          if (msg.includes('Sign')) {
+            updateStage('authenticating')
+          } else if (
+            msg.includes('key') ||
+            msg.includes('Key') ||
+            msg.includes('network')
+          ) {
+            updateStage('decrypting-key', undefined, 'Recovering decryption key...')
           }
         },
-        signal,
-      })
-
-      if (signal.aborted) throw new Error('Download cancelled')
-
-      // Step 2: Fetch encrypted CAR from Synapse (piece_cid)
-      updateStage('fetching')
-      const fetchResult = await fetchPinnedContent(video, {
-        abortSignal: signal,
-        timeout: DEFAULT_PIECE_DOWNLOAD_TIMEOUT_MS,
-        onProgress: (downloaded, total) => {
+        onFetchProgress: (downloaded, total) => {
           if (!isMountedRef.current || total <= 0) return
           const ratio = Math.min(1, downloaded / total)
           const pct =
@@ -312,9 +295,8 @@ export function useVideoDownload(): UseVideoDownloadReturn {
           setProgressMessage(`Downloading encrypted file… ${Math.round(ratio * 100)}%`)
         },
       })
-      if (signal.aborted) throw new Error('Download cancelled')
 
-      const encryptedData = await extractHavenEncryptedPayload(fetchResult.data)
+      if (signal.aborted) throw new Error('Download cancelled')
 
       // Step 3: Chunked AES decryption
       updateStage('decrypting-file')

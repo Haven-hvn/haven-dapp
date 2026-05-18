@@ -36,11 +36,10 @@ import {
   DEFAULT_PIECE_DOWNLOAD_TIMEOUT_MS,
   fetchPinnedContent,
 } from '@/services/ipfsService'
-import { decryptContentKey, isGateMetadata } from '@/lib/haven-aol'
+import { prepareEncryptedContentInputs } from '@/lib/encrypted-playback-prepare'
 import { isPlaybackCancellation, toPlaybackLoadError } from '@/lib/playback-errors'
 import type { WalletClientLike } from '@/lib/haven-aol'
 import { decryptChunkedStream, parseChunkedFileHeader, concatenateChunks } from '@/lib/chunked-decrypt'
-import { extractHavenEncryptedPayload } from '@/lib/encrypted-payload'
 import type { ChunkedDecryptProgress } from '@/lib/chunked-decrypt'
 import { createBufferLifecycle } from '@/lib/buffer-lifecycle'
 import type { Video } from '@/types'
@@ -288,61 +287,47 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
 
         const lifecycle = createBufferLifecycle()
 
-        // Step 2: Wallet / Haven-AOL key (does not require the piece download)
-        updateStage('authenticating')
-
         const currentWalletClient = walletClientRef.current
         if (!currentWalletClient) {
           throw new Error('Please connect your wallet to decrypt this video.')
         }
 
-        if (!isGateMetadata(videoToLoad.encryptionMetadata)) {
-          throw new Error(
-            'Invalid content encryption metadata — expected Haven-AOL gate v1 (version: 1)'
-          )
-        }
+        // Wallet sign + ICP key and Filecoin piece download in parallel
+        updateStage('authenticating')
 
-        const { aesKey } = await decryptContentKey({
-          encryptionMetadata: videoToLoad.encryptionMetadata,
-          encryptedCid: videoToLoad.encryptedCid,
+        const { aesKey, encryptedData } = await prepareEncryptedContentInputs({
+          video: videoToLoad,
           walletClient: currentWalletClient as unknown as WalletClientLike,
-          onProgress: (msg) => {
-            if (isMountedRef.current) {
-              if (msg.includes('key') || msg.includes('Key') || msg.includes('network')) {
-                updateStage('decrypting-key')
-              }
+          signal,
+          abortParallel: () => abortControllerRef.current?.abort(),
+          timeoutMs: DEFAULT_PIECE_DOWNLOAD_TIMEOUT_MS,
+          onKeyProgress: (msg) => {
+            if (!isMountedRef.current) return
+            if (msg.includes('Sign')) {
+              updateStage('authenticating')
+            } else if (
+              msg.includes('key') ||
+              msg.includes('Key') ||
+              msg.includes('network')
+            ) {
+              updateStage('decrypting-key')
             }
           },
-          signal,
+          onFetchProgress: (downloaded, total) => {
+            if (!isMountedRef.current || total <= 0) return
+            const ratio = Math.min(1, downloaded / total)
+            updateStage(
+              'fetching',
+              FETCH_PROGRESS_START +
+                Math.round(ratio * (FETCH_PROGRESS_END - FETCH_PROGRESS_START))
+            )
+          },
         })
 
         lifecycle.track('aesKey', aesKey)
-
-        if (signal.aborted) throw new Error('Loading cancelled')
-
-        // Step 3: Fetch encrypted CAR from Synapse (after wallet is ready)
-        updateStage('fetching')
-
-        const fetchResult = await fetchPinnedContent(videoToLoad, {
-          abortSignal: signal,
-          timeout: DEFAULT_PIECE_DOWNLOAD_TIMEOUT_MS,
-          onProgress: (downloaded, total) => {
-            if (!isMountedRef.current) return
-            if (total > 0) {
-              const ratio = Math.min(1, downloaded / total)
-              updateStage(
-                'fetching',
-                FETCH_PROGRESS_START +
-                  Math.round(ratio * (FETCH_PROGRESS_END - FETCH_PROGRESS_START))
-              )
-            }
-          },
-        })
-
-        if (signal.aborted) throw new Error('Loading cancelled')
-
-        const encryptedData = await extractHavenEncryptedPayload(fetchResult.data)
         lifecycle.track('encrypted', encryptedData)
+
+        if (signal.aborted) throw new Error('Loading cancelled')
 
         if (signal.aborted) throw new Error('Loading cancelled')
 
