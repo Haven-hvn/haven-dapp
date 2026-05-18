@@ -9,6 +9,7 @@
  */
 
 import { CarReader } from '@ipld/car'
+import { reassembleUnixfsFileFromCar } from './unixfs-car'
 
 const BASE_IV_SIZE = 12
 const CHUNK_HEADER_SIZE = 8
@@ -165,6 +166,15 @@ export async function extractHavenEncryptedPayload(
   const fromCarBlock = await extractFromCarBlocks(downloaded)
   if (fromCarBlock != null) {
     return fromCarBlock
+  }
+
+  try {
+    const reassembled = await reassembleUnixfsFileFromCar(downloaded)
+    if (looksLikeHavenChunkedEncryptStrict(reassembled, 0)) {
+      return reassembled
+    }
+  } catch {
+    // Not a UnixFS CAR we can walk — fall through to byte scan.
   }
 
   const offset = findHavenChunkedEncryptOffset(downloaded)
