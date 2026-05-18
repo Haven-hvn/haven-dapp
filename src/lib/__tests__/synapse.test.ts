@@ -23,7 +23,7 @@ vi.mock('@filoz/synapse-sdk', () => ({
     create: vi.fn(() => ({
       client: mockClient,
       storage: {
-        withCDN: false,
+        withCDN: true,
         download: mockDownload,
       },
     })),
@@ -66,23 +66,27 @@ describe('downloadFromSynapse', () => {
     })
   })
 
-  it('uses catalog owner resolution when provided', async () => {
+  it('always uses FilBeam and chain resolvers for catalog owner', async () => {
     const bytes = await downloadFromSynapse(PIECE, { catalogOwner: OWNER })
     expect(bytes).toEqual(new Uint8Array([7, 8, 9]))
     expect(resolvePieceUrl).toHaveBeenCalledWith(
       expect.objectContaining({
         address: OWNER.toLowerCase(),
+        resolvers: [expect.any(Function), expect.any(Function)],
       })
     )
+    const resolvers = resolvePieceUrl.mock.calls[0]?.[0]?.resolvers ?? []
+    expect(resolvers).toHaveLength(2)
     expect(downloadAndValidate).toHaveBeenCalled()
     expect(mockDownload).not.toHaveBeenCalled()
   })
 
-  it('falls back to storage.download when owner resolution fails', async () => {
+  it('does not fall back to throwaway storage.download when owner resolution fails', async () => {
     resolvePieceUrl.mockRejectedValueOnce(new Error('no provider'))
-    const bytes = await downloadFromSynapse(PIECE, { catalogOwner: OWNER })
-    expect(bytes).toEqual(new Uint8Array([1, 2, 3]))
-    expect(mockDownload).toHaveBeenCalled()
+    await expect(
+      downloadFromSynapse(PIECE, { catalogOwner: OWNER })
+    ).rejects.toMatchObject({ code: 'DOWNLOAD_FAILED' })
+    expect(mockDownload).not.toHaveBeenCalled()
   })
 
   it('passes providerAddress to storage.download', async () => {
@@ -124,6 +128,9 @@ describe('getSynapseErrorMessage', () => {
     ).toMatch(/Filecoin storage/)
     expect(
       getSynapseErrorMessage(new SynapseError('x', 'INVALID_OWNER'))
-    ).toMatch(/owner address/)
+    ).toMatch(/uploader address/)
+    expect(
+      getSynapseErrorMessage(new SynapseError('402', 'CDN_RAIL_MISMATCH'))
+    ).toMatch(/Re-upload/)
   })
 })

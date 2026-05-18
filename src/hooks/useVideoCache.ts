@@ -34,7 +34,7 @@ import { touchVideo } from '@/lib/cache-expiration'
 import { getVideoCacheService } from '@/services/cacheService'
 import { fetchPinnedContent } from '@/services/ipfsService'
 import { decryptContentKey, isGateMetadata } from '@/lib/haven-aol'
-import { getPlaybackErrorMessage } from '@/lib/playback-errors'
+import { toPlaybackLoadError } from '@/lib/playback-errors'
 import type { WalletClientLike } from '@/lib/haven-aol'
 import { decryptChunkedStream, parseChunkedFileHeader, concatenateChunks } from '@/lib/chunked-decrypt'
 import type { ChunkedDecryptProgress } from '@/lib/chunked-decrypt'
@@ -416,13 +416,10 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
           return
         }
 
-        const errorMessage = err instanceof Error ? err.message : 'Failed to load video'
         console.error('[useVideoCache] Loading failed:', err)
 
-        const friendlyMessage = getPlaybackErrorMessage(err)
-
         if (isMountedRef.current) {
-          setError(new Error(friendlyMessage || errorMessage))
+          setError(toPlaybackLoadError(err))
           updateStage('error')
           setIsStreaming(false)
         }

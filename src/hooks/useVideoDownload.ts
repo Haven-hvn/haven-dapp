@@ -23,7 +23,7 @@ import {
   decryptContentKey,
   isGateMetadata,
 } from '@/lib/haven-aol'
-import { getPlaybackErrorMessage } from '@/lib/playback-errors'
+import { toPlaybackLoadError } from '@/lib/playback-errors'
 import type { WalletClientLike } from '@/lib/haven-aol'
 import { requirePieceCid } from '@/lib/download-cid'
 import { decryptChunkedFile, type ChunkedDecryptProgress } from '@/lib/chunked-decrypt'
@@ -333,14 +333,13 @@ export function useVideoDownload(): UseVideoDownloadReturn {
         return
       }
 
-      const friendlyMessage = getPlaybackErrorMessage(err)
-      const errorMessage = friendlyMessage || (err instanceof Error ? err.message : 'Download failed')
+      const loadError = toPlaybackLoadError(err)
 
       console.error('[useVideoDownload] Download failed:', err)
 
       if (isMountedRef.current) {
-        setError(new Error(errorMessage))
-        updateStage('error', 0, errorMessage)
+        setError(loadError)
+        updateStage('error', 0, loadError.message)
       }
     }
   }, [updateStage])

@@ -6,20 +6,198 @@
  * @module lib/playback-errors
  */
 
-import { getHavenAolErrorMessage } from './haven-aol/haven-aol-errors'
+import { getHavenAolErrorMessage, HavenAolDecryptError } from './haven-aol/haven-aol-errors'
 import { IpfsError, getIpfsErrorMessage } from './ipfs'
-import { SynapseError, getSynapseErrorMessage } from './synapse'
+import {
+  SynapseError,
+  getSynapseErrorMessage,
+  getSynapseErrorTitle,
+} from './synapse'
+
+export type PlaybackErrorCategory =
+  | 'storage'
+  | 'wallet'
+  | 'decryption'
+  | 'cancelled'
+  | 'size'
+  | 'unknown'
+
+export interface PlaybackErrorPresentation {
+  category: PlaybackErrorCategory
+  title: string
+  message: string
+  /** Optional secondary line below the main message */
+  hint?: string
+  /** Show encrypted-video wallet note (only for decrypt/signing failures) */
+  showEncryptedNote: boolean
+}
 
 /**
- * Resolve a playback pipeline error to UI copy.
- * Order: storage retrieval → Haven-AOL / wallet.
+ * Structured error for player UI (title + body + hints).
+ */
+export class PlaybackLoadError extends Error {
+  readonly presentation: PlaybackErrorPresentation
+
+  constructor(presentation: PlaybackErrorPresentation) {
+    super(presentation.message)
+    this.name = 'PlaybackLoadError'
+    this.presentation = presentation
+  }
+}
+
+function storagePresentation(
+  title: string,
+  message: string,
+  hint?: string
+): PlaybackErrorPresentation {
+  return {
+    category: 'storage',
+    title,
+    message,
+    hint,
+    showEncryptedNote: false,
+  }
+}
+
+function havenAolPresentation(message: string, code: string): PlaybackErrorPresentation {
+  const lower = code.toLowerCase()
+  const isWallet =
+    code === 'WALLET_NOT_CONNECTED' ||
+    code === 'SIGNING_REJECTED' ||
+    code === 'INSUFFICIENT_BALANCE'
+  const isCancelled = code === 'CANCELLED'
+
+  if (isCancelled) {
+    return {
+      category: 'cancelled',
+      title: 'Playback cancelled',
+      message,
+      showEncryptedNote: false,
+    }
+  }
+
+  if (message.toLowerCase().includes('too large') || message.toLowerCase().includes('out of memory')) {
+    return {
+      category: 'size',
+      title: 'Video too large',
+      message,
+      hint: 'Use the Haven desktop app for very large encrypted videos.',
+      showEncryptedNote: false,
+    }
+  }
+
+  return {
+    category: isWallet ? 'wallet' : 'decryption',
+    title: isWallet ? 'Wallet required' : 'Decryption failed',
+    message,
+    hint: isWallet
+      ? 'Connect the wallet that owns this video and approve the signature when prompted.'
+      : 'If this persists, the file may be corrupted or access rules may have changed.',
+    showEncryptedNote: true,
+  }
+}
+
+/**
+ * Resolve a playback pipeline error to structured UI copy.
+ */
+export function getPlaybackErrorPresentation(error: unknown): PlaybackErrorPresentation {
+  if (error instanceof PlaybackLoadError) {
+    return error.presentation
+  }
+
+  if (error instanceof SynapseError) {
+    return storagePresentation(
+      getSynapseErrorTitle(error.code),
+      getSynapseErrorMessage(error),
+      error.code === 'STILL_PROPAGATING'
+        ? 'New uploads can take a few minutes before they are readable in the browser.'
+        : error.code === 'PIECE_NOT_FOUND' || error.code === 'DOWNLOAD_FAILED'
+          ? 'Run haven-cli upload to completion before opening the video here.'
+          : undefined
+    )
+  }
+
+  if (error instanceof IpfsError) {
+    const message = getIpfsErrorMessage(error)
+    if (error.code === 'ABORTED') {
+      return {
+        category: 'cancelled',
+        title: 'Playback cancelled',
+        message,
+        showEncryptedNote: false,
+      }
+    }
+    return storagePresentation('Could not load from Filecoin', message)
+  }
+
+  if (error instanceof HavenAolDecryptError) {
+    return havenAolPresentation(error.message, error.code)
+  }
+
+  if (error instanceof Error) {
+    const msg = getHavenAolErrorMessage(error)
+    const lower = msg.toLowerCase()
+
+    if (lower.includes('cancelled')) {
+      return {
+        category: 'cancelled',
+        title: 'Playback cancelled',
+        message: msg,
+        showEncryptedNote: false,
+      }
+    }
+    if (
+      lower.includes('signature') ||
+      lower.includes('wallet') ||
+      lower.includes('reject')
+    ) {
+      return havenAolPresentation(msg, 'SIGNING_REJECTED')
+    }
+    if (lower.includes('too large') || lower.includes('out of memory')) {
+      return {
+        category: 'size',
+        title: 'Video too large',
+        message: msg,
+        showEncryptedNote: false,
+      }
+    }
+    if (
+      lower.includes('synapse') ||
+      lower.includes('filecoin') ||
+      lower.includes('provider retrieval')
+    ) {
+      return storagePresentation('Could not load from Filecoin', msg)
+    }
+
+    return {
+      category: 'unknown',
+      title: 'Playback failed',
+      message: msg,
+      showEncryptedNote: true,
+    }
+  }
+
+  return {
+    category: 'unknown',
+    title: 'Playback failed',
+    message: 'An unexpected error occurred while loading this video.',
+    showEncryptedNote: false,
+  }
+}
+
+/**
+ * Resolve a playback pipeline error to a single message string (legacy helpers).
  */
 export function getPlaybackErrorMessage(error: unknown): string {
-  if (error instanceof IpfsError) {
-    return getIpfsErrorMessage(error)
+  return getPlaybackErrorPresentation(error).message
+}
+
+/**
+ * Wrap any error as {@link PlaybackLoadError} for the player UI.
+ */
+export function toPlaybackLoadError(error: unknown): PlaybackLoadError {
+  if (error instanceof PlaybackLoadError) {
+    return error
   }
-  if (error instanceof SynapseError) {
-    return getSynapseErrorMessage(error)
-  }
-  return getHavenAolErrorMessage(error)
+  return new PlaybackLoadError(getPlaybackErrorPresentation(error))
 }

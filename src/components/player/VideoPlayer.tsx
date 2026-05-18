@@ -24,6 +24,10 @@ import { VideoPlayerControls } from './VideoPlayerControls'
 import { CacheAwareProgress } from './CacheAwareProgress'
 import { CacheIndicator } from './CacheIndicator'
 import { ErrorOverlay } from './ErrorOverlay'
+import {
+  getPlaybackErrorPresentation,
+  PlaybackLoadError,
+} from '@/lib/playback-errors'
 import { ArrowLeft, Loader2, Lock, Download, Radio } from 'lucide-react'
 import Link from 'next/link'
 import type { Video } from '@/types'
@@ -142,8 +146,12 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
       <div className="flex-1 relative flex items-center justify-center">
         {/* Error overlay */}
         {error && (
-          <ErrorOverlay 
-            error={error.message} 
+          <ErrorOverlay
+            presentation={
+              error instanceof PlaybackLoadError
+                ? error.presentation
+                : getPlaybackErrorPresentation(error)
+            }
             onRetry={retry}
             isEncrypted={video.isEncrypted}
           />

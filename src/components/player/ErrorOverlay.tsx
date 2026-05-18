@@ -2,80 +2,61 @@
 
 /**
  * Error Overlay Component
- * 
- * Displays video playback errors with:
- * - User-friendly error messages
- * - Context-aware help text based on error type
- * - Retry functionality
- * - Additional guidance for encrypted videos
- * 
+ *
+ * Displays structured playback errors (Filecoin retrieval vs wallet/decrypt).
+ *
  * @module components/player/ErrorOverlay
  */
 
 import { AlertTriangle, RefreshCw } from 'lucide-react'
+import type { PlaybackErrorPresentation } from '@/lib/playback-errors'
 
 interface ErrorOverlayProps {
-  error: string
+  presentation: PlaybackErrorPresentation
   onRetry: () => void
   isEncrypted: boolean
 }
 
-export function ErrorOverlay({ error, onRetry, isEncrypted }: ErrorOverlayProps) {
-  const getHelpfulMessage = (error: string): string => {
-    const lowerError = error.toLowerCase()
-    
-    if (lowerError.includes('too large') || lowerError.includes('exceeds')) {
-      return 'This video is too large to play in the browser. Please use the Haven desktop app for large encrypted videos.'
-    }
-    if (lowerError.includes('permission') || lowerError.includes('access control') || lowerError.includes('unauthorized')) {
-      return 'You do not have permission to decrypt this video. Make sure you\'re using the wallet that owns this video.'
-    }
-    if (lowerError.includes('network') || lowerError.includes('fetch') || lowerError.includes('download')) {
-      return 'Failed to download the video. Please check your connection and try again.'
-    }
-    if (lowerError.includes('timeout')) {
-      return 'The download timed out. The IPFS network may be slow. Please try again.'
-    }
-    if (lowerError.includes('cancelled')) {
-      return 'The operation was cancelled. You can try again.'
-    }
-    if (lowerError.includes('private key')) {
-      return 'Unable to access your decryption key. Please check your wallet connection.'
-    }
-    if (lowerError.includes('lit') || lowerError.includes('protocol')) {
-      return 'There was an issue with the encryption service. Please try again later.'
-    }
-    if (lowerError.includes('not available') || lowerError.includes('not found')) {
-      return 'This video is no longer available or has been removed.'
-    }
-    
-    return error
-  }
-  
+export function ErrorOverlay({
+  presentation,
+  onRetry,
+  isEncrypted,
+}: ErrorOverlayProps) {
+  const showEncryptedFooter =
+    isEncrypted && presentation.showEncryptedNote
+
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-black/90 z-20">
       <div className="text-center max-w-md px-6">
         <AlertTriangle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
-        
+
         <h3 className="text-xl font-semibold text-white mb-2">
-          Failed to Play Video
+          {presentation.title}
         </h3>
-        
-        <p className="text-white/60 mb-6">
-          {getHelpfulMessage(error)}
-        </p>
-        
+
+        <p className="text-white/80 mb-3 leading-relaxed">{presentation.message}</p>
+
+        {presentation.hint != null && presentation.hint.length > 0 ? (
+          <p className="text-sm text-white/50 mb-6 leading-relaxed">
+            {presentation.hint}
+          </p>
+        ) : (
+          <div className="mb-6" />
+        )}
+
         <button
+          type="button"
           onClick={onRetry}
           className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
         >
           <RefreshCw className="w-4 h-4" />
           Try Again
         </button>
-        
-        {isEncrypted && (
-          <p className="text-xs text-white/30 mt-4">
-            Encrypted videos require your wallet to decrypt them locally.
+
+        {showEncryptedFooter && (
+          <p className="text-xs text-white/40 mt-4 leading-relaxed">
+            Encrypted videos are decrypted in your browser after you sign with
+            the owning wallet.
           </p>
         )}
       </div>

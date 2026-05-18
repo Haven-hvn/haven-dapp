@@ -13,7 +13,7 @@ import {
   getIpfsErrorMessage,
 } from '@/lib/ipfs'
 import { isFilecoinPieceCid, requirePieceCid } from '@/lib/download-cid'
-import { downloadFromSynapse } from '@/lib/synapse'
+import { downloadFromSynapse, SynapseError } from '@/lib/synapse'
 import type { Video } from '@/types/video'
 
 // ============================================================================
@@ -187,8 +187,12 @@ export async function fetchPieceFromSynapse(
     }
   }
 
+  if (lastError instanceof SynapseError) {
+    throw lastError
+  }
+
   throw new IpfsError(
-    `Failed to fetch via Synapse after ${maxRetries} attempts. Last error: ${lastError?.message}`,
+    `Failed to fetch via Synapse after ${maxRetries} attempts. Last error: ${lastError?.message ?? 'unknown'}`,
     'ALL_GATEWAYS_FAILED',
     normalizedCid
   )

@@ -18,12 +18,27 @@ import {
   downloadAndValidate,
   filbeamResolver,
   resolvePieceUrl,
+  type resolvePieceUrl as ResolvePieceUrlTypes,
 } from '@filoz/synapse-core/piece'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
+import {
+  classifyRetrievalFailure,
+  getSynapseErrorMessageForCode,
+  type SynapseErrorCode,
+} from './synapse-errors'
+
+export type { SynapseErrorCode } from './synapse-errors'
+export { classifyRetrievalFailure, getSynapseErrorMessageForCode } from './synapse-errors'
 
 // ============================================================================
 // Types
 // ============================================================================
+
+/** FilBeam first, PDP chain fallback (legacy non-CDN deals may skip FilBeam via 402). */
+const PIECE_URL_RESOLVERS: ResolvePieceUrlTypes.ResolverFnType[] = [
+  filbeamResolver,
+  chainResolver,
+]
 
 export interface SynapseConfig {
   /** Enable CDN for faster retrieval */
@@ -45,12 +60,27 @@ export interface SynapseDownloadOptions {
 export class SynapseError extends Error {
   constructor(
     message: string,
-    public readonly code: string,
+    public readonly code: SynapseErrorCode,
     public readonly pieceCid?: string
   ) {
     super(message)
     this.name = 'SynapseError'
   }
+}
+
+export function synapseErrorFromUnknown(
+  error: unknown,
+  pieceCid?: string
+): SynapseError {
+  if (error instanceof SynapseError) {
+    return error
+  }
+  const message = error instanceof Error ? error.message : String(error)
+  return new SynapseError(
+    message,
+    classifyRetrievalFailure(message),
+    pieceCid
+  )
 }
 
 type SynapseInstance = Awaited<ReturnType<typeof Synapse.create>>
@@ -77,12 +107,15 @@ export function getSynapseInstance(): SynapseInstance {
 
   const key = generatePrivateKey()
 
+  const cdnEnv =
+    typeof window === 'undefined'
+      ? process.env.SYNAPSE_ENABLE_CDN
+      : import.meta.env.VITE_SYNAPSE_ENABLE_CDN
+
   synapseInstance = Synapse.create({
     account: privateKeyToAccount(key),
     source: 'haven-dapp',
-    withCDN: typeof window === 'undefined'
-      ? process.env.SYNAPSE_ENABLE_CDN === 'true'
-      : false,
+    withCDN: cdnEnv == null || String(cdnEnv).trim().toLowerCase() !== 'false',
   })
 
   return synapseInstance
@@ -116,7 +149,8 @@ function normalizeCatalogOwner(address: string): `0x${string}` {
 async function downloadForCatalogOwner(
   synapse: SynapseInstance,
   pieceCid: string,
-  catalogOwner: string
+  catalogOwner: string,
+  _options?: Pick<SynapseDownloadOptions, 'withCDN'>
 ): Promise<Uint8Array> {
   const parsed = asPieceCID(pieceCid)
   if (parsed == null) {
@@ -132,7 +166,7 @@ async function downloadForCatalogOwner(
     address: owner,
     client: synapse.client,
     pieceCid: parsed,
-    resolvers: [filbeamResolver, chainResolver],
+    resolvers: PIECE_URL_RESOLVERS,
   })
 
   return downloadAndValidate({
@@ -194,62 +228,50 @@ export async function downloadFromSynapse(
         return await downloadForCatalogOwner(
           synapse,
           normalizedPieceCid,
-          options.catalogOwner
+          options.catalogOwner,
+          options
         )
       } catch (ownerError) {
-        if (ownerError instanceof SynapseError) {
-          throw ownerError
-        }
-        console.warn(
-          '[synapse] Owner-aware resolution failed, falling back to storage.download:',
-          ownerError instanceof Error ? ownerError.message : ownerError,
-          { pieceCid: normalizedPieceCid, catalogOwner: options.catalogOwner.trim() }
-        )
+        throw synapseErrorFromUnknown(ownerError, normalizedPieceCid)
       }
     }
 
     return await downloadViaStorageManager(synapse, normalizedPieceCid, options)
   } catch (error) {
-    if (error instanceof SynapseError) {
-      throw error
-    }
-
-    const message = error instanceof Error ? error.message : String(error)
-    throw new SynapseError(
-      `Failed to download from Synapse: ${message}`,
-      'DOWNLOAD_FAILED',
-      normalizedPieceCid
-    )
+    throw synapseErrorFromUnknown(error, normalizedPieceCid)
   }
+}
+
+const SYNAPSE_ERROR_TITLES: Record<SynapseErrorCode, string> = {
+  INVALID_CID: 'Invalid Filecoin reference',
+  INVALID_OWNER: 'Missing uploader address',
+  PIECE_NOT_FOUND: 'Video not on Filecoin',
+  STILL_PROPAGATING: 'Still storing on Filecoin',
+  CDN_RAIL_MISMATCH: 'Upload needs CDN',
+  NETWORK_ERROR: 'Connection problem',
+  TIMEOUT: 'Download timed out',
+  ABORTED: 'Cancelled',
+  DOWNLOAD_FAILED: 'Could not load from Filecoin',
+}
+
+/**
+ * Short title for player error overlay.
+ */
+export function getSynapseErrorTitle(code: SynapseErrorCode): string {
+  return SYNAPSE_ERROR_TITLES[code]
 }
 
 /**
  * Get a user-friendly error message for a Synapse error.
- *
- * @param error - The error to get a message for
- * @returns User-friendly error message
  */
 export function getSynapseErrorMessage(error: unknown): string {
   if (error instanceof SynapseError) {
-    switch (error.code) {
-      case 'INVALID_CID':
-        return 'Invalid content identifier provided.'
-      case 'INVALID_OWNER':
-        return 'Invalid video owner address for Filecoin retrieval.'
-      case 'DOWNLOAD_FAILED':
-        return (
-          'Could not download the video from Filecoin storage (Synapse). ' +
-          'The piece may still be propagating after upload — wait a few minutes and try again. ' +
-          'If this persists, re-upload with haven-cli and confirm the upload completed successfully.'
-        )
-      default:
-        return error.message || 'An unexpected Synapse error occurred.'
-    }
+    return getSynapseErrorMessageForCode(error.code)
   }
 
   if (error instanceof Error) {
-    return error.message
+    return getSynapseErrorMessageForCode(classifyRetrievalFailure(error.message))
   }
 
-  return 'An unexpected error occurred during content retrieval.'
+  return getSynapseErrorMessageForCode('DOWNLOAD_FAILED')
 }
