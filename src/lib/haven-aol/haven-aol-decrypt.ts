@@ -27,6 +27,13 @@ import {
 } from './haven-aol-metadata'
 import { HavenAolDecryptError, mapGateError } from './haven-aol-errors'
 import { getCachedKey, setCachedKey, getVideoIdFromMetadata } from '../aes-key-cache'
+import {
+  logFetchVerificationKeyDuration,
+  logPostSignToIcpKeySuccess,
+  logRequestDecryptionKeyDuration,
+  markPostWalletSign,
+  type HavenAolIcpTimingMark,
+} from './haven-aol-icp-timing'
 
 // ============================================================================
 // Types
@@ -178,6 +185,7 @@ async function decryptContentKeyImpl(
   // Step 3: Sign EIP-712 gate request
   onProgress?.('Sign with your wallet to decrypt...')
   let signedRequest = await createSignedGateRequest(walletClient)
+  let icpTimingMark: HavenAolIcpTimingMark = markPostWalletSign()
 
   if (signal?.aborted) {
     throw new HavenAolDecryptError('Decryption cancelled', 'CANCELLED')
@@ -212,6 +220,7 @@ async function decryptContentKeyImpl(
       throw new HavenAolDecryptError('Decryption cancelled', 'CANCELLED')
     }
 
+    const requestStartMs = performance.now()
     result = await requestDecryptionKey(agent, config.canisterId, {
       ...gateRequestBase,
       transportPublicKey: signedRequest.transportPublicKey,
@@ -220,8 +229,14 @@ async function decryptContentKeyImpl(
       eip712ChainId: signedRequest.eip712ChainId,
       eip712VerifyingContract: signedRequest.eip712VerifyingContract,
     })
+    logRequestDecryptionKeyDuration(
+      icpTimingMark,
+      performance.now() - requestStartMs,
+      attempt
+    )
 
     if (!('err' in result)) {
+      logPostSignToIcpKeySuccess(icpTimingMark, attempt)
       break
     }
 
@@ -230,6 +245,7 @@ async function decryptContentKeyImpl(
     if ('NonceAlreadyUsed' in errObj && attempt < MAX_NONCE_ATTEMPTS - 1) {
       onProgress?.('Nonce collision — please sign once more…')
       signedRequest = await retryWithFreshGateNonce(walletClient)
+      icpTimingMark = markPostWalletSign()
       continue
     }
 
@@ -249,7 +265,9 @@ async function decryptContentKeyImpl(
 
   // Step 6: Fetch verification key
   onProgress?.('Verifying key...')
+  const verificationFetchStartMs = performance.now()
   const verificationKeyBytes = await fetchVerificationKey(agent, config.canisterId)
+  logFetchVerificationKeyDuration(performance.now() - verificationFetchStartMs)
 
   // Step 7: Compute derivation input
   const derivationInput = await computeDerivationInput(
