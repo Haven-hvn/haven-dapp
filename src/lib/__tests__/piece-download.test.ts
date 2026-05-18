@@ -117,6 +117,9 @@ describe('streamDownloadAndValidatePiece', () => {
         url: 'https://example.com/wrong',
         expectedPieceCid: PIECE,
       })
-    ).rejects.toThrow(/PieceCID verification failed/)
+    ).rejects.toMatchObject({
+      name: 'PieceDownloadError',
+      code: 'VERIFICATION_FAILED',
+    })
   })
 })

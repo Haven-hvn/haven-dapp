@@ -20,6 +20,14 @@ describe('classifyRetrievalFailure', () => {
   it('detects network errors', () => {
     expect(classifyRetrievalFailure('Failed to fetch')).toBe('NETWORK_ERROR')
   })
+
+  it('detects PieceCID verification mismatch', () => {
+    expect(
+      classifyRetrievalFailure(
+        'PieceCID verification failed. Expected: bafkzcibaaa, Got: bafkzcibbbb'
+      )
+    ).toBe('PIECE_VERIFICATION_FAILED')
+  })
 })
 
 describe('getSynapseErrorMessageForCode', () => {
@@ -27,5 +35,8 @@ describe('getSynapseErrorMessageForCode', () => {
     expect(getSynapseErrorMessageForCode('CDN_RAIL_MISMATCH')).toMatch(/Re-upload/)
     expect(getSynapseErrorMessageForCode('PIECE_NOT_FOUND')).toMatch(/not found/)
     expect(getSynapseErrorMessageForCode('NETWORK_ERROR')).toMatch(/browser/)
+    expect(getSynapseErrorMessageForCode('PIECE_VERIFICATION_FAILED')).toMatch(
+      /second attempt/
+    )
   })
 })

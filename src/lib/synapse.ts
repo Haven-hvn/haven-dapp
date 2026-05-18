@@ -19,7 +19,11 @@ import {
   resolvePieceUrl,
   type resolvePieceUrl as ResolvePieceUrlTypes,
 } from '@filoz/synapse-core/piece'
-import { streamDownloadAndValidatePiece } from './piece-download'
+import {
+  isPieceCidVerificationFailure,
+  PieceDownloadError,
+  streamDownloadAndValidatePiece,
+} from './piece-download'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import {
   classifyRetrievalFailure,
@@ -259,6 +263,7 @@ const SYNAPSE_ERROR_TITLES: Record<SynapseErrorCode, string> = {
   INVALID_CID: 'Invalid Filecoin reference',
   INVALID_OWNER: 'Missing uploader address',
   PIECE_NOT_FOUND: 'Video not on Filecoin',
+  PIECE_VERIFICATION_FAILED: 'Download didn’t match this video',
   STILL_PROPAGATING: 'Still storing on Filecoin',
   CDN_RAIL_MISMATCH: 'Upload needs CDN',
   NETWORK_ERROR: 'Connection problem',

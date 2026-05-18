@@ -29,6 +29,10 @@ export interface PlaybackErrorPresentation {
   message: string
   /** Optional secondary line below the main message */
   hint?: string
+  /** Primary retry button label (default: Try again) */
+  retryLabel?: string
+  /** Short line under the retry button */
+  retryHint?: string
   /** Show encrypted-video wallet note (only for decrypt/signing failures) */
   showEncryptedNote: boolean
 }
@@ -126,6 +130,18 @@ export function getPlaybackErrorPresentation(error: unknown): PlaybackErrorPrese
   }
 
   if (error instanceof SynapseError) {
+    if (error.code === 'PIECE_VERIFICATION_FAILED') {
+      return {
+        category: 'storage',
+        title: getSynapseErrorTitle(error.code),
+        message: getSynapseErrorMessage(error),
+        hint: 'If it keeps failing after several tries, re-upload with haven-cli.',
+        retryLabel: 'Try again',
+        retryHint: 'Retries the Filecoin download from scratch.',
+        showEncryptedNote: false,
+      }
+    }
+
     return storagePresentation(
       getSynapseErrorTitle(error.code),
       getSynapseErrorMessage(error),
@@ -133,7 +149,9 @@ export function getPlaybackErrorPresentation(error: unknown): PlaybackErrorPrese
         ? 'New uploads can take a few minutes before they are readable in the browser.'
         : error.code === 'PIECE_NOT_FOUND' || error.code === 'DOWNLOAD_FAILED'
           ? 'Run haven-cli upload to completion before opening the video here.'
-          : undefined
+          : error.code === 'NETWORK_ERROR' || error.code === 'TIMEOUT'
+            ? 'Tap Try again — transient connection issues often clear on retry.'
+            : undefined
     )
   }
 

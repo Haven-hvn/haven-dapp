@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { PieceDownloadError } from '../piece-download'
 import {
   downloadFromSynapse,
   getSynapseErrorMessage,
@@ -18,9 +19,13 @@ const {
   streamDownloadAndValidatePiece: vi.fn(),
 }))
 
-vi.mock('@/lib/piece-download', () => ({
-  streamDownloadAndValidatePiece,
-}))
+vi.mock('@/lib/piece-download', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../piece-download')>()
+  return {
+    ...actual,
+    streamDownloadAndValidatePiece,
+  }
+})
 
 vi.mock('@filoz/synapse-sdk', () => ({
   Synapse: {
@@ -139,6 +144,18 @@ describe('downloadFromSynapse', () => {
     await expect(downloadFromSynapse(PIECE)).rejects.toMatchObject({
       code: 'DOWNLOAD_FAILED',
     })
+  })
+
+  it('maps PieceCID verification failures to PIECE_VERIFICATION_FAILED', async () => {
+    vi.mocked(streamDownloadAndValidatePiece).mockRejectedValueOnce(
+      new PieceDownloadError(
+        'PieceCID verification failed. Expected: a, Got: b',
+        'VERIFICATION_FAILED'
+      )
+    )
+    await expect(
+      downloadFromSynapse(PIECE, { catalogOwner: OWNER })
+    ).rejects.toMatchObject({ code: 'PIECE_VERIFICATION_FAILED' })
   })
 })
 

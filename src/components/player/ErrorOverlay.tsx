@@ -47,11 +47,17 @@ export function ErrorOverlay({
         <button
           type="button"
           onClick={onRetry}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+          className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors touch-manipulation min-h-[44px]"
         >
           <RefreshCw className="w-4 h-4" />
-          Try Again
+          {presentation.retryLabel ?? 'Try again'}
         </button>
+
+        {presentation.retryHint != null && presentation.retryHint.length > 0 ? (
+          <p className="text-xs text-white/45 mt-2 leading-relaxed">
+            {presentation.retryHint}
+          </p>
+        ) : null}
 
         {showEncryptedFooter && (
           <p className="text-xs text-white/40 mt-4 leading-relaxed">

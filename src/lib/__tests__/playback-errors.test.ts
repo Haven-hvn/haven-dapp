@@ -11,6 +11,21 @@ import {
 import { HavenAolDecryptError } from '../haven-aol/haven-aol-errors'
 
 describe('getPlaybackErrorPresentation', () => {
+  it('maps PieceCID verification failure with retry copy', () => {
+    const err = new SynapseError(
+      'PieceCID verification failed. Expected: a, Got: b',
+      'PIECE_VERIFICATION_FAILED',
+      'bafkzcibtest'
+    )
+    const p = getPlaybackErrorPresentation(err)
+    expect(p.category).toBe('storage')
+    expect(p.title).toBe('Download didn’t match this video')
+    expect(p.message).toMatch(/second attempt/)
+    expect(p.retryLabel).toBe('Try again')
+    expect(p.retryHint).toMatch(/Filecoin download/)
+    expect(p.showEncryptedNote).toBe(false)
+  })
+
   it('maps Synapse PIECE_NOT_FOUND with storage title and no encrypted note', () => {
     const err = new SynapseError(
       'All provider retrieval attempts failed',

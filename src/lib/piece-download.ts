@@ -23,11 +23,27 @@ export interface StreamDownloadAndValidateOptions {
   onProgress?: PieceDownloadProgressFn
 }
 
+export type PieceDownloadErrorCode =
+  | 'VERIFICATION_FAILED'
+  | 'DOWNLOAD_FAILED'
+
 export class PieceDownloadError extends Error {
-  constructor(message: string) {
+  readonly code: PieceDownloadErrorCode
+
+  constructor(message: string, code: PieceDownloadErrorCode = 'DOWNLOAD_FAILED') {
     super(message)
     this.name = 'PieceDownloadError'
+    this.code = code
   }
+}
+
+/** True when downloaded bytes did not match the expected Filecoin piece CID. */
+export function isPieceCidVerificationFailure(error: unknown): boolean {
+  if (error instanceof PieceDownloadError) {
+    return error.code === 'VERIFICATION_FAILED'
+  }
+  const message = error instanceof Error ? error.message : String(error)
+  return message.toLowerCase().includes('piececid verification failed')
 }
 
 /**
@@ -134,7 +150,8 @@ export async function streamDownloadAndValidatePiece(
 
   if (calculatedPieceCid.toString() !== parsedPieceCid.toString()) {
     throw new PieceDownloadError(
-      `PieceCID verification failed. Expected: ${String(parsedPieceCid)}, Got: ${String(calculatedPieceCid)}`
+      `PieceCID verification failed. Expected: ${String(parsedPieceCid)}, Got: ${String(calculatedPieceCid)}`,
+      'VERIFICATION_FAILED'
     )
   }
 

@@ -8,6 +8,7 @@ export type SynapseErrorCode =
   | 'INVALID_CID'
   | 'INVALID_OWNER'
   | 'PIECE_NOT_FOUND'
+  | 'PIECE_VERIFICATION_FAILED'
   | 'STILL_PROPAGATING'
   | 'CDN_RAIL_MISMATCH'
   | 'NETWORK_ERROR'
@@ -21,6 +22,9 @@ export type SynapseErrorCode =
 export function classifyRetrievalFailure(raw: string): SynapseErrorCode {
   const m = raw.toLowerCase()
 
+  if (m.includes('piececid verification failed')) {
+    return 'PIECE_VERIFICATION_FAILED'
+  }
   if (m.includes('invalid piece cid') || m.includes('invalid piececid')) {
     return 'INVALID_CID'
   }
@@ -79,6 +83,8 @@ const SYNAPSE_USER_MESSAGES: Record<SynapseErrorCode, string> = {
     'This video is missing a valid uploader address, so Filecoin storage cannot be queried. Check the Arkiv entity or re-sync.',
   PIECE_NOT_FOUND:
     'The video file was not found on Filecoin for this uploader. The upload may have failed or the piece was never committed — re-upload with haven-cli and wait until the pipeline reports success.',
+  PIECE_VERIFICATION_FAILED:
+    'Filecoin returned data that does not match this video’s record. That is often temporary (network or CDN). Try again — it usually works on the second attempt.',
   STILL_PROPAGATING:
     'The video is still being stored on Filecoin after upload. Wait a few minutes, then try again.',
   CDN_RAIL_MISMATCH:

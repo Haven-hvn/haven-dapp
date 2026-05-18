@@ -15,19 +15,15 @@ import {
 import type { Video } from '@/types/video'
 import { IpfsError } from '@/lib/ipfs'
 
-vi.mock('@/lib/synapse', () => ({
-  downloadFromSynapse: vi.fn(),
-  SynapseError: class SynapseError extends Error {
-    code: string
-    constructor(message: string, code: string) {
-      super(message)
-      this.code = code
-      this.name = 'SynapseError'
-    }
-  },
-}))
+vi.mock('@/lib/synapse', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/synapse')>()
+  return {
+    ...actual,
+    downloadFromSynapse: vi.fn(),
+  }
+})
 
-import { downloadFromSynapse } from '@/lib/synapse'
+import { downloadFromSynapse, SynapseError } from '@/lib/synapse'
 
 const PIECE =
   'bafkzcibe2hzbcd4t6clvsb3mfrezyxl75gl3gzcsqi42dd27gktq4nk75rr62ciuaq'
@@ -57,7 +53,7 @@ Object.defineProperty(global, 'performance', {
 
 describe('ipfsService', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.mocked(downloadFromSynapse).mockReset()
   })
 
   describe('fetchPieceFromSynapse', () => {
@@ -106,6 +102,27 @@ describe('ipfsService', () => {
 
       expect(result.data).toEqual(mockData)
       expect(downloadFromSynapse).toHaveBeenCalledTimes(3)
+    })
+
+    it('retries extra times on PieceCID verification failure', async () => {
+      const verifyError = new SynapseError(
+        'PieceCID verification failed. Expected: a, Got: b',
+        'PIECE_VERIFICATION_FAILED',
+        PIECE
+      )
+      vi.mocked(downloadFromSynapse)
+        .mockRejectedValueOnce(verifyError)
+        .mockRejectedValueOnce(verifyError)
+        .mockRejectedValueOnce(verifyError)
+        .mockResolvedValueOnce(mockData)
+
+      const result = await fetchPieceFromSynapse(PIECE, {
+        retries: 3,
+        retryDelayMs: 0,
+      })
+
+      expect(result.data).toEqual(mockData)
+      expect(downloadFromSynapse).toHaveBeenCalledTimes(4)
     })
 
     it('should throw after all retries fail', async () => {
