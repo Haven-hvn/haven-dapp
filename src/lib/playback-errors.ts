@@ -189,6 +189,20 @@ export function getPlaybackErrorPresentation(error: unknown): PlaybackErrorPrese
       }
     }
     if (
+      lower.includes('aes-gcm decryption failed') ||
+      lower.includes('chunk ordering violation')
+    ) {
+      return storagePresentation(
+        'Decryption failed',
+        'The downloaded file could not be decrypted with your wallet key. ' +
+          'This usually means the Filecoin piece is not the expected encrypted video bytes ' +
+          '(CAR unpacking issue) or the Arkiv gate metadata does not match the upload. ' +
+          'Try re-uploading with the current haven-cli.',
+        'Confirm you are using the wallet that owns this video and holds any required token.'
+      )
+    }
+
+    if (
       lower.includes('claims') &&
       lower.includes('exceeds maximum allowed chunk size')
     ) {

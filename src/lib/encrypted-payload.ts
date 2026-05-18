@@ -2,11 +2,13 @@
  * Locate haven-cli chunked ciphertext inside Synapse / FilBeam downloads.
  *
  * Uploads are wrapped as UnixFS inside a CAR; the piece GET returns the CAR
- * bytes, not the raw `{video}.encrypted` file. This module finds the embedded
- * streaming-encrypt payload before chunked decryption.
+ * bytes, not the raw `{video}.encrypted` file. This module extracts the leaf
+ * block that contains streaming-encrypt data before chunked decryption.
  *
  * @module lib/encrypted-payload
  */
+
+import { CarReader } from '@ipld/car'
 
 const BASE_IV_SIZE = 12
 const CHUNK_HEADER_SIZE = 8
@@ -14,8 +16,8 @@ const GCM_TAG_MIN = 17
 const MAX_CHUNK_SIZE = 64 * 1024 * 1024
 const DEFAULT_PLAINTEXT_CHUNK = 1024 * 1024
 
-/** How far into a CAR to scan for the haven chunked header (chunk index 0). */
-const CAR_SCAN_LIMIT_BYTES = 8 * 1024 * 1024
+/** How far into a linear CAR byte stream to scan (fallback only). */
+const CAR_SCAN_LIMIT_BYTES = 16 * 1024 * 1024
 
 export class EncryptedPayloadError extends Error {
   constructor(message: string) {
@@ -56,16 +58,64 @@ export function looksLikeHavenChunkedEncryptAt(
 }
 
 /**
- * Find byte offset of haven-cli chunked ciphertext inside a larger buffer.
+ * Stricter check: valid chunk 0 and, when more data follows, a plausible chunk 1.
+ * Reduces false positives inside CAR/DAG bytes.
+ */
+export function looksLikeHavenChunkedEncryptStrict(
+  data: Uint8Array,
+  offset: number
+): boolean {
+  if (!looksLikeHavenChunkedEncryptAt(data, offset)) {
+    return false
+  }
+
+  const headerStart = offset + BASE_IV_SIZE
+  const view = new DataView(
+    data.buffer,
+    data.byteOffset + headerStart,
+    CHUNK_HEADER_SIZE
+  )
+  const chunkLength = view.getUint32(4, true)
+  const chunkEnd = headerStart + CHUNK_HEADER_SIZE + chunkLength
+
+  if (chunkEnd === data.length) {
+    return true
+  }
+
+  if (chunkEnd + CHUNK_HEADER_SIZE + GCM_TAG_MIN > data.length) {
+    return false
+  }
+
+  const next = new DataView(
+    data.buffer,
+    data.byteOffset + chunkEnd,
+    CHUNK_HEADER_SIZE
+  )
+  const nextIndex = next.getUint32(0, true)
+  const nextLength = next.getUint32(4, true)
+
+  return (
+    nextIndex === 1 &&
+    nextLength >= GCM_TAG_MIN &&
+    nextLength <= MAX_CHUNK_SIZE &&
+    chunkEnd + CHUNK_HEADER_SIZE + nextLength <= data.length
+  )
+}
+
+/**
+ * Find byte offset of haven-cli chunked ciphertext inside a larger buffer (fallback).
  */
 export function findHavenChunkedEncryptOffset(data: Uint8Array): number | null {
-  if (looksLikeHavenChunkedEncryptAt(data, 0)) {
+  if (looksLikeHavenChunkedEncryptStrict(data, 0)) {
     return 0
   }
 
-  const scanEnd = Math.min(data.length - BASE_IV_SIZE - CHUNK_HEADER_SIZE - GCM_TAG_MIN, CAR_SCAN_LIMIT_BYTES)
+  const scanEnd = Math.min(
+    data.length - BASE_IV_SIZE - CHUNK_HEADER_SIZE - GCM_TAG_MIN,
+    CAR_SCAN_LIMIT_BYTES
+  )
   for (let offset = 1; offset < scanEnd; offset++) {
-    if (looksLikeHavenChunkedEncryptAt(data, offset)) {
+    if (looksLikeHavenChunkedEncryptStrict(data, offset)) {
       return offset
     }
   }
@@ -73,39 +123,61 @@ export function findHavenChunkedEncryptOffset(data: Uint8Array): number | null {
   return null
 }
 
+async function extractFromCarBlocks(carBytes: Uint8Array): Promise<Uint8Array | null> {
+  try {
+    const reader = await CarReader.fromBytes(carBytes)
+    let best: Uint8Array | null = null
+
+    for await (const block of reader.blocks()) {
+      const bytes = block.bytes
+      if (!bytes || bytes.length < BASE_IV_SIZE + CHUNK_HEADER_SIZE + GCM_TAG_MIN) {
+        continue
+      }
+      if (looksLikeHavenChunkedEncryptStrict(bytes, 0)) {
+        if (best == null || bytes.length > best.length) {
+          best = bytes
+        }
+      }
+    }
+
+    return best
+  } catch {
+    return null
+  }
+}
+
 /**
  * Strip CAR / wrapper bytes and return raw haven-cli `.encrypted` payload.
  */
-export function extractHavenEncryptedPayload(downloaded: Uint8Array): Uint8Array {
+export async function extractHavenEncryptedPayload(
+  downloaded: Uint8Array
+): Promise<Uint8Array> {
   if (downloaded.length < BASE_IV_SIZE + CHUNK_HEADER_SIZE + GCM_TAG_MIN) {
     throw new EncryptedPayloadError(
       `Downloaded object is too small (${downloaded.length} bytes) to be a haven encrypted video.`
     )
   }
 
-  const offset = findHavenChunkedEncryptOffset(downloaded)
-  if (offset != null) {
-    return offset === 0 ? downloaded : downloaded.subarray(offset)
+  if (looksLikeHavenChunkedEncryptStrict(downloaded, 0)) {
+    return downloaded
   }
 
-  const probe = new DataView(
-    downloaded.buffer,
-    downloaded.byteOffset + BASE_IV_SIZE,
-    Math.min(CHUNK_HEADER_SIZE, downloaded.length - BASE_IV_SIZE)
-  )
-  const bogusIndex = downloaded.length > BASE_IV_SIZE + 4
-    ? probe.getUint32(0, true)
-    : 0
-  const bogusLength = downloaded.length > BASE_IV_SIZE + 8
-    ? probe.getUint32(4, true)
-    : 0
+  const fromCarBlock = await extractFromCarBlocks(downloaded)
+  if (fromCarBlock != null) {
+    return fromCarBlock
+  }
+
+  const offset = findHavenChunkedEncryptOffset(downloaded)
+  if (offset != null) {
+    return downloaded.subarray(offset)
+  }
 
   const looksLikeMp4 =
     downloaded.length > 8 &&
-    downloaded[4] === 0x66 && // 'f'
-    downloaded[5] === 0x74 && // 't'
-    downloaded[6] === 0x79 && // 'y'
-    downloaded[7] === 0x70 // 'p'
+    downloaded[4] === 0x66 &&
+    downloaded[5] === 0x74 &&
+    downloaded[6] === 0x79 &&
+    downloaded[7] === 0x70
 
   if (looksLikeMp4) {
     throw new EncryptedPayloadError(
@@ -115,9 +187,9 @@ export function extractHavenEncryptedPayload(downloaded: Uint8Array): Uint8Array
   }
 
   throw new EncryptedPayloadError(
-    'Could not find haven-cli encrypted chunk header in the Filecoin download. ' +
-      `The piece may be a CAR wrapper we failed to unpack (bogus chunk index ${bogusIndex}, ` +
-      `length ${bogusLength}). Re-upload with haven-cli or contact support.`
+    'Could not extract haven-cli encrypted content from the Filecoin download. ' +
+      'The piece is likely a UnixFS CAR; no valid encrypted chunk stream was found in its blocks. ' +
+      'Re-upload with the current haven-cli.'
   )
 }
 

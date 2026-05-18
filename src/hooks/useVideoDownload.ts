@@ -268,7 +268,7 @@ export function useVideoDownload(): UseVideoDownloadReturn {
       const fetchResult = await fetchPinnedContent(video, { abortSignal: signal })
       if (signal.aborted) throw new Error('Download cancelled')
 
-      const encryptedData = extractHavenEncryptedPayload(fetchResult.data)
+      const encryptedData = await extractHavenEncryptedPayload(fetchResult.data)
 
       // Step 2: Decrypt AES key via Haven-AOL
       updateStage('authenticating')

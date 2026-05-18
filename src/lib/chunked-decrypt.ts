@@ -278,8 +278,9 @@ async function decryptSingleChunk(
   } catch (error) {
     if (error instanceof DOMException) {
       throw new Error(
-        `AES-GCM decryption failed on chunk ${chunkIndex}: ${error.message}. ` +
-        'The file may be corrupted or the wrong key is being used.'
+        `AES-GCM decryption failed on chunk ${chunkIndex}: ${error.message || error.name}. ` +
+        'The downloaded bytes may not be the haven-cli encrypted file (check CAR extraction), ' +
+        'or the Haven-AOL key does not match this upload.'
       )
     }
     throw error

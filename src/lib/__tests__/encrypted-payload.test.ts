@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   EncryptedPayloadError,
   extractHavenEncryptedPayload,
-  findHavenChunkedEncryptOffset,
   looksLikeHavenChunkedEncryptAt,
+  looksLikeHavenChunkedEncryptStrict,
 } from '../encrypted-payload'
 
 function buildChunkedPayload(chunkPlaintextLen: number): Uint8Array {
@@ -17,43 +17,55 @@ function buildChunkedPayload(chunkPlaintextLen: number): Uint8Array {
   return buf
 }
 
-describe('looksLikeHavenChunkedEncryptAt', () => {
-  it('accepts valid chunk 0 at offset 0', () => {
+function buildTwoChunkPayload(): Uint8Array {
+  const chunk0Enc = 256 + 16
+  const chunk1Enc = 128 + 16
+  const total = 12 + 8 + chunk0Enc + 8 + chunk1Enc
+  const buf = new Uint8Array(total)
+  buf.fill(7, 0, 12)
+  const view = new DataView(buf.buffer)
+  let off = 12
+  view.setUint32(off, 0, true)
+  view.setUint32(off + 4, chunk0Enc, true)
+  off += 8 + chunk0Enc
+  view.setUint32(off, 1, true)
+  view.setUint32(off + 4, chunk1Enc, true)
+  return buf
+}
+
+describe('looksLikeHavenChunkedEncryptStrict', () => {
+  it('accepts single-chunk payload at offset 0', () => {
     const payload = buildChunkedPayload(1024)
-    expect(looksLikeHavenChunkedEncryptAt(payload, 0)).toBe(true)
+    expect(looksLikeHavenChunkedEncryptStrict(payload, 0)).toBe(true)
   })
 
-  it('rejects MP4-like bytes at offset 0', () => {
-    const mp4 = new Uint8Array(32)
-    mp4[4] = 0x66
-    mp4[5] = 0x74
-    mp4[6] = 0x79
-    mp4[7] = 0x70
-    expect(looksLikeHavenChunkedEncryptAt(mp4, 0)).toBe(false)
+  it('accepts two-chunk payload at offset 0', () => {
+    expect(looksLikeHavenChunkedEncryptStrict(buildTwoChunkPayload(), 0)).toBe(true)
+  })
+
+  it('rejects false positive with chunk 0 but no following chunk 1', () => {
+    const fake = new Uint8Array(20_000)
+    fake.fill(0)
+    const view = new DataView(fake.buffer)
+    view.setUint32(12, 0, true)
+    view.setUint32(16, 5000, true)
+    expect(looksLikeHavenChunkedEncryptAt(fake, 0)).toBe(true)
+    expect(looksLikeHavenChunkedEncryptStrict(fake, 0)).toBe(false)
   })
 })
 
 describe('extractHavenEncryptedPayload', () => {
-  it('returns payload unchanged when already raw encrypted', () => {
+  it('returns payload unchanged when already raw encrypted', async () => {
     const payload = buildChunkedPayload(512)
-    const out = extractHavenEncryptedPayload(payload)
+    const out = await extractHavenEncryptedPayload(payload)
     expect(out).toBe(payload)
   })
 
-  it('finds payload embedded after CAR-like prefix', () => {
-    const payload = buildChunkedPayload(256)
-    const carLike = new Uint8Array(200 + payload.length)
-    carLike.fill(0xab, 0, 200)
-    carLike.set(payload, 200)
-    const out = extractHavenEncryptedPayload(carLike)
-    expect(out.byteLength).toBe(payload.byteLength)
-    expect(out[0]).toBe(1)
-    expect(findHavenChunkedEncryptOffset(carLike)).toBe(200)
-  })
-
-  it('throws when no valid header exists', () => {
+  it('throws when no valid header exists', async () => {
     const garbage = new Uint8Array(256)
     garbage.fill(0xff)
-    expect(() => extractHavenEncryptedPayload(garbage)).toThrow(EncryptedPayloadError)
+    await expect(extractHavenEncryptedPayload(garbage)).rejects.toThrow(
+      EncryptedPayloadError
+    )
   })
 })

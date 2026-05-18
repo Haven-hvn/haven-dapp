@@ -289,7 +289,7 @@ export function useVideoCache(video: Video | null): UseVideoCacheReturn {
 
         if (signal.aborted) throw new Error('Loading cancelled')
 
-        const encryptedData = extractHavenEncryptedPayload(fetchResult.data)
+        const encryptedData = await extractHavenEncryptedPayload(fetchResult.data)
         const lifecycle = createBufferLifecycle()
         lifecycle.track('encrypted', encryptedData)
 
