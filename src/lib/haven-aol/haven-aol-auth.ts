@@ -17,7 +17,7 @@ import {
 /** Ephemeral VetKD transport secret key (from haven-aol / vetkeys). */
 type TransportSecretKey = ReturnType<typeof createTransportKeyPair>['secretKey']
 import { getHavenAolConfig } from './haven-aol-client'
-import { getNextNonce, bumpNonce } from './haven-aol-nonce'
+import { commitNonceUsed, getNextNonce, nonceAfterCollision } from './haven-aol-nonce'
 import { HavenAolDecryptError } from './haven-aol-errors'
 
 // ============================================================================
@@ -75,8 +75,17 @@ export interface WalletClientLike {
  * @returns SignedGateRequest with all parameters for decryption
  * @throws HavenAolDecryptError on signing failure
  */
+export interface CreateSignedGateRequestOptions {
+  /**
+   * Explicit nonce (retry after canister `NonceAlreadyUsed`).
+   * When omitted, allocates the next monotonic nonce for this wallet.
+   */
+  nonce?: bigint
+}
+
 export async function createSignedGateRequest(
-  walletClient: WalletClientLike
+  walletClient: WalletClientLike,
+  options?: CreateSignedGateRequestOptions
 ): Promise<SignedGateRequest> {
   const config = getHavenAolConfig()
   const address = walletClient.account.address
@@ -91,8 +100,9 @@ export async function createSignedGateRequest(
   // 1. Generate ephemeral transport key pair
   const { secretKey, publicKey } = createTransportKeyPair()
 
-  // 2. Get next nonce
-  const nonce = getNextNonce(address)
+  // 2. Nonce (monotonic per wallet; scoped on canister by EIP-712 domain)
+  const nonce = options?.nonce ?? getNextNonce(address)
+  commitNonceUsed(address, nonce)
 
   // 3. Build EIP-712 typed data
   const typedData = buildGateRequestTypedData({
@@ -140,57 +150,12 @@ export async function createSignedGateRequest(
 }
 
 /**
- * Retry signing with a bumped nonce (after NonceAlreadyUsed error).
- *
- * @param walletClient - The viem wallet client from wagmi
- * @returns SignedGateRequest with new nonce
+ * Retry signing with the next nonce after a canister `NonceAlreadyUsed` error.
  */
 export async function retryWithBumpedNonce(
-  walletClient: WalletClientLike
+  walletClient: WalletClientLike,
+  collidedNonce: bigint
 ): Promise<SignedGateRequest> {
-  const config = getHavenAolConfig()
-  const address = walletClient.account.address
-
-  // Bump the nonce
-  const nonce = bumpNonce(address)
-
-  // Generate fresh transport keys
-  const { secretKey, publicKey } = createTransportKeyPair()
-
-  // Build EIP-712 typed data with new nonce
-  const typedData = buildGateRequestTypedData({
-    evmAddress: address,
-    transportPublicKey: publicKey,
-    nonce,
-    eip712ChainId: config.eip712ChainId,
-    eip712VerifyingContract: config.eip712VerifyingContract,
-  })
-
-  // Sign with wallet
-  let signatureHex: string
-  try {
-    signatureHex = await walletClient.signTypedData({
-      domain: typedData.domain as unknown as Record<string, unknown>,
-      types: typedData.types as unknown as Record<string, unknown[]>,
-      primaryType: typedData.primaryType,
-      message: typedData.message as unknown as Record<string, unknown>,
-    })
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error)
-    throw new HavenAolDecryptError(
-      `Failed to sign gate request on retry: ${msg}`,
-      'SIGNING_REJECTED'
-    )
-  }
-
-  const signature = parseSignatureHex(signatureHex)
-
-  return {
-    transportSecretKey: secretKey,
-    transportPublicKey: publicKey,
-    nonce,
-    signature,
-    eip712ChainId: config.eip712ChainId,
-    eip712VerifyingContract: config.eip712VerifyingContract,
-  }
+  const nextNonce = nonceAfterCollision(walletClient.account.address, collidedNonce)
+  return createSignedGateRequest(walletClient, { nonce: nextNonce })
 }

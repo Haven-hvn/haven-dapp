@@ -19,6 +19,7 @@ import {
   parseGateMetadata,
 } from 'haven-aol'
 import { getHavenAolConfig } from './haven-aol-client'
+import { commitNonceUsed } from './haven-aol-nonce'
 import { createSignedGateRequest, retryWithBumpedNonce, type WalletClientLike } from './haven-aol-auth'
 import {
   isGateMetadata,
@@ -77,6 +78,19 @@ export interface DecryptCidOptions {
 }
 
 // ============================================================================
+// In-flight deduplication (parallel loadVideo / Strict Mode)
+// ============================================================================
+
+const inflightDecryptBySession = new Map<string, Promise<DecryptContentKeyResult>>()
+
+function decryptSessionKey(
+  walletAddress: string,
+  encryptionMetadata: GateMetadataJson
+): string {
+  return `${walletAddress.toLowerCase()}:${encryptionMetadata.encryptedAesKey}`
+}
+
+// ============================================================================
 // Content Key Decryption
 // ============================================================================
 
@@ -97,6 +111,31 @@ export interface DecryptCidOptions {
  * @throws HavenAolDecryptError on failure
  */
 export async function decryptContentKey(
+  options: DecryptContentKeyOptions
+): Promise<DecryptContentKeyResult> {
+  const { encryptionMetadata, walletClient } = options
+  const address = walletClient.account.address
+  if (!address) {
+    throw new HavenAolDecryptError(
+      'Wallet not connected. Please connect your wallet.',
+      'WALLET_NOT_CONNECTED'
+    )
+  }
+
+  const sessionKey = decryptSessionKey(address, encryptionMetadata)
+  const inflight = inflightDecryptBySession.get(sessionKey)
+  if (inflight) {
+    return inflight
+  }
+
+  const task = decryptContentKeyImpl(options).finally(() => {
+    inflightDecryptBySession.delete(sessionKey)
+  })
+  inflightDecryptBySession.set(sessionKey, task)
+  return task
+}
+
+async function decryptContentKeyImpl(
   options: DecryptContentKeyOptions
 ): Promise<DecryptContentKeyResult> {
   const { encryptionMetadata, encryptedCid, walletClient, onProgress, signal } = options
@@ -165,8 +204,10 @@ export async function decryptContentKey(
     evmAddress: walletClient.account.address,
   }
 
-  const MAX_NONCE_ATTEMPTS = 5
+  /** Canister stores nonce before other checks; +1 retry per collision (not +10). */
+  const MAX_NONCE_ATTEMPTS = 8
   let result: Awaited<ReturnType<typeof requestDecryptionKey>> | null = null
+  const walletAddress = walletClient.account.address
 
   for (let attempt = 0; attempt < MAX_NONCE_ATTEMPTS; attempt++) {
     if (signal?.aborted) {
@@ -183,13 +224,17 @@ export async function decryptContentKey(
     })
 
     if (!('err' in result)) {
+      commitNonceUsed(walletAddress, signedRequest.nonce)
       break
     }
 
     const errObj = result.err as Record<string, unknown>
+    // Canister marks nonce used before signature/balance checks (haven-aol main.mo).
+    commitNonceUsed(walletAddress, signedRequest.nonce)
+
     if ('NonceAlreadyUsed' in errObj && attempt < MAX_NONCE_ATTEMPTS - 1) {
-      onProgress?.('Nonce conflict, retrying...')
-      signedRequest = await retryWithBumpedNonce(walletClient)
+      onProgress?.('Decrypt session syncing — please sign once more…')
+      signedRequest = await retryWithBumpedNonce(walletClient, signedRequest.nonce)
       continue
     }
 
@@ -198,7 +243,8 @@ export async function decryptContentKey(
 
   if (result == null || 'err' in result) {
     throw new HavenAolDecryptError(
-      'Could not obtain a decryption key after multiple attempts.',
+      'Could not obtain a decryption key — the decrypt session is ahead of this browser. ' +
+        'Try again once; if it persists, clear site data for this app or contact support.',
       'NONCE_ALREADY_USED'
     )
   }

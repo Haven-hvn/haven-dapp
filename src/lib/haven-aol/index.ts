@@ -34,4 +34,11 @@ export {
 } from './haven-aol-errors'
 export type { HavenAolErrorCode } from './haven-aol-errors'
 
-export { getNextNonce, bumpNonce, clearNonce, getCurrentNonce } from './haven-aol-nonce'
+export {
+  getNextNonce,
+  bumpNonce,
+  clearNonce,
+  getCurrentNonce,
+  commitNonceUsed,
+  nonceAfterCollision,
+} from './haven-aol-nonce'
