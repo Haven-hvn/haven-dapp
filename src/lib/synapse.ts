@@ -2,8 +2,8 @@
  * Synapse SDK Utilities
  *
  * Client-side module for retrieving data from Filecoin Onchain Cloud
- * via the Synapse SDK (owner-aware URL resolution + `downloadAndValidate`).
- * Does not fall back to throwaway `storage.download` when `catalogOwner` is set.
+ * via the Synapse SDK (owner-aware `resolvePieceUrl` + `downloadAndValidate`,
+ * with optional direct `storage.download` fallback).
  *
  * No private key or funded wallet is required — the SDK auto-generates
  * a throwaway key for initialization. Downloads of public data are free.
@@ -17,12 +17,9 @@ import {
   chainResolver,
   downloadAndValidate,
   filbeamResolver,
+  resolvePieceUrl,
   type resolvePieceUrl as ResolvePieceUrlTypes,
 } from '@filoz/synapse-core/piece'
-import {
-  resolvePieceUrlSequential,
-  type PieceUrlResolver,
-} from './resolve-piece-url-sequential'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import {
   classifyRetrievalFailure,
@@ -37,13 +34,11 @@ export { classifyRetrievalFailure, getSynapseErrorMessageForCode } from './synap
 // Types
 // ============================================================================
 
-/** Browser: PDP first (CORS-friendly); server/CLI: FilBeam first. */
-function getPieceUrlResolvers(): PieceUrlResolver[] {
-  if (typeof window !== 'undefined') {
-    return [chainResolver, filbeamResolver]
-  }
-  return [filbeamResolver, chainResolver]
-}
+/** FilBeam first, PDP chain fallback (legacy non-CDN deals may skip FilBeam via 402). */
+const PIECE_URL_RESOLVERS: ResolvePieceUrlTypes.ResolverFnType[] = [
+  filbeamResolver,
+  chainResolver,
+]
 
 export interface SynapseConfig {
   /** Enable CDN for faster retrieval */
@@ -60,8 +55,6 @@ export interface SynapseDownloadOptions {
   providerAddress?: `0x${string}`
   /** Override CDN for this download */
   withCDN?: boolean
-  /** Abort in-flight resolution/download (e.g. user navigates away) */
-  signal?: AbortSignal
 }
 
 export class SynapseError extends Error {
@@ -155,7 +148,7 @@ async function downloadForCatalogOwner(
   synapse: SynapseInstance,
   pieceCid: string,
   catalogOwner: string,
-  options?: Pick<SynapseDownloadOptions, 'withCDN' | 'signal'>
+  _options?: Pick<SynapseDownloadOptions, 'withCDN'>
 ): Promise<Uint8Array> {
   const parsed = asPieceCID(pieceCid)
   if (parsed == null) {
@@ -167,61 +160,17 @@ async function downloadForCatalogOwner(
   }
 
   const owner = normalizeCatalogOwner(catalogOwner)
-  const resolvers = getPieceUrlResolvers()
+  const url = await resolvePieceUrl({
+    address: owner,
+    client: synapse.client,
+    pieceCid: parsed,
+    resolvers: PIECE_URL_RESOLVERS,
+  })
 
-  const resolveAndDownload = async (
-    activeResolvers: PieceUrlResolver[]
-  ): Promise<Uint8Array> => {
-    const url = await resolvePieceUrlSequential({
-      address: owner,
-      client: synapse.client,
-      pieceCid: parsed,
-      resolvers: activeResolvers,
-      signal: options?.signal,
-    })
-    return downloadAndValidate({
-      expectedPieceCid: parsed,
-      url,
-    })
-  }
-
-  try {
-    return await resolveAndDownload(resolvers)
-  } catch (firstError) {
-    const firstMessage =
-      firstError instanceof Error ? firstError.message : String(firstError)
-
-    // If FilBeam was tried first and failed, force a PDP-only retry (browser path).
-    const filbeamWasFirst = resolvers[0] === filbeamResolver
-    const shouldRetryChainOnly =
-      filbeamWasFirst &&
-      (firstMessage.toLowerCase().includes('filbeam') ||
-        firstMessage.includes('402') ||
-        classifyRetrievalFailure(firstMessage) === 'NETWORK_ERROR')
-
-    if (shouldRetryChainOnly) {
-      try {
-        return await resolveAndDownload([chainResolver])
-      } catch (retryError) {
-        throw synapseErrorFromUnknown(retryError, pieceCid)
-      }
-    }
-
-    // FilBeam URL resolved but byte download failed (common with CORS) — retry via PDP.
-    if (
-      typeof window !== 'undefined' &&
-      resolvers.includes(filbeamResolver) &&
-      classifyRetrievalFailure(firstMessage) !== 'PIECE_NOT_FOUND'
-    ) {
-      try {
-        return await resolveAndDownload([chainResolver])
-      } catch {
-        // fall through to primary error
-      }
-    }
-
-    throw synapseErrorFromUnknown(firstError, pieceCid)
-  }
+  return downloadAndValidate({
+    expectedPieceCid: parsed,
+    url,
+  })
 }
 
 async function downloadViaStorageManager(
@@ -243,8 +192,8 @@ async function downloadViaStorageManager(
  * Download data from Filecoin via Synapse SDK using a piece CID.
  *
  * When `catalogOwner` is set (Arkiv entity owner), resolves the piece URL
- * against the uploader's FOC datasets before downloading. Never uses throwaway
- * `storage.download` for that path (wrong catalog address).
+ * against the uploader's FOC datasets before downloading. Falls back to
+ * `storage.download` only if owner-aware resolution fails.
  *
  * @param pieceCid - The piece CID (content identifier) to download
  * @param options - Optional owner address and provider hints
@@ -278,7 +227,7 @@ export async function downloadFromSynapse(
           synapse,
           normalizedPieceCid,
           options.catalogOwner,
-          { signal: options.signal, withCDN: options.withCDN }
+          options
         )
       } catch (ownerError) {
         throw synapseErrorFromUnknown(ownerError, normalizedPieceCid)
