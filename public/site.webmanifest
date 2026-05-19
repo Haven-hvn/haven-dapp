@@ -1,7 +1,7 @@
 {
   "name": "Haven - Decentralized Video Library",
   "short_name": "Haven",
-  "description": "Access your encrypted video collection from anywhere using your Web3 wallet. Secure, private, and decentralized video storage powered by IPFS, Filecoin, and Lit Protocol.",
+  "description": "Access your encrypted video collection from anywhere using your Web3 wallet. Secure, private, and decentralized video storage powered by IPFS, Filecoin, and Haven-AOL.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0A0A0F",

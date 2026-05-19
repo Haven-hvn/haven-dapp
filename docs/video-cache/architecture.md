@@ -21,8 +21,7 @@ The Haven video cache system provides fast, encrypted video playback with intell
 - **Sub-100ms playback**: Cached videos play instantly via Service Worker
 - **Automatic decryption pipeline**: Fetch → Decrypt → Cache on first play
 - **Memory-efficient staging**: OPFS reduces peak memory usage by 30-40%
-- **Session caching**: Lit Protocol sessions cached to avoid repeated wallet popups
-- **AES key caching**: Decrypted keys cached in memory to skip BLS-IBE operations
+- **AES key caching**: Haven-AOL VetKD unwrap results cached in memory to skip repeated EIP-712 signatures per video
 - **Periodic cleanup**: Automatic TTL-based expiration and storage pressure management
 
 ## System Components
@@ -44,14 +43,14 @@ The Haven video cache system provides fast, encrypted video playback with intell
 │  │                        Core Library Layer                             │  │
 │  │                                                                       │  │
 │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌──────────────┐  │  │
-│  │  │ video-cache │  │   lit-      │  │  aes-key-   │  │   security   │  │  │
-│  │  │  (Cache API)│  │ session-    │  │   cache     │  │   cleanup    │  │  │
-│  │  │             │  │   cache     │  │             │  │              │  │  │
-│  │  │ • putVideo  │  │             │  │             │  │              │  │  │
-│  │  │ • getVideo  │  │ • getCached │  │ • getCached │  │ • onWallet   │  │  │
-│  │  │ • hasVideo  │  │   AuthCtx   │  │   Key       │  │   Disconnect │  │  │
-│  │  │ • deleteVid │  │ • setCached │  │ • setCached │  │ • onSecurity │  │  │
-│  │  │ • listCached│  │   AuthCtx   │  │   Key       │  │   Clear      │  │  │
+│  │  │ video-cache │  │  haven-aol/ │  │  aes-key-   │  │   security   │  │  │
+│  │  │  (Cache API)│  │  (decrypt)  │  │   cache     │  │   cleanup    │  │  │
+│  │  │             │  │             │  │             │  │              │  │  │
+│  │  │ • putVideo  │  │ • decrypt   │  │ • getCached │  │ • onWallet   │  │  │
+│  │  │ • getVideo  │  │   ContentKey│  │   Key       │  │   Disconnect │  │  │
+│  │  │ • hasVideo  │  │ • decryptCid│  │ • setCached │  │ • onSecurity │  │  │
+│  │  │ • deleteVid │  │             │  │   Key       │  │   Clear      │  │  │
+│  │  │ • listCached│  │             │  │             │  │              │  │  │
 │  │  └──────┬──────┘  └─────────────┘  └─────────────┘  └──────────────┘  │  │
 │  │         │                                                             │  │
 │  │  ┌──────┴──────┐  ┌─────────────────────────────────────────────────┐  │  │
@@ -119,7 +118,7 @@ The Haven video cache system provides fast, encrypted video playback with intell
 | Module | Purpose |
 |--------|---------|
 | `video-cache.ts` | Cache API wrapper with put/get/delete/has operations |
-| `lit-session-cache.ts` | Caches Lit Protocol SIWE sessions to avoid repeated wallet signatures |
+| `haven-aol/` | Haven-AOL gate decrypt (EIP-712 sign → ICP canister → VetKD unwrap) |
 | `aes-key-cache.ts` | In-memory cache for decrypted AES keys |
 | `opfs.ts` | Origin Private File System utilities for staging large encrypted files |
 | `cache-expiration.ts` | TTL management and periodic cleanup |
@@ -170,23 +169,20 @@ The Service Worker is the critical bridge between the video element and the cach
 
 **Browser support**: Chrome 86+, Edge 86+, Firefox 111+, Safari 15.2+ (limited)
 
-### Lit Protocol Session Caching
+### Haven-AOL Gate Authentication
 
-**Why**: Lit Protocol requires a wallet signature to create a SIWE session. Without caching:
+**Why**: Each encrypted video is protected by a Haven-AOL gate ([Always Online](https://github.com/HavenCTO/haven-aol)): the user signs an EIP-712 `GateRequest`, the ICP canister verifies conditional access (e.g. token balance on EVM), and the browser unwraps the VetKD-protected AES key.
 
-- User would need to sign for every video (terrible UX)
-- Each signature adds 1-3 seconds to playback
+- Cold path (first play per video): wallet popup + ICP round-trip — typically 1–3s for signing plus network latency
+- Warm path: AES key already in `aes-key-cache` — no wallet popup
 
-**Implementation**:
-- Sessions cached in memory (primary) + sessionStorage (backup)
-- 1-hour default TTL with 5-minute safety margin
-- Cleared on wallet disconnect for security
+**Protocol reference**: [github.com/HavenCTO/haven-aol](https://github.com/HavenCTO/haven-aol)
 
 ### AES Key Caching
 
-**Why**: Decrypting the AES key via Lit nodes requires expensive BLS-IBE operations:
+**Why**: VetKD unwrap and IBE decrypt are expensive compared to serving a cached key:
 
-- Cold key decryption: 500ms - 2s
+- Cold key decryption: 500ms - 2s (ICP + crypto)
 - Cached key retrieval: <1ms
 
 **Security considerations**:
@@ -201,7 +197,7 @@ The Service Worker is the critical bridge between the video element and the cach
 | Data Type | Storage | Persistence | Cleared When |
 |-----------|---------|-------------|--------------|
 | **Decrypted video content** | Cache API (disk) | Until TTL expiry or manual clear | Manual clear, TTL expiry, or browser eviction |
-| **Lit auth context** | Memory + sessionStorage | Tab lifetime | Wallet disconnect, session expiry, tab close |
+| **Haven-AOL gate nonces** | localStorage (legacy cleanup only) | Until cleared | Wallet disconnect, security clear |
 | **Decrypted AES keys** | Memory only | Session only | Wallet disconnect, page unload, TTL expiry |
 | **Video metadata** | IndexedDB | Persistent | Manual clear |
 | **Staging files** | OPFS | Session only | After successful decryption, or on cleanup |
@@ -216,14 +212,14 @@ The Service Worker is the critical bridge between the video element and the cach
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │                  USER WALLET (Most Trusted)              │   │
 │  │  • Private keys never leave wallet                       │   │
-│  │  • SIWE signatures for Lit session creation              │   │
+│  │  • EIP-712 signatures for Haven-AOL GateRequest          │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                              │                                   │
 │                              ▼                                   │
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │           IN-MEMORY CACHE (Session Only)                 │   │
 │  │  • AES keys (decrypted)                                  │   │
-│  │  • Lit auth contexts                                     │   │
+│  │  • Decrypted AES keys (Haven-AOL unwrap)                 │   │
 │  │  • Zero-filled on cleanup                                │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                              │                                   │
@@ -340,8 +336,8 @@ User clicks Play
            │
            ▼
 ┌─────────────────────────┐
-│ Authenticate with       │
-│ Lit Protocol            │
+│ Haven-AOL gate          │
+│ (EIP-712 + ICP VetKD)   │
 └──────────┬──────────────┘
            │
      ┌─────┴─────┐
@@ -349,7 +345,7 @@ User clicks Play
      ▼           ▼
 ┌────────┐  ┌──────────────┐
 │ Cached │  │ Wallet popup │
-│ session│  │ (SIWE sign)  │
+│ AES key│  │ (EIP-712)    │
 │ (warm) │  │  (cold)      │
 └───┬────┘  └──────┬───────┘
     │              │
@@ -357,8 +353,8 @@ User clicks Play
            │
            ▼
 ┌─────────────────────────┐
-│ Decrypt AES key via     │
-│ Lit nodes (or cache)    │
+│ AES content key ready   │
+│ (from cache or unwrap)  │
 └──────────┬──────────────┘
            │
            ▼
@@ -426,16 +422,16 @@ VideoPlayer Component
        │                    │
        │                    ▼
        │           ┌─────────────────┐
-       │           │ getCachedAuthCtx│
-       │           │ (Lit session)   │
+       │           │ decryptContentKey│
+       │           │ (Haven-AOL)     │
        │           └────────┬────────┘
        │                    │
        │                    ├──────────────┐
        │                    │              │
        │                    ▼              ▼
        │            ┌──────────┐    ┌─────────────┐
-       │            │  Cached  │    │ Lit Client  │
-       │            │  Session │    │  Auth Flow  │
+       │            │  Cached  │    │ EIP-712 +   │
+       │            │  AES key │    │ ICP canister│
        │            └────┬─────┘    └──────┬──────┘
        │                 │                 │
        │                 └────────┬────────┘
@@ -450,8 +446,8 @@ VideoPlayer Component
        │                          │              │
        │                          ▼              ▼
        │                   ┌──────────┐    ┌─────────────┐
-       │                   │  Cached  │    │  Lit Nodes  │
-       │                   │   Key    │    │  BLS-IBE    │
+       │                   │  Cached  │    │ Haven-AOL   │
+       │                   │   Key    │    │ VetKD unwrap│
        │                   └────┬─────┘    └──────┬──────┘
        │                        │                 │
        │                        └────────┬────────┘
@@ -499,8 +495,8 @@ Wallet Disconnect
          │                │                │
          ▼                ▼                ▼
 ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-│clearAuthCtx  │  │ clearAllKeys │  │clearAllVideos│
-│(Lit session) │  │ (AES keys)   │  │ (optional)   │
+│ clearNonce   │  │ clearAllKeys │  │clearAllVideos│
+│ (Haven-AOL)  │  │ (AES keys)   │  │ (optional)   │
 └──────────────┘  └──────────────┘  └──────────────┘
          │                │                │
          │                │                │
@@ -543,7 +539,7 @@ Wallet Disconnect
 |-----------|----------|
 | Service Worker | `public/haven-sw.js` |
 | Video Cache API | `src/lib/video-cache.ts` |
-| Lit Session Cache | `src/lib/lit-session-cache.ts` |
+| Haven-AOL | `src/lib/haven-aol/` |
 | AES Key Cache | `src/lib/aes-key-cache.ts` |
 | OPFS Utilities | `src/lib/opfs.ts` |
 | Cache Expiration | `src/lib/cache-expiration.ts` |

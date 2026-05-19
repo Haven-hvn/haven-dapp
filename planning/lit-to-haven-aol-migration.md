@@ -8,9 +8,10 @@
 
 Keep **haven-dapp as an Ethereum-first application** (wagmi/Reown, Arkiv on EVM, wallet identity on EVM) while replacing **Lit Protocol** with **Haven-AOL** for decryption. ICP is a **narrow dependency**: VetKD key release via the Haven-AOL canister—not user identity, not storage, not wallet plumbing.
 
-Reference repos in this workspace:
+Reference repos:
 
-- `haven-aol-main/` — TypeScript decrypt SDK, derivation spec, mainnet canister docs
+- [github.com/HavenCTO/haven-aol](https://github.com/HavenCTO/haven-aol) — Always Online (AOL): ICP-native conditional, token-gated access via VetKD keys
+- `haven-aol-main/` (local checkout) — TypeScript decrypt SDK, derivation spec, mainnet canister docs
 - `haven-cli-main/` — Upload/encrypt pipeline, Arkiv entity shape, EIP-712 signing (Python)
 - web3-shoutbox-platform-main/ - web3 reference frontend
 ---

@@ -22,7 +22,7 @@ Common issues and solutions for the Haven video cache system.
 |-------|-------|----------|
 | Video doesn't play from cache | SW not registered | Check HTTPS, check DevTools → Application |
 | Cache not persisting | Browser eviction | Request persistent storage in settings |
-| Wallet popup on every video | Session cache miss | Check Lit session expiration |
+| Wallet popup on every video | AES key cache miss or new video | First play per video needs EIP-712; replay uses `aes-key-cache` |
 | High memory usage | OPFS not available | Check browser support, use Chrome |
 | Video plays but no audio | Incorrect MIME type | Check `originalMimeType` in metadata |
 | Slow first playback | Network/decryption latency | Normal behavior, should be <100ms on repeat |
@@ -165,54 +165,54 @@ If usage is close to quota:
 ### Symptoms
 - Metamask/wallet popup appears for every video playback
 - "Authenticating" stage takes 1-3 seconds each time
-- Session doesn't seem to be cached
+- Same video still asks for a signature on replay
+
+### Expected behavior (Haven-AOL)
+
+Unlike a long-lived Lit SIWE session, Haven-AOL uses **per-gate EIP-712 signatures**. The dapp avoids repeat popups by:
+
+1. **AES key cache** — after the first successful unwrap for a video, `getCachedKey(videoId)` skips the wallet until keys are cleared (disconnect, TTL, or manual clear).
+2. **Video cache** — once decrypted bytes are in the Cache API, playback does not touch Haven-AOL at all.
+
+You should still see **one signature per video** on first play (or after cache eviction).
 
 ### Diagnosis
 
-Check session cache status:
+Check AES key cache:
 ```typescript
-import { getSessionInfo, hasCachedSession } from '@/lib/lit-session-cache'
+import { getCachedKey } from '@/lib/aes-key-cache'
 
-const address = '0x...' // user's address
-console.log('Has cached session:', hasCachedSession(address))
-console.log('Session info:', getSessionInfo(address))
+const cached = getCachedKey(video.id)
+console.log('AES key cached:', cached !== null)
+```
+
+Check whether playback is a cache hit:
+```typescript
+import { hasVideo } from '@/lib/video-cache'
+
+console.log('Video in cache:', await hasVideo(video.id))
 ```
 
 ### Solutions
 
-#### Solution 1: Check Session Expiration
+#### Solution 1: Wallet disconnect / account change
 
-Sessions expire after 1 hour by default. Check if expired:
-```typescript
-import { getSessionInfo } from '@/lib/lit-session-cache'
+`onWalletDisconnect` clears AES keys and Haven-AOL nonce state. If the wallet reconnects between videos, each video may need to re-authorize once.
 
-const info = getSessionInfo(address)
-if (info.isCached) {
-  console.log(`Session expires in ${info.expiresIn / 1000} seconds`)
-}
-```
-
-#### Solution 2: Wallet Disconnect/Account Change
-
-Sessions are cleared on wallet disconnect. If your app disconnects the wallet between videos, sessions won't persist.
-
-Check if cleanup is being triggered:
-```typescript
-// Add logging to security-cleanup.ts temporarily
-export function onWalletDisconnect(address: string) {
-  console.log('[SecurityCleanup] Wallet disconnected:', address)
-  // ... rest of function
-}
-```
-
-#### Solution 3: Extend Session TTL
+#### Solution 2: Verify Haven-AOL config
 
 ```typescript
-import { setCachedAuthContext } from '@/lib/lit-session-cache'
+import { isHavenAolConfigValid, getHavenAolConfig } from '@/lib/haven-aol'
 
-// Cache with longer TTL (e.g., 2 hours)
-setCachedAuthContext(address, authContext, 2 * 60 * 60 * 1000)
+console.log('Haven-AOL valid:', isHavenAolConfigValid())
+console.log('Config:', getHavenAolConfig())
 ```
+
+See [haven-aol](https://github.com/HavenCTO/haven-aol) and `.env.local.example` for canister and EIP-712 variables.
+
+#### Solution 3: Prefetch before play
+
+Use `usePrefetch` or hover prefetch so the gate signature and decrypt run before the user hits play (see [developer-guide.md](./developer-guide.md)).
 
 ## High Memory Usage
 
@@ -311,7 +311,7 @@ When caching, preserve the original MIME type:
 ```typescript
 import { putVideo } from '@/lib/video-cache'
 
-const mimeType = video.litEncryptionMetadata?.originalMimeType || 'video/mp4'
+const mimeType = video.encryptionMetadata?.originalMimeType || 'video/mp4'
 await putVideo(videoId, blob, mimeType)
 ```
 
@@ -359,8 +359,8 @@ This is **normal** for cache miss:
 | Check cache | <10ms |
 | Fetch from network | 2-10s (depends on size) |
 | Authenticate (cold) | 1-3s (wallet signature) |
-| Authenticate (warm) | <100ms (cached session) |
-| Decrypt key via Lit | 500ms-2s (network + crypto) |
+| Authenticate (warm) | <100ms (AES key cache hit) |
+| Decrypt key via Haven-AOL | 500ms-2s (ICP + VetKD, cold) |
 | Decrypt video | 100ms-2s (depends on size) |
 | Write to cache | 100ms-1s (depends on size) |
 | **Total (cold)** | **5-30s** |

@@ -6,6 +6,8 @@ Complete documentation for the Haven DApp video caching system.
 
 The Haven video cache system provides fast, encrypted video playback with intelligent caching. It implements a **cache-first strategy** where decrypted video content is stored locally after the first play, enabling instant playback on subsequent views.
 
+Decryption uses [Haven-AOL](https://github.com/HavenCTO/haven-aol) (Always Online)—an ICP-native protocol for conditional, token-gated access via VetKD keys—not Lit Protocol.
+
 ## Documentation
 
 | Document | Description |
@@ -46,7 +48,7 @@ function VideoPlayer({ video }) {
 - **Sub-100ms playback**: Cached videos play instantly via Service Worker
 - **Automatic decryption pipeline**: Fetch → Decrypt → Cache on first play
 - **Memory-efficient staging**: OPFS reduces peak memory usage by 30-40%
-- **Session caching**: Lit Protocol sessions cached to avoid repeated wallet signatures
+- **AES key caching**: Haven-AOL gate unwrap results cached in memory to avoid repeated EIP-712 signatures per video
 - **AES key caching**: Decrypted keys cached in memory
 - **Periodic cleanup**: Automatic TTL-based expiration
 
@@ -61,8 +63,8 @@ function VideoPlayer({ video }) {
          ├──────────────┬──────────────┬──────────────┐
          ▼              ▼              ▼              ▼
 ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│lit-session- │  │  aes-key-   │  │    opfs     │  │cache-expir- │
-│   cache     │  │   cache     │  │  (Staging)  │  │   ation     │
+│ haven-aol/  │  │  aes-key-   │  │    opfs     │  │cache-expir- │
+│  (decrypt)  │  │   cache     │  │  (Staging)  │  │   ation     │
 └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘
 ```
 
@@ -81,7 +83,7 @@ function VideoPlayer({ video }) {
 |-----------|----------|
 | Service Worker | `public/haven-sw.js` |
 | Video Cache API | `src/lib/video-cache.ts` |
-| Lit Session Cache | `src/lib/lit-session-cache.ts` |
+| Haven-AOL decrypt | `src/lib/haven-aol/` |
 | AES Key Cache | `src/lib/aes-key-cache.ts` |
 | OPFS Utilities | `src/lib/opfs.ts` |
 | Cache Expiration | `src/lib/cache-expiration.ts` |
@@ -104,7 +106,7 @@ function VideoPlayer({ video }) {
 |-------|----------|
 | Video doesn't play from cache | Check HTTPS, check DevTools → Application → Service Workers |
 | Cache not persisting | Request persistent storage, bookmark site, or install as PWA |
-| Wallet popup on every video | Check Lit session expiration, ensure wallet stays connected |
+| Wallet popup on every video | Check AES key cache; each new video needs one EIP-712 gate sign unless keys are cached |
 | High memory usage | Use Chrome/Edge, OPFS may not be available |
 | Video plays but no audio | Check `originalMimeType` in metadata |
 

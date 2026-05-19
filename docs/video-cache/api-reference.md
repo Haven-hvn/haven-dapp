@@ -16,7 +16,7 @@ Complete reference for all public functions and hooks in the Haven video cache s
 - [OPFS Utilities](#opfs-utilities)
   - [writeToStaging](#writetostaging)
   - [readFromStaging](#readfromstaging)
-- [Lit Session Cache](#lit-session-cache)
+- [Haven-AOL Decryption](#haven-aol-decryption)
   - [getCachedAuthContext](#getcachedauthcontext)
   - [setCachedAuthContext](#setcachedauthcontext)
 - [AES Key Cache](#aes-key-cache)
@@ -67,7 +67,7 @@ function useVideoCache(video: Video | null): UseVideoCacheReturn
 type LoadingStage = 
   | 'checking-cache'  // Checking if video is in Cache API
   | 'fetching'        // Downloading encrypted data
-  | 'authenticating'  // Authenticating with Lit Protocol
+  | 'authenticating'  // Haven-AOL gate (EIP-712 + ICP)
   | 'decrypting'      // Decrypting AES key and video content
   | 'caching'         // Storing decrypted content in Cache API
   | 'ready'           // Video ready for playback
@@ -469,68 +469,61 @@ await deleteStaging(video.id) // Clean up staging
 
 ---
 
-## Lit Session Cache
+## Haven-AOL Decryption
 
-### getCachedAuthContext
+[Haven-AOL](https://github.com/HavenCTO/haven-aol) (Always Online) is the ICP-native protocol used for conditional, token-gated access. Playback decrypts content keys via EIP-712 gate signatures and VetKD unwrap on the Haven-AOL canister.
 
-Get cached auth context for a wallet address.
+### decryptContentKey
+
+Decrypt the AES content key for a video (checks `aes-key-cache` first).
 
 ```typescript
-function getCachedAuthContext(address: string): LitAuthContext | null
+function decryptContentKey(
+  options: DecryptContentKeyOptions
+): Promise<DecryptContentKeyResult>
 ```
 
-**Parameters:**
+**Parameters (`DecryptContentKeyOptions`):**
 
 | Name | Type | Description |
 |------|------|-------------|
-| `address` | `string` | The wallet address to look up |
+| `encryptionMetadata` | `GateMetadataJson` | Haven-AOL gate v1 metadata from Arkiv |
+| `encryptedCid` | `string` | Optional `encrypted_cid` attribute for derivation |
+| `walletClient` | `WalletClientLike` | Wallet client for EIP-712 signing |
+| `onProgress` | `(message: string) => void` | Optional progress callback |
+| `signal` | `AbortSignal` | Optional cancellation |
 
-**Returns:** The cached `LitAuthContext` if valid, `null` if not found or expired.
+**Returns:** `{ aesKey: Uint8Array, fromCache: boolean }`
 
 **Example:**
 
 ```typescript
-import { getCachedAuthContext } from '@/lib/lit-session-cache'
+import { decryptContentKey } from '@/lib/haven-aol'
+import type { WalletClientLike } from '@/lib/haven-aol'
 
-const authContext = getCachedAuthContext('0x123...')
-if (authContext) {
-  // Use cached context - no wallet popup needed
-  const decryptedKey = await decryptWithLit(authContext, encryptedKey)
-} else {
-  // Need to create new context - will trigger wallet popup
-  const newContext = await createLitAuthContext()
-}
+const { aesKey, fromCache } = await decryptContentKey({
+  encryptionMetadata: video.encryptionMetadata,
+  encryptedCid: video.encryptedCid,
+  walletClient: walletClient as WalletClientLike,
+})
+// fromCache === true → no wallet popup (AES key cache hit)
 ```
+
+See also `decryptCidWithHavenAol` for encrypted piece-CID layers. Protocol details: [github.com/HavenCTO/haven-aol](https://github.com/HavenCTO/haven-aol).
 
 ---
 
-### setCachedAuthContext
+### getHavenAolConfig / isHavenAolConfigValid
 
-Cache an auth context for a wallet address.
-
-```typescript
-function setCachedAuthContext(
-  address: string,
-  authContext: LitAuthContext,
-  expirationMs?: number
-): void
-```
-
-**Parameters:**
-
-| Name | Type | Default | Description |
-|------|------|---------|-------------|
-| `address` | `string` | (required) | The wallet address to cache for |
-| `authContext` | `LitAuthContext` | (required) | The auth context to cache |
-| `expirationMs` | `number` | `3600000` (1 hour) | Expiration time in milliseconds |
-
-**Example:**
+Read and validate Haven-AOL environment configuration (`NEXT_PUBLIC_ICP_HOST`, `NEXT_PUBLIC_HAVEN_AOL_CANISTER_ID`, EIP-712 vars).
 
 ```typescript
-import { setCachedAuthContext } from '@/lib/lit-session-cache'
+import { getHavenAolConfig, isHavenAolConfigValid } from '@/lib/haven-aol'
 
-const authContext = await authManager.createEoaAuthContext(config)
-setCachedAuthContext('0x123...', authContext, 60 * 60 * 1000)
+if (!isHavenAolConfigValid()) {
+  throw new Error('Haven-AOL is not configured')
+}
+const config = getHavenAolConfig()
 ```
 
 ---
@@ -563,8 +556,8 @@ if (cached) {
   // Use cached.key and cached.iv for decryption
   const decrypted = await aesDecrypt(encryptedData, cached.key, cached.iv)
 } else {
-  // Need to decrypt key via Lit nodes
-  const key = await decryptKeyViaLit(encryptedKey)
+  // Need Haven-AOL gate decrypt (EIP-712 + ICP)
+  const { aesKey } = await decryptContentKey({ encryptionMetadata, walletClient })
 }
 ```
 
@@ -597,10 +590,10 @@ function setCachedKey(
 ```typescript
 import { setCachedKey } from '@/lib/aes-key-cache'
 
-const aesKey = await decryptKeyViaLit(encryptedKey) // expensive!
+const { aesKey } = await decryptContentKey({ encryptionMetadata, walletClient }) // expensive!
 const iv = base64ToUint8Array(metadata.iv)
 setCachedKey('video-123', aesKey, iv)
-// Next time, getCachedKey('video-123') will return without Lit contact
+// Next time, getCachedKey('video-123') will return without a wallet popup
 ```
 
 ---
@@ -622,7 +615,7 @@ function onWalletDisconnect(address: string): void
 | `address` | `string` | The wallet address that disconnected |
 
 **What it clears:**
-- Lit session cache for the address
+- Haven-AOL legacy nonce entries for the address
 - All AES keys
 - OPFS staging files
 - Video cache (configurable, default: keep)
@@ -652,7 +645,7 @@ async function onSecurityClear(): Promise<SecurityClearResult>
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `sessionsCleared` | `boolean` | Whether Lit sessions were cleared |
+| `sessionsCleared` | `boolean` | Whether Haven-AOL nonces / agent cache were cleared |
 | `keysCleared` | `boolean` | Whether AES keys were cleared |
 | `videosCleared` | `boolean` | Whether video cache was cleared |
 | `stagingCleared` | `boolean` | Whether OPFS staging was cleared |

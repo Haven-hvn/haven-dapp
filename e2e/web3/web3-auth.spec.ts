@@ -2,7 +2,7 @@
  * Web3 Authentication Flow E2E Tests
  * 
  * Tests for Web3-specific authentication including:
- * - Lit Protocol authentication
+ * - Haven-AOL gate authentication (EIP-712)
  * - Signature requests
  * - Auth state management
  * - Protected route access

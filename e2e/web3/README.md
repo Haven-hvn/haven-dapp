@@ -1,6 +1,6 @@
 # Web3 E2E Testing
 
-This directory contains end-to-end tests specifically for Web3 functionality including wallet connections, MetaMask interactions, and Lit Protocol authentication.
+This directory contains end-to-end tests specifically for Web3 functionality including wallet connections, MetaMask interactions, and Haven-AOL gate authentication.
 
 ## Overview
 
@@ -41,7 +41,7 @@ npm run test:web3:ui
 | File | Description |
 |------|-------------|
 | `wallet-connection.spec.ts` | Wallet connection, disconnection, network switching |
-| `web3-auth.spec.ts` | Lit Protocol auth, signatures, protected routes |
+| `web3-auth.spec.ts` | Haven-AOL gate auth, EIP-712 signatures, protected routes |
 
 ## Test Patterns
 
@@ -102,25 +102,28 @@ test('switch to Sepolia network', async ({
 });
 ```
 
-### Lit Protocol Testing
+### Haven-AOL Testing
 
 ```typescript
-test('Lit Protocol signature storage', async ({ 
+test('should persist Haven-AOL nonce in localStorage', async ({
+  page,
+  gotoWithWeb3,
   mockWalletConnected,
-  mockSignature,
-  page 
+  mockHavenAolNonce,
 }) => {
+  await gotoWithWeb3('/library');
   await mockWalletConnected(TEST_WALLET.address, 1);
-  await mockSignature('0x' + 'a'.repeat(130));
-  
-  // Verify signature stored
-  const sig = await page.evaluate(() => {
-    return localStorage.getItem('lit-auth-signature');
-  });
-  
-  expect(sig).toBeTruthy();
+  await mockHavenAolNonce(TEST_WALLET.address);
+
+  const nonce = await page.evaluate((address) => {
+    return localStorage.getItem(`haven-aol-nonce-${address.toLowerCase()}`);
+  }, TEST_WALLET.address);
+
+  expect(nonce).toBeTruthy();
 });
 ```
+
+See [Haven-AOL](https://github.com/HavenCTO/haven-aol) for the gate protocol.
 
 ## Available Fixtures
 
@@ -131,7 +134,8 @@ From `../web3-fixtures.ts`:
 | `gotoWithWeb3(path)` | Navigate with Web3 initialization |
 | `mockWalletConnected(address, chainId)` | Mock connection |
 | `mockWalletDisconnected()` | Clear all wallet state |
-| `mockSignature(sig)` | Mock Lit signature |
+| `mockSignature(sig)` | Mock EIP-712 gate signature |
+| `mockHavenAolNonce(address)` | Mock Haven-AOL nonce in localStorage |
 | `waitForWalletModal()` | Wait for AppKit modal |
 | `connectWalletViaUI()` | Click connect button |
 | `disconnectWalletViaUI()` | Click disconnect |

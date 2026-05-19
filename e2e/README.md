@@ -26,7 +26,7 @@ See [docs/MANUAL_TEST_PLAN.md](../docs/MANUAL_TEST_PLAN.md) for manual testing c
 
 ### Web3 Tests (`web3/`)
 - **Wallet Connection** (`wallet-connection.spec.ts`): Connect, disconnect, network switching
-- **Web3 Authentication** (`web3-auth.spec.ts`): Lit Protocol auth, signatures, protected routes
+- **Web3 Authentication** (`web3-auth.spec.ts`): Haven-AOL gate signatures, protected routes
 
 ## Running Tests
 
@@ -180,7 +180,7 @@ e2e/
 - `gotoWithWeb3(path)` - Navigate with Web3 provider initialization
 - `mockWalletConnected(address, chainId)` - Full wallet connection mock
 - `mockWalletDisconnected()` - Full disconnection with storage cleanup
-- `mockSignature(signature)` - Mock Lit Protocol signature
+- `mockSignature(signature)` - Mock EIP-712 gate signature for Haven-AOL
 - `waitForWalletModal()` - Wait for AppKit/Reown modal
 - `connectWalletViaUI()` - Connect via UI (opens wallet modal)
 - `disconnectWalletViaUI()` - Disconnect via UI

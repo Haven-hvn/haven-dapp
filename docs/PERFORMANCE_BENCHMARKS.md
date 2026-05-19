@@ -98,8 +98,8 @@ Measures individual stages of the decryption process.
 | Metric | Description |
 |--------|-------------|
 | `synapseFetchMs` | Time to fetch encrypted data from Filecoin |
-| `litAuthColdMs` | First authentication (requires wallet signature) |
-| `litAuthWarmMs` | Cached session reuse |
+| `keyAuthColdMs` | First Haven-AOL gate auth (EIP-712 wallet signature + ICP) |
+| `keyAuthWarmMs` | AES key served from in-memory cache (no wallet popup) |
 | `aesDecryptMs` | AES-256-GCM decryption time |
 | `cacheWriteMs` | Writing decrypted data to Cache API |
 | `totalPipelineMs` | Sum of all stages |
@@ -144,8 +144,8 @@ Measures the performance of cache API operations.
   },
   "decryptionPipeline": {
     "synapseFetchMs": 800,
-    "litAuthColdMs": 1500,
-    "litAuthWarmMs": 10,
+    "keyAuthColdMs": 1500,
+    "keyAuthWarmMs": 10,
     "aesDecryptMs": 1200,
     "cacheWriteMs": 500,
     "totalPipelineMs": 4000,

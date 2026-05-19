@@ -41,7 +41,11 @@ cp .env.local.example .env.local
 | `NEXT_PUBLIC_CHAIN_ID` | Default chain ID | 1 (Ethereum) |
 | `NEXT_PUBLIC_ARKIV_RPC_URL` | Arkiv RPC URL | `https://braga.hoodi.arkiv.network/rpc` |
 | `NEXT_PUBLIC_ARKIV_API_URL` | Arkiv HTTP API URL | `https://braga.hoodi.arkiv.network/api` |
-| `NEXT_PUBLIC_LIT_NETWORK` | Lit Protocol network | `naga-dev` |
+| `NEXT_PUBLIC_ICP_HOST` | ICP API host for Haven-AOL | `https://icp-api.io` |
+| `NEXT_PUBLIC_HAVEN_AOL_CANISTER_ID` | Haven-AOL canister ID | (see `.env.local.example`) |
+| `NEXT_PUBLIC_EIP712_CHAIN_ID` | EIP-712 chain ID for gate signatures | `1` |
+| `NEXT_PUBLIC_EIP712_VERIFYING_CONTRACT` | EIP-712 verifying contract | (see `.env.local.example`) |
+| `NEXT_PUBLIC_HAVEN_AOL_FETCH_ROOT_KEY` | Fetch ICP root key (local dev only) | `false` |
 | `NEXT_PUBLIC_APP_URL` | Application URL | `https://haven.video` |
 
 ## Build Configuration
@@ -161,7 +165,7 @@ The following security headers are configured in `next.config.mjs`:
 ### Runtime Errors
 
 1. **WalletConnect issues**: Verify `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` is set
-2. **Lit Protocol errors**: Check `NEXT_PUBLIC_LIT_NETWORK` is set to a valid network
+2. **Haven-AOL / decryption errors**: Verify `NEXT_PUBLIC_ICP_HOST`, `NEXT_PUBLIC_HAVEN_AOL_CANISTER_ID`, and EIP-712 variables match your deployment (see [haven-aol](https://github.com/HavenCTO/haven-aol))
 3. **IPFS loading failures**: Verify IPFS gateway URLs in next.config.js
 
 ### Performance Issues

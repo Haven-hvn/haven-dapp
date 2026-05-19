@@ -1,13 +1,15 @@
 # Haven - Decentralized Video Library
 
-A Web3-powered video streaming platform with encrypted content using Lit Protocol, IPFS/Filecoin storage, and wallet-based authentication.
+A Web3-powered video streaming platform with encrypted content using [Always Online (AOL)](https://github.com/HavenCTO/haven-aol), IPFS/Filecoin storage, and wallet-based authentication.
+
+**Always Online (AOL)** is an ICP-native protocol for conditional, token-gated access using VetKD keys. AOL enables smart access patterns across web3—DAOs, DataDAOs, agent swarms, and shared resources.
 
 ## Tech Stack
 
 - **Framework**: [Next.js 16](https://nextjs.org/) with App Router
 - **Styling**: Tailwind CSS + shadcn/ui
 - **Web3**: wagmi, viem, @reown/appkit (Web3Modal)
-- **Encryption**: Lit Protocol
+- **Encryption / access control**: [Haven-AOL](https://github.com/HavenCTO/haven-aol) (ICP VetKD + EIP-712 gates)
 - **Storage**: IPFS/Filecoin via Arkiv SDK
 - **Testing**: Playwright + Synpress (MetaMask automation)
 
@@ -44,9 +46,14 @@ NEXT_PUBLIC_ALCHEMY_RPC=https://eth-sepolia.g.alchemy.com/v2/your_api_key
 # Chain ID (1 = Mainnet, 11155111 = Sepolia)
 NEXT_PUBLIC_CHAIN_ID=11155111
 
-# Lit Protocol Network
-tNEXT_PUBLIC_LIT_NETWORK=datil-dev
+# Haven-AOL (ICP + VetKD decryption)
+NEXT_PUBLIC_ICP_HOST=https://icp-api.io
+NEXT_PUBLIC_HAVEN_AOL_CANISTER_ID=your_canister_id
+NEXT_PUBLIC_EIP712_CHAIN_ID=1
+NEXT_PUBLIC_EIP712_VERIFYING_CONTRACT=0x0000000000000000000000000000000000000000
 ```
+
+See [.env.local.example](.env.local.example) for the full list of optional variables (Arkiv, Synapse CDN, etc.).
 
 ### Development
 
@@ -103,12 +110,12 @@ See [e2e/web3/README.md](e2e/web3/README.md) for detailed Web3 testing documenta
 │   ├── app/              # Next.js App Router
 │   ├── components/       # React components
 │   │   ├── auth/         # Authentication components
-│   │   ├── providers/    # Context providers (Web3, Auth, Lit)
+│   │   ├── providers/    # Context providers (Web3, Haven-AOL)
 │   │   └── ui/           # UI components
 │   ├── hooks/            # Custom React hooks
 │   ├── lib/              # Utility libraries
 │   │   ├── crypto.ts     # Encryption utilities
-│   │   ├── lit.ts        # Lit Protocol integration
+│   │   ├── haven-aol/    # Haven-AOL gate decrypt (ICP VetKD)
 │   │   └── wagmi.ts      # Web3 configuration
 │   └── stores/           # Zustand state stores
 ├── e2e/                  # Playwright E2E tests
@@ -122,11 +129,11 @@ See [e2e/web3/README.md](e2e/web3/README.md) for detailed Web3 testing documenta
 ## Features
 
 - 🔐 **Wallet Authentication** - Connect with MetaMask or any Web3 wallet
-- 🔒 **Encrypted Video** - Content encrypted with Lit Protocol
+- 🔒 **Encrypted Video** - Token-gated decryption via Haven-AOL (VetKD on ICP)
 - 📦 **Decentralized Storage** - Videos stored on IPFS/Filecoin
 - 📱 **Responsive Design** - Works on desktop and mobile
 - 🌙 **Dark Mode** - Built-in theme switching
-- ⚡ **Fast Playback** - Optimized video streaming
+- ⚡ **Fast Playback** - Optimized video streaming with local cache
 - 🧪 **E2E Tested** - Comprehensive Playwright tests including Web3 flows
 
 ## Web3 Integration
@@ -144,19 +151,23 @@ function MyComponent() {
 }
 ```
 
-### Lit Protocol
+### Haven-AOL (playback)
 
-Content encryption/decryption with Lit Protocol:
+Content keys are released through conditional gates: the user signs an EIP-712 `GateRequest`, the Haven-AOL ICP canister verifies access (e.g. token balance on EVM), and the browser unwraps the VetKD-protected AES key. See the [haven-aol](https://github.com/HavenCTO/haven-aol) repository for the protocol spec and TypeScript SDK.
 
 ```typescript
-import { encryptVideo, decryptVideo } from '@/lib/lit';
+import { decryptContentKey } from '@/lib/haven-aol';
+import type { WalletClientLike } from '@/lib/haven-aol';
 
-// Encrypt before upload
-const encrypted = await encryptVideo(videoFile, walletAddress);
-
-// Decrypt for playback
-const decrypted = await decryptVideo(encryptedData, accessControlConditions);
+// Decrypt AES content key for playback (after fetch from IPFS/Filecoin)
+const { aesKey, fromCache } = await decryptContentKey({
+  encryptionMetadata: video.encryptionMetadata,
+  encryptedCid: video.encryptedCid,
+  walletClient: walletClient as WalletClientLike,
+});
 ```
+
+Upload and encryption are handled by [haven-cli](https://github.com/HavenCTO/haven-cli); this dapp focuses on read/playback.
 
 ### E2E Testing with MetaMask
 
@@ -196,7 +207,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
 
 - [Next.js Documentation](https://nextjs.org/docs)
 - [wagmi Documentation](https://wagmi.sh/)
-- [Lit Protocol Documentation](https://developer.litprotocol.com/)
+- [Haven-AOL (Always Online)](https://github.com/HavenCTO/haven-aol)
 - [AppKit Documentation](https://docs.reown.com/appkit/overview)
 - [Playwright Documentation](https://playwright.dev/)
 
