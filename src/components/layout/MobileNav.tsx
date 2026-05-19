@@ -10,13 +10,14 @@
  */
 
 import { useState, useEffect } from 'react'
-import { Menu, X, Library, Settings } from 'lucide-react'
+import { Menu, X, Library, Settings, Users } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   { href: '/library', label: 'Library', icon: Library },
+  { href: '/community', label: 'Community', icon: Users },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
 
