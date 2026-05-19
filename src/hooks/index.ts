@@ -70,6 +70,9 @@ export type {
 // Security cleanup hook
 export { useSecurityCleanup } from './useSecurityCleanup'
 
+// Haven-AOL verification key prefetch hook
+export { useHavenAolPrefetch } from './useHavenAolPrefetch'
+
 // Prefetch hooks
 export {
   usePrefetch,

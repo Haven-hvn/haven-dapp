@@ -20,6 +20,14 @@ jest.mock('../../haven-aol/haven-aol-nonce', () => ({
   clearNonce: jest.fn(),
 }))
 
+jest.mock('../../haven-aol/haven-aol-verification-key-cache', () => ({
+  clearVerificationKeyCache: jest.fn(),
+}))
+
+jest.mock('../../haven-aol/haven-aol-client', () => ({
+  clearAgentCache: jest.fn(),
+}))
+
 jest.mock('../../aes-key-cache', () => ({
   clearAllKeys: jest.fn(),
 }))

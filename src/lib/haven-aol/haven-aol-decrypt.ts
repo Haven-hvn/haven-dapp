@@ -9,16 +9,14 @@
  * @module lib/haven-aol/haven-aol-decrypt
  */
 
-import { HttpAgent, AnonymousIdentity } from '@icp-sdk/core/agent'
 import {
   recoverVetKey,
   ibeDecryptAesKey,
   requestDecryptionKey,
-  fetchVerificationKey,
   computeDerivationInput,
   parseGateMetadata,
 } from 'haven-aol'
-import { getHavenAolConfig } from './haven-aol-client'
+import { getHavenAolConfig, getOrCreateAgent } from './haven-aol-client'
 import { createSignedGateRequest, retryWithFreshGateNonce, type WalletClientLike } from './haven-aol-auth'
 import {
   isGateMetadata,
@@ -28,7 +26,6 @@ import {
 import { HavenAolDecryptError, mapGateError } from './haven-aol-errors'
 import { getCachedKey, setCachedKey, getVideoIdFromMetadata } from '../aes-key-cache'
 import {
-  logFetchVerificationKeyDuration,
   logPostSignToIcpKeySuccess,
   logRequestDecryptionKeyDuration,
   markPostWalletSign,
@@ -191,17 +188,10 @@ async function decryptContentKeyImpl(
     throw new HavenAolDecryptError('Decryption cancelled', 'CANCELLED')
   }
 
-  // Step 4: Create ICP agent and call canister
+  // Step 4: Get singleton ICP agent and call canister
   onProgress?.('Requesting decryption key from network...')
   const config = getHavenAolConfig()
-
-  const agent = await HttpAgent.create({
-    host: config.host,
-    identity: new AnonymousIdentity(),
-  })
-  if (config.fetchRootKey) {
-    await agent.fetchRootKey()
-  }
+  const agent = await getOrCreateAgent()
 
   const gateRequestBase = {
     chain: metadata.chain,
@@ -263,11 +253,9 @@ async function decryptContentKeyImpl(
     throw new HavenAolDecryptError('Decryption cancelled', 'CANCELLED')
   }
 
-  // Step 6: Fetch verification key
+  // Step 6: Extract bundled verification key from response (zero extra round-trip)
   onProgress?.('Verifying key...')
-  const verificationFetchStartMs = performance.now()
-  const verificationKeyBytes = await fetchVerificationKey(agent, config.canisterId)
-  logFetchVerificationKeyDuration(performance.now() - verificationFetchStartMs)
+  const { encryptedKey, verificationKey: verificationKeyBytes } = result.ok
 
   // Step 7: Compute derivation input
   const derivationInput = await computeDerivationInput(
@@ -280,7 +268,7 @@ async function decryptContentKeyImpl(
   // Step 8: Recover VetKD key
   onProgress?.('Recovering encryption key...')
   const vetKey = recoverVetKey(
-    result.ok as Uint8Array,
+    encryptedKey,
     signedRequest.transportSecretKey,
     verificationKeyBytes,
     derivationInput,

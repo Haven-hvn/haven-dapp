@@ -8,6 +8,8 @@
  * @module lib/haven-aol/haven-aol-client
  */
 
+import { HttpAgent, AnonymousIdentity } from '@icp-sdk/core/agent'
+
 // ============================================================================
 // Configuration
 // ============================================================================
@@ -67,4 +69,55 @@ export function isHavenAolConfigValid(): boolean {
   } catch {
     return false
   }
+}
+
+// ============================================================================
+// Singleton HttpAgent
+// ============================================================================
+
+let cachedAgent: HttpAgent | null = null
+let cachedAgentHost: string | null = null
+
+/**
+ * Get or create a singleton HttpAgent for Haven-AOL canister calls.
+ *
+ * Safe to reuse because:
+ * - Uses AnonymousIdentity (no per-user state)
+ * - Config (host, canisterId) doesn't change at runtime
+ * - HttpAgent handles connection pooling internally
+ *
+ * The agent caches subnet node keys internally with a 5-minute TTL,
+ * so reusing it avoids redundant read_state calls.
+ *
+ * @returns A reusable HttpAgent instance
+ */
+export async function getOrCreateAgent(): Promise<HttpAgent> {
+  const config = getHavenAolConfig()
+
+  // Reuse if host hasn't changed
+  if (cachedAgent && cachedAgentHost === config.host) {
+    return cachedAgent
+  }
+
+  const agent = await HttpAgent.create({
+    host: config.host,
+    identity: new AnonymousIdentity(),
+    verifyQuerySignatures: false, // Skip for anonymous agent (canister does EVM auth)
+  })
+
+  if (config.fetchRootKey) {
+    await agent.fetchRootKey()
+  }
+
+  cachedAgent = agent
+  cachedAgentHost = config.host
+  return agent
+}
+
+/**
+ * Clear the cached agent (e.g., on config change, wallet disconnect, or for testing).
+ */
+export function clearAgentCache(): void {
+  cachedAgent = null
+  cachedAgentHost = null
 }

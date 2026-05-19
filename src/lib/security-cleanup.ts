@@ -18,6 +18,7 @@ import { clearAllKeys } from './aes-key-cache'
 import { clearAllVideos } from './video-cache'
 import { clearAllStaging } from './opfs'
 import { clearNonce } from './haven-aol/haven-aol-nonce'
+import { clearAgentCache } from './haven-aol/haven-aol-client'
 
 // ============================================================================
 // Types
@@ -132,6 +133,7 @@ export function onWalletDisconnect(address: string): void {
   // Always clear auth-related caches
   clearNonce(address)
   clearAllKeys()
+  clearAgentCache()
 
   // Optionally clear video cache
   if (options.clearVideosOnDisconnect) {
@@ -174,6 +176,7 @@ export function onAccountChange(oldAddress: string, newAddress: string): void {
   // Clear old account's auth
   clearNonce(oldAddress)
   clearAllKeys()
+  clearAgentCache()
 
   // Optionally clear video cache
   if (options.clearVideosOnAccountChange) {
@@ -268,6 +271,7 @@ export async function onSecurityClear(): Promise<SecurityClearResult> {
 
   try {
     clearNonce()
+    clearAgentCache()
     results.sessionsCleared = true
   } catch (err) {
     console.error('[SecurityCleanup] Failed to clear sessions:', err)

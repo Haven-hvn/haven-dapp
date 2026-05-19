@@ -1,6 +1,8 @@
 'use client'
 
+import { useAccount } from 'wagmi'
 import { useSecurityCleanup } from '@/hooks/useSecurityCleanup'
+import { useHavenAolPrefetch } from '@/hooks/useHavenAolPrefetch'
 
 /**
  * Security Cleanup Provider
@@ -36,6 +38,8 @@ export function SecurityCleanupProvider({
 }: {
   children: React.ReactNode
 }) {
+  const { isConnected } = useAccount()
   useSecurityCleanup()
+  useHavenAolPrefetch(isConnected)
   return <>{children}</>
 }

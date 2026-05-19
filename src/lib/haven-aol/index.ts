@@ -4,7 +4,7 @@
  * @module lib/haven-aol
  */
 
-export { getHavenAolConfig, isHavenAolConfigValid } from './haven-aol-client'
+export { getHavenAolConfig, isHavenAolConfigValid, getOrCreateAgent, clearAgentCache } from './haven-aol-client'
 export type { HavenAolConfig } from './haven-aol-client'
 
 export {
@@ -47,3 +47,4 @@ export {
   commitNonceUsed,
   nonceAfterCollision,
 } from './haven-aol-nonce'
+
