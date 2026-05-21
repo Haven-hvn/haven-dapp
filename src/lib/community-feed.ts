@@ -131,6 +131,12 @@ export async function fetchCommunityFeedForToken(
     const getAttr = (key: string): string | number | undefined =>
       attrs.find((a) => a.key === key)?.value
 
+    // Surface the entity's own bound fields so verifyFeed can cross-check
+    // the attestation against them. The query-time `gate` is what the caller
+    // *asked* for; the entity's attributes are what it actually claims.
+    const entityCidHash = (getAttr('cid_hash') as string) || null
+    const entityGateThreshold = getAttr('gate_threshold') as number | undefined
+
     return {
       id: entity.key,
       title: (getAttr('title') as string) || 'Untitled',
@@ -138,9 +144,10 @@ export async function fetchCommunityFeedForToken(
       creatorAddress: (entity.creator || entity.owner || '').toLowerCase(),
       gateToken: gate.tokenAddress,
       gateChain: gate.chain,
-      gateThreshold: gate.threshold,
+      gateThreshold: entityGateThreshold ?? gate.threshold,
       createdAtBlock: entity.createdAtBlock ? Number(entity.createdAtBlock) : 0,
       isEncrypted: getAttr('is_encrypted') === 1,
+      cidHash: entityCidHash,
       attestation,
       verified: false, // Set in verification step
     }
@@ -187,12 +194,16 @@ export async function verifyFeed(
     // 1. Verify signature is valid and not expired
     const sigValid = verifyAttestation(video.attestation, canisterPubKey)
 
-    // 2. Verify attestation matches this entity (anti-replay)
+    // 2. Verify attestation matches this entity (anti-replay).
+    //    cid_hash binds the attestation to specific content — without it, an
+    //    attacker can copy any valid attestation onto a different entity.
     const entityMatch = attestationMatchesEntity(video.attestation, {
       creator: video.creatorAddress,
       attributes: {
         gate_token: video.gateToken,
         gate_chain: video.gateChain,
+        gate_threshold: video.gateThreshold,
+        cid_hash: video.cidHash ?? undefined,
       },
     })
 

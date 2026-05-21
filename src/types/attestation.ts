@@ -60,6 +60,8 @@ export interface CommunityVideo {
   createdAtBlock: number
   /** Whether the content is encrypted */
   isEncrypted: boolean
+  /** SHA-256 hash of the content CID, as stored in entity attributes (binds attestation to content) */
+  cidHash: string | null
   /** Attestation data from entity payload (null if none) */
   attestation: Attestation | null
   /** Whether attestation signature has been verified */

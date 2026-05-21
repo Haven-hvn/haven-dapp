@@ -86,31 +86,66 @@ export function verifyAttestation(
 
 /**
  * Verify attestation matches the entity it's attached to.
- * Cross-checks attestation fields against entity attributes to prevent replay.
+ * Cross-checks attestation fields against entity attributes to prevent replay
+ * (i.e. attaching one entity's attestation to another).
+ *
+ * All listed fields are REQUIRED: missing values fail closed. Optional
+ * presence checks were removed because they allowed an attacker to elide
+ * the binding fields and still render verified.
  */
 export function attestationMatchesEntity(
   attestation: Attestation,
   entity: {
     creator: string
-    attributes: { gate_token?: string; gate_chain?: string; cid_hash?: string }
+    attributes: {
+      gate_token?: string
+      gate_chain?: string
+      gate_threshold?: number
+      cid_hash?: string
+    }
   }
 ): boolean {
   // Attestation must be for the entity's creator
-  if (attestation.evmAddress.toLowerCase() !== entity.creator.toLowerCase()) {
+  if (
+    !attestation.evmAddress ||
+    !entity.creator ||
+    attestation.evmAddress.toLowerCase() !== entity.creator.toLowerCase()
+  ) {
     return false
   }
 
-  // Attestation must be for this entity's token gate
+  // Attestation must be for this entity's token gate (required)
   if (
-    entity.attributes.gate_token &&
+    !entity.attributes.gate_token ||
     attestation.tokenAddress.toLowerCase() !== entity.attributes.gate_token.toLowerCase()
   ) {
     return false
   }
 
-  // Attestation must be bound to this entity's content (anti-replay)
+  // Attestation must be for this entity's chain (required)
   if (
-    entity.attributes.cid_hash &&
+    !entity.attributes.gate_chain ||
+    attestation.chain.toLowerCase() !== entity.attributes.gate_chain.toLowerCase()
+  ) {
+    return false
+  }
+
+  // Attestation threshold must match the gate's threshold (required).
+  // Without this, an attestation issued for a 1-token gate could be displayed
+  // on a 1M-token gate.
+  if (
+    entity.attributes.gate_threshold === undefined ||
+    attestation.threshold !== entity.attributes.gate_threshold
+  ) {
+    return false
+  }
+
+  // Attestation must be bound to this entity's content (anti-replay).
+  // REQUIRED: if the entity has no cid_hash attribute, fail closed — the
+  // signature alone does not bind the attestation to specific content.
+  if (
+    !entity.attributes.cid_hash ||
+    !attestation.cidHash ||
     attestation.cidHash !== entity.attributes.cid_hash
   ) {
     return false
