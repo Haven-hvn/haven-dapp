@@ -93,7 +93,7 @@ function CommunityFeedContent() {
           {videos.map((video) => (
             <Link
               key={video.id}
-              href={`/watch/${video.id}`}
+              href={`/watch?v=${encodeURIComponent(video.id)}`}
               className="group block rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 hover:bg-white/[0.04] hover:border-white/[0.12] transition-all duration-200"
             >
               <div className="flex items-start justify-between mb-3">
