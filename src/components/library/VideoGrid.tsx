@@ -27,6 +27,11 @@ import { SearchBar } from "./SearchBar";
 import { FilterControls } from "./FilterControls";
 import { ViewToggle } from "./ViewToggle";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SelectableVideoCard } from "./SelectableVideoCard";
+import { MultiSelectToolbar } from "./MultiSelectToolbar";
+import { DownloadQueuePanel } from "./DownloadQueuePanel";
+import { useMultiSelect } from "@/hooks/useMultiSelect";
+import { useDownloadQueue } from "@/hooks/useDownloadQueue";
 import type { ViewMode, VideoFilters } from "@/types";
 import type { VideoSortField, SortOrder } from "@/hooks/useVideoSearch";
 import { Cloud } from "lucide-react";
@@ -73,6 +78,7 @@ function VideoCardSkeleton() {
  * - Lazy loaded video cards for performance
  * - Cache status badges for encrypted videos
  * - Cache stats in header
+ * - Multi-select batch download with queue panel
  */
 export function VideoGrid() {
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
@@ -84,12 +90,45 @@ export function VideoGrid() {
 
   const router = useRouter();
 
+  // Multi-select hook
+  const {
+    isSelectMode,
+    toggleSelectMode,
+    toggleSelection,
+    isSelected,
+    getSelectionOrder,
+    selectedVideos,
+    selectedCount,
+    clearSelection,
+    isMaxReached,
+  } = useMultiSelect();
+
+  // Download queue hook
+  const {
+    enqueue,
+    dequeue,
+    clear: clearQueue,
+    cancel: cancelQueue,
+    queue,
+    isProcessing,
+    currentItem,
+    completedCount,
+    totalCount: queueTotalCount,
+  } = useDownloadQueue();
+
   const handleVideoClick = useCallback(
     (video: { id: string }) => {
       router.push(`/watch?v=${encodeURIComponent(video.id)}`);
     },
     [router]
   );
+
+  const handleDownloadAll = useCallback(() => {
+    if (selectedVideos.length === 0) return;
+    enqueue(selectedVideos);
+    clearSelection();
+    toggleSelectMode();
+  }, [selectedVideos, enqueue, clearSelection, toggleSelectMode]);
 
   const {
     videos,
@@ -193,7 +232,16 @@ export function VideoGrid() {
             placeholder="Search videos..."
           />
         </div>
-        <div className="flex items-center gap-2 justify-end">
+        <div className="flex items-center gap-2 justify-end flex-wrap">
+          <MultiSelectToolbar
+            isSelectMode={isSelectMode}
+            onToggleSelectMode={toggleSelectMode}
+            selectedCount={selectedCount}
+            isMaxReached={isMaxReached}
+            onDownloadAll={handleDownloadAll}
+            onClearSelection={clearSelection}
+            isProcessing={isProcessing}
+          />
           <FilterControls filters={filters} onChange={setFilters} />
           <ViewToggle mode={viewMode} onChange={setViewMode} />
         </div>
@@ -242,9 +290,14 @@ export function VideoGrid() {
         >
           <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
             {paginatedVideos.map((video) => (
-              <VideoCard 
-                key={video.id} 
-                video={video} 
+              <SelectableVideoCard
+                key={video.id}
+                video={video}
+                isSelectMode={isSelectMode}
+                isSelected={isSelected(video.id)}
+                selectionOrder={getSelectionOrder(video.id)}
+                isMaxReached={isMaxReached}
+                onToggleSelection={toggleSelection}
                 onClick={handleVideoClick}
                 isCached={cacheStatus.get(video.id) ?? false}
               />
@@ -285,6 +338,18 @@ export function VideoGrid() {
           </p>
         </div>
       )}
+
+      {/* Download Queue Panel */}
+      <DownloadQueuePanel
+        queue={queue}
+        isProcessing={isProcessing}
+        currentItem={currentItem}
+        completedCount={completedCount}
+        totalCount={queueTotalCount}
+        onCancel={cancelQueue}
+        onClear={clearQueue}
+        onRemoveItem={dequeue}
+      />
     </div>
   );
 }

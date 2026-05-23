@@ -9,10 +9,14 @@ export type { HavenAolConfig } from './haven-aol-client'
 
 export {
   createSignedGateRequest,
+  createSignedBatchGateRequest,
   retryWithFreshGateNonce,
   retryWithBumpedNonce,
 } from './haven-aol-auth'
-export type { SignedGateRequest, WalletClientLike } from './haven-aol-auth'
+export type { SignedGateRequest, SignedBatchGateRequest, WalletClientLike } from './haven-aol-auth'
+
+export { batchDecryptContentKeys } from './haven-aol-batch-decrypt'
+export type { BatchDecryptResult } from './haven-aol-batch-decrypt'
 
 export { decryptContentKey, decryptCidWithHavenAol } from './haven-aol-decrypt'
 export type { DecryptContentKeyOptions, DecryptContentKeyResult, DecryptCidOptions } from './haven-aol-decrypt'
