@@ -108,6 +108,6 @@ export type {
   DownloadStage,
 } from './useVideoDownload'
 
-// Community feed hook
-export { useCommunityFeed, communityKeys } from './useCommunityFeed'
-export type { UseCommunityFeedReturn } from './useCommunityFeed'
+// Community feed hooks
+export { useUserCommunities, useCommunityFeedForGate, communityKeys } from './useCommunityFeed'
+export type { UseUserCommunitiesReturn, UseCommunityFeedForGateReturn } from './useCommunityFeed'

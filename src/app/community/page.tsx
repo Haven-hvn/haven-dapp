@@ -1,21 +1,17 @@
-/**
- * Community Feed Page
- *
- * Displays token-gated community content from other creators.
- * Verifies attestation signatures offline for trust indicators.
- *
- * @module app/community/page
- */
-
 'use client'
 
-import { useCommunityFeed } from '@/hooks/useCommunityFeed'
+import { Suspense } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
+import { useUserCommunities, useCommunityFeedForGate } from '@/hooks/useCommunityFeed'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { LibraryLayout } from '@/components/layout/LibraryLayout'
+import { CommunityCard } from '@/components/community/CommunityCard'
 import Link from 'next/link'
+import type { TokenGate } from '@/types/attestation'
 
-function CommunityFeedContent() {
-  const { videos, communities, isLoading, error, refetch } = useCommunityFeed()
+function CommunityListContent() {
+  const router = useRouter()
+  const { communities, isLoading, error, refetch } = useUserCommunities()
 
   if (isLoading) {
     return (
@@ -32,7 +28,7 @@ function CommunityFeedContent() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center max-w-md">
-          <p className="text-red-400 mb-2">Failed to load community feed</p>
+          <p className="text-red-400 mb-2">Failed to load communities</p>
           <p className="text-sm text-white/40 mb-4">{error.message}</p>
           <button
             onClick={() => refetch()}
@@ -64,26 +60,93 @@ function CommunityFeedContent() {
     )
   }
 
+  const handleCommunityClick = (gate: TokenGate) => {
+    router.push(`/community?c=${encodeURIComponent(gate.tokenAddress)}`)
+  }
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {communities.map((gate) => (
+        <CommunityCard
+          key={`${gate.chain}:${gate.tokenAddress}`}
+          gate={gate}
+          onClick={handleCommunityClick}
+        />
+      ))}
+    </div>
+  )
+}
+
+function CommunityFeedContent() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const gateToken = searchParams.get('c')
+  const { communities } = useUserCommunities()
+  const { videos, isLoading, error, refetch } = useCommunityFeedForGate(gateToken)
+
+  const gate = gateToken
+    ? communities.find((g) => g.tokenAddress === gateToken) ?? null
+    : null
+
+  if (!gateToken) {
+    return <CommunityListContent />
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm text-white/50">Loading community videos...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center max-w-md">
+          <p className="text-red-400 mb-2">Failed to load community feed</p>
+          <p className="text-sm text-white/40 mb-4">{error.message}</p>
+          <button
+            onClick={() => refetch()}
+            className="px-4 py-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
-      {/* Community Badges */}
-      <div className="flex flex-wrap gap-2 mb-6">
-        {communities.map((gate) => (
-          <span
-            key={`${gate.chain}:${gate.tokenAddress}`}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs text-white/60"
-          >
+      <div className="flex items-center gap-4 mb-6">
+        <button
+          onClick={() => router.push('/community')}
+          className="flex items-center gap-1.5 text-sm text-white/50 hover:text-white/80 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19l-7-7 7-7" />
+          </svg>
+          Back
+        </button>
+
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs text-white/60">
             <span className="w-2 h-2 rounded-full bg-emerald-400/60" />
-            {gate.tokenAddress.slice(0, 6)}...{gate.tokenAddress.slice(-4)}
-            <span className="text-white/30">({gate.chain})</span>
+            {gate
+              ? `${gate.tokenAddress.slice(0, 6)}...${gate.tokenAddress.slice(-4)}`
+              : `${gateToken.slice(0, 6)}...${gateToken.slice(-4)}`}
+            {gate && <span className="text-white/30">({gate.chain})</span>}
           </span>
-        ))}
+        </div>
       </div>
 
-      {/* Feed */}
       {videos.length === 0 ? (
         <div className="text-center py-12">
-          <p className="text-white/40">No verified community content yet.</p>
+          <p className="text-white/40">No community content yet for this gate.</p>
           <p className="text-sm text-white/25 mt-1">
             Content will appear here when community members upload gated videos.
           </p>
@@ -102,7 +165,7 @@ function CommunityFeedContent() {
                 </h3>
                 {video.isEncrypted && (
                   <span className="ml-2 flex-shrink-0 text-xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400/80">
-                    🔒
+                    &#x1f512;
                   </span>
                 )}
               </div>
@@ -125,7 +188,7 @@ function CommunityFeedContent() {
                 <span className="truncate">
                   {video.gateToken.slice(0, 8)}...
                 </span>
-                <span>•</span>
+                <span>&bull;</span>
                 <span>{video.gateChain}</span>
               </div>
             </Link>
@@ -134,6 +197,17 @@ function CommunityFeedContent() {
       )}
     </div>
   )
+}
+
+function CommunityContent() {
+  const searchParams = useSearchParams()
+  const gateToken = searchParams.get('c')
+
+  if (!gateToken) {
+    return <CommunityListContent />
+  }
+
+  return <CommunityFeedContent />
 }
 
 export default function CommunityPage() {
@@ -147,7 +221,13 @@ export default function CommunityPage() {
               Discover content from your token-gated communities
             </p>
           </div>
-          <CommunityFeedContent />
+          <Suspense fallback={
+            <div className="flex items-center justify-center min-h-[400px]">
+              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+          }>
+            <CommunityContent />
+          </Suspense>
         </div>
       </LibraryLayout>
     </ProtectedRoute>

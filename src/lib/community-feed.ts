@@ -136,6 +136,7 @@ export async function fetchCommunityFeedForToken(
     // *asked* for; the entity's attributes are what it actually claims.
     const entityCidHash = (getAttr('cid_hash') as string) || null
     const entityGateThreshold = getAttr('gate_threshold') as number | undefined
+    const entityGateChain = getAttr('gate_chain') as string | undefined
 
     return {
       id: entity.key,
@@ -143,7 +144,7 @@ export async function fetchCommunityFeedForToken(
       owner: (entity.owner || '').toLowerCase(),
       creatorAddress: (entity.creator || entity.owner || '').toLowerCase(),
       gateToken: gate.tokenAddress,
-      gateChain: gate.chain,
+      gateChain: entityGateChain ?? gate.chain,
       gateThreshold: entityGateThreshold ?? gate.threshold,
       createdAtBlock: entity.createdAtBlock ? Number(entity.createdAtBlock) : 0,
       isEncrypted: getAttr('is_encrypted') === 1,
