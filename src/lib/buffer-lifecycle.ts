@@ -13,7 +13,7 @@
  * - IV buffer (after decryption completes)
  *
  * @module lib/buffer-lifecycle
- * @see ../hooks/useVideoDecryption.ts - Primary integration point
+ * @see ../hooks/useVideoCache.ts - Primary integration point
  */
 
 import { formatBytes } from './crypto'

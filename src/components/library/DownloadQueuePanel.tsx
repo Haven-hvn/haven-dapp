@@ -80,20 +80,11 @@ export function DownloadQueuePanel({
 
             <div className="flex-1 min-w-0">
               <p className="text-sm truncate">{item.video.title}</p>
-
-              {/* Human-readable status text */}
-              {item.statusText && item.status !== 'complete' && item.status !== 'error' && (
-                <p className="text-xs text-muted-foreground truncate mt-0.5">
-                  {item.statusText}
-                </p>
-              )}
-
               {item.status === 'error' && item.error && (
                 <p className="text-xs text-destructive truncate">
                   {item.error.message}
                 </p>
               )}
-
               {(item.status === 'downloading' || item.status === 'decrypting') && (
                 <div className="mt-1 h-1.5 w-full bg-muted rounded-full overflow-hidden">
                   <div
@@ -101,12 +92,6 @@ export function DownloadQueuePanel({
                     style={{ width: `${item.progress}%` }}
                   />
                 </div>
-              )}
-
-              {item.status === 'complete' && (
-                <p className="text-xs text-green-600 truncate mt-0.5">
-                  ✓ Downloaded
-                </p>
               )}
             </div>
 

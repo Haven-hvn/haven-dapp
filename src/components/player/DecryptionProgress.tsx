@@ -13,7 +13,18 @@
  */
 
 import { Loader2, Lock, Download, Key, FileVideo } from 'lucide-react'
-import type { DecryptionStatus } from '@/hooks/useVideoDecryption'
+
+/** Decryption stages for progress display. */
+type DecryptionStatus =
+  | 'idle'
+  | 'checking'
+  | 'fetching'
+  | 'authenticating'
+  | 'decrypting-key'
+  | 'decrypting-file'
+  | 'complete'
+  | 'error'
+  | 'cancelled'
 
 interface DecryptionProgressProps {
   status: DecryptionStatus

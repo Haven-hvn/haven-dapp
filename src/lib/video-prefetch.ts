@@ -21,7 +21,6 @@
  */
 
 import { hasVideo, putVideo, getCacheStorageEstimate } from './video-cache'
-import { hasCachedKey } from './aes-key-cache'
 import { fetchPinnedContent } from '@/services/ipfsService'
 import type { Video } from '@/types'
 
@@ -595,10 +594,13 @@ async function processQueue(): Promise<void> {
 
 /**
  * Execute a prefetch operation.
- * Fetches the encrypted video, decrypts it, and caches the result.
+ * Fetches the video content and caches it for instant future playback.
  *
- * This function uses a simplified version of the useVideoCache pipeline
- * but with lower priority and abort signal support.
+ * For encrypted videos: prefetch is not supported because decryption requires
+ * a wallet-cached AES key that only exists after first play. At that point,
+ * useVideoCache already writes to Cache API, making prefetch redundant.
+ *
+ * For non-encrypted videos: fetches from Synapse and stores in Cache API.
  *
  * @param item - The prefetch item to process
  */
@@ -609,6 +611,16 @@ async function executePrefetch(item: PrefetchItem): Promise<void> {
   // Check for abort before starting
   if (signal.aborted) {
     throw new Error('Prefetch cancelled')
+  }
+
+  // Encrypted videos cannot be prefetched without a wallet popup.
+  // After first play, useVideoCache writes to Cache API, so subsequent loads
+  // are instant. Prefetching encrypted content before first play would require
+  // a wallet signature (unacceptable UX for background prefetch).
+  if (video.isEncrypted) {
+    throw new Error(
+      'Encrypted video prefetch not supported — cache is populated on first play via useVideoCache'
+    )
   }
 
   // Update status
@@ -622,62 +634,9 @@ async function executePrefetch(item: PrefetchItem): Promise<void> {
     throw new Error('Prefetch cancelled')
   }
 
-  // For non-encrypted videos, just cache directly
-  if (!video.isEncrypted) {
-    const mimeType = 'video/mp4'
-    await putVideo(video.id, fetchResult.data, mimeType)
-    return
-  }
-
-  const gateMeta = video.encryptionMetadata
-
-  const hasKey = gateMeta?.encryptedAesKey
-    ? hasCachedKey(gateMeta.encryptedAesKey.slice(0, 32))
-    : false
-
-  if (!hasKey) {
-    // We don't have the key cached - decryption would require a wallet signature
-    // which we don't want to trigger during prefetch
-    // Mark this as failed but don't throw - it's expected behavior
-    throw new Error('AES key not cached - skipping prefetch to avoid wallet popup')
-  }
-
-  // We have the key cached, proceed with decryption
-  item.status = 'decrypting'
-
-  // Import crypto functions dynamically to avoid circular dependencies
-  const { aesDecryptToCache, base64ToUint8Array } = await import('./crypto')
-
-  if (signal.aborted) {
-    throw new Error('Prefetch cancelled')
-  }
-
-  if (!gateMeta) {
-    throw new Error('Missing gate encryption metadata')
-  }
-
-  const cacheKey = gateMeta.encryptedAesKey.slice(0, 32)
-  const cachedKeyResult = await import('./aes-key-cache').then((m) =>
-    m.getCachedKey(cacheKey)
-  )
-  if (!cachedKeyResult) {
-    throw new Error('Cached key not found')
-  }
-
-  if (signal.aborted) {
-    throw new Error('Prefetch cancelled')
-  }
-
-  const iv = cachedKeyResult.iv
+  // Non-encrypted videos: cache directly from Synapse fetch
   const mimeType = video.contentMimeType || 'video/mp4'
-
-  await aesDecryptToCache(
-    fetchResult.data,
-    cachedKeyResult.key,
-    iv,
-    video.id,
-    mimeType
-  )
+  await putVideo(video.id, fetchResult.data, mimeType)
 }
 
 // ============================================================================
