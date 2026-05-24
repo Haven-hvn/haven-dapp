@@ -25,7 +25,7 @@ import {
   normalizeGateMetadataForDerivation,
 } from './haven-aol-metadata'
 import { HavenAolDecryptError, mapGateError } from './haven-aol-errors'
-import { getCachedKey, setCachedKey, hasCachedKey } from '../aes-key-cache'
+import { getCachedKey, setCachedKey, hasCachedKey, getVideoIdFromMetadata } from '../aes-key-cache'
 import type { Video } from '@/types'
 
 // ============================================================================
@@ -105,9 +105,22 @@ export async function batchDecryptContentKeys(
       throw new HavenAolDecryptError('Batch decryption cancelled', 'CANCELLED')
     }
 
-    // Check cache first
+    // Check cache first — check both video.id key and single-video key hash
     if (hasCachedKey(video.id)) {
       const cached = getCachedKey(video.id)
+      if (cached) {
+        keys.set(video.id, { key: cached.key, iv: cached.iv })
+        cachedCount++
+        continue
+      }
+    }
+
+    // Also check the single-video cache key (in case video was played individually first)
+    const singleCacheKey = video.encryptionMetadata
+      ? getVideoIdFromMetadata({ keyHash: video.encryptionMetadata.encryptedAesKey?.slice(0, 32) })
+      : null
+    if (singleCacheKey && hasCachedKey(singleCacheKey)) {
+      const cached = getCachedKey(singleCacheKey)
       if (cached) {
         keys.set(video.id, { key: cached.key, iv: cached.iv })
         cachedCount++
@@ -222,9 +235,21 @@ export async function batchDecryptContentKeys(
         vetKey,
       )
 
-      // Cache the key
+      // Cache the key under BOTH keys:
+      // 1. video.id — used by this batch queue for direct lookup
+      // 2. encryptedAesKey.slice(0,32) — used by decryptContentKey() for single-video path
+      // This ensures that after batch prefetch, playing a single video later
+      // will find the key cached and skip wallet sign.
       const iv = new Uint8Array(12)
       setCachedKey(info.video.id, aesKey, iv)
+
+      const singleVideoCacheKey = getVideoIdFromMetadata({
+        keyHash: info.video.encryptionMetadata!.encryptedAesKey.slice(0, 32),
+      })
+      if (singleVideoCacheKey && singleVideoCacheKey !== info.video.id) {
+        setCachedKey(singleVideoCacheKey, aesKey, iv)
+      }
+
       keys.set(info.video.id, { key: aesKey, iv })
       derivedCount++
     }

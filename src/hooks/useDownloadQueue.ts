@@ -1,22 +1,29 @@
 /**
  * Download Queue Hook
  *
- * Manages serial download processing: batch key fetch → per-video download + decrypt.
+ * Manages serial batch pre-caching: batch key fetch → per-video fetch + decrypt + cache.
  * Processes one video at a time (Synapse gateway + memory constraints).
  *
- * ## Design: Composition over Duplication
+ * ## Purpose
  *
- * Rather than reimplementing the fetch → CAR-extract → decrypt logic inline,
- * this hook composes existing proven primitives:
+ * When the user multi-selects videos, this hook pre-loads them into Cache API
+ * so they're available for instant playback — the same result as if the user had
+ * played each video individually. It does NOT save files to disk.
  *
- * 1. `batchDecryptContentKeys()` — prefetch all AES keys (1 wallet popup per 20 videos)
- * 2. `prepareEncryptedContentInputs()` — the SAME function used by single-video download.
- *    Since keys are already cached by step 1, it won't prompt the wallet again. It handles
- *    Synapse fetch + CAR extraction correctly.
- * 3. `decryptChunkedFile()` — AES-GCM chunked decryption → browser download trigger.
+ * ## Design: Batch Key Optimization
  *
- * This guarantees batch downloads use the exact same code path as single downloads,
- * eliminating the class of bugs where batch-specific fetch/extract code diverges.
+ * The key benefit of this queue over individual plays:
+ * - `batchDecryptContentKeys()` fetches up to 20 keys per wallet popup
+ * - Each video's per-video loop then fetches content + decrypts WITHOUT another wallet popup
+ *   because the key is already in the AES key cache.
+ *
+ * ## Cache Key Alignment
+ *
+ * The batch decrypt function caches keys by `video.id`.
+ * The per-video `decryptContentKey()` looks up by `encryptedAesKey.slice(0,32)`.
+ * This hook bridges the gap: after batch prefetch, it reads the key from the batch
+ * result (keyed by video.id), and uses it directly for decryption — skipping the
+ * single-video key retrieval path entirely.
  *
  * @module hooks/useDownloadQueue
  */
@@ -26,8 +33,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useWalletClient } from 'wagmi'
 import { batchDecryptContentKeys } from '@/lib/haven-aol/haven-aol-batch-decrypt'
-import { prepareEncryptedContentInputs } from '@/lib/encrypted-playback-prepare'
-import { decryptChunkedFile } from '@/lib/chunked-decrypt'
+import { DEFAULT_PIECE_DOWNLOAD_TIMEOUT_MS, fetchPinnedContent } from '@/services/ipfsService'
+import { extractHavenEncryptedPayload } from '@/lib/encrypted-payload'
+import { decryptChunkedToCache } from '@/lib/chunked-decrypt'
+import { requirePieceCid } from '@/lib/download-cid'
 import type { WalletClientLike } from '@/lib/haven-aol'
 import type { Video } from '@/types'
 
@@ -46,49 +55,23 @@ export interface DownloadQueueItem {
 }
 
 export interface UseDownloadQueueReturn {
-  /** Add videos to queue and start processing (triggers batch key fetch + serial downloads) */
+  /** Add videos to queue and start processing (triggers batch key fetch + serial cache) */
   enqueue: (videos: Video[]) => Promise<void>
   /** Remove a pending item from queue */
   dequeue: (videoId: string) => void
   /** Clear all pending/completed items */
   clear: () => void
-  /** Cancel current download and stop processing */
+  /** Cancel current processing and stop */
   cancel: () => void
   /** Current queue items with status */
   queue: DownloadQueueItem[]
   /** Whether the queue is actively processing */
   isProcessing: boolean
-  /** Currently downloading item (or null) */
+  /** Currently processing item (or null) */
   currentItem: DownloadQueueItem | null
   /** Progress stats */
   completedCount: number
   totalCount: number
-}
-
-// ============================================================================
-// Utility
-// ============================================================================
-
-function generateFilename(video: Video): string {
-  const sanitized = (video.title || 'video')
-    .replace(/[^a-zA-Z0-9\s\-_.]/g, '')
-    .replace(/\s+/g, '_')
-    .slice(0, 100)
-  return `${sanitized}.mp4`
-}
-
-function triggerBrowserDownload(blob: Blob, filename: string): void {
-  const blobUrl = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = blobUrl
-  anchor.download = filename
-  anchor.style.display = 'none'
-  document.body.appendChild(anchor)
-  anchor.click()
-  setTimeout(() => {
-    document.body.removeChild(anchor)
-    URL.revokeObjectURL(blobUrl)
-  }, 1000)
 }
 
 // ============================================================================
@@ -145,10 +128,9 @@ export function useDownloadQueue(): UseDownloadQueueReturn {
       // Step 1: Batch key prefetch
       //
       // Fetches all AES keys in batches of ≤20 (1 wallet popup per batch).
-      // Keys are cached in the in-memory AES key cache, so subsequent calls
-      // to prepareEncryptedContentInputs will find them without prompting.
+      // Returns a Map<video.id, { key, iv }> with all decrypted keys.
       // =====================================================================
-      await batchDecryptContentKeys(
+      const batchResult = await batchDecryptContentKeys(
         videos,
         currentWallet as unknown as WalletClientLike,
         { signal }
@@ -157,15 +139,16 @@ export function useDownloadQueue(): UseDownloadQueueReturn {
       if (signal.aborted) return
 
       // =====================================================================
-      // Step 2: Serial per-video download + decrypt
+      // Step 2: Serial per-video fetch + decrypt + cache
       //
-      // Uses prepareEncryptedContentInputs — the SAME proven function that
-      // single-video download uses. This handles:
-      //   - AES key retrieval (from cache — no wallet popup)
-      //   - Synapse piece fetch (with timeout + retries)
-      //   - CAR container extraction (extractHavenEncryptedPayload)
+      // For each video:
+      //   1. Get AES key from batchResult (already fetched — no wallet popup)
+      //   2. Fetch encrypted content from Synapse
+      //   3. Extract payload from CAR container
+      //   4. Decrypt chunked AES-GCM → write to Cache API
       //
-      // Then decryptChunkedFile handles the AES-GCM chunked decryption.
+      // The result is identical to what useVideoCache does on first play:
+      // the video is in Cache API, ready for instant playback.
       // =====================================================================
       for (const item of items) {
         if (signal.aborted) break
@@ -175,12 +158,18 @@ export function useDownloadQueue(): UseDownloadQueueReturn {
         try {
           updateItem(video.id, { status: 'downloading', progress: 10 })
 
-          // Prepare encrypted content (fetch + extract from CAR + get cached key)
-          const { aesKey, encryptedData } = await prepareEncryptedContentInputs({
-            video,
-            walletClient: currentWallet as unknown as WalletClientLike,
-            signal,
-            onFetchProgress: (downloaded, total) => {
+          // Get the key from the batch result directly (no wallet popup needed)
+          const keyEntry = batchResult.keys.get(video.id)
+          if (!keyEntry) {
+            throw new Error('Decryption key not found after batch fetch')
+          }
+
+          // Fetch encrypted content from Synapse
+          requirePieceCid(video)
+          const fetchResult = await fetchPinnedContent(video, {
+            abortSignal: signal,
+            timeout: DEFAULT_PIECE_DOWNLOAD_TIMEOUT_MS,
+            onProgress: (downloaded, total) => {
               if (!isMountedRef.current || total <= 0) return
               // Map fetch progress to 10-45% range
               const ratio = Math.min(1, downloaded / total)
@@ -191,10 +180,16 @@ export function useDownloadQueue(): UseDownloadQueueReturn {
 
           if (signal.aborted) break
 
+          // Extract encrypted payload from CAR container
+          const encryptedData = await extractHavenEncryptedPayload(fetchResult.data)
+
+          if (signal.aborted) break
+
           updateItem(video.id, { status: 'decrypting', progress: 50 })
 
-          // Chunked AES-GCM decryption
-          const plaintext = await decryptChunkedFile(encryptedData, aesKey, {
+          // Decrypt chunked file and write directly to Cache API
+          const mimeType = video.contentMimeType || 'video/mp4'
+          await decryptChunkedToCache(encryptedData, keyEntry.key, video.id, mimeType, {
             signal,
             onProgress: (chunkIdx, totalEst) => {
               if (totalEst > 0 && isMountedRef.current) {
@@ -206,11 +201,6 @@ export function useDownloadQueue(): UseDownloadQueueReturn {
           })
 
           if (signal.aborted) break
-
-          // Trigger browser download
-          const mimeType = video.contentMimeType || 'video/mp4'
-          const blob = new Blob([plaintext as BlobPart], { type: mimeType })
-          triggerBrowserDownload(blob, generateFilename(video))
 
           updateItem(video.id, { status: 'complete', progress: 100 })
         } catch (err) {

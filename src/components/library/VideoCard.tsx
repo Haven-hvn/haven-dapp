@@ -18,10 +18,8 @@
 import React from 'react'
 import { Cloud, Download, Loader2 } from 'lucide-react'
 import type { Video } from '../../types/video'
-import type { DownloadQueueItem } from '@/hooks/useDownloadQueue'
 import { CacheStatusBadge, getArkivStatusFromVideo } from './CacheStatusBadge'
 import { useVideoDownload } from '@/hooks/useVideoDownload'
-import { DownloadProgressBadge } from './DownloadProgressBadge'
 
 // =============================================================================
 // Types
@@ -42,9 +40,6 @@ export interface VideoCardProps {
 
   /** Whether the video content is cached (for encrypted videos) */
   isCached?: boolean
-
-  /** Batch download queue status for this video, if any */
-  downloadStatus?: DownloadQueueItem
 }
 
 // =============================================================================
@@ -169,7 +164,6 @@ export function VideoCard({
   className = '',
   currentBlock,
   isCached = false,
-  downloadStatus,
 }: VideoCardProps) {
   // Download hook for this card
   const { download, isDownloading, progress, progressMessage, stage } = useVideoDownload()
@@ -257,9 +251,8 @@ export function VideoCard({
           </div>
         </div>
 
-        {/* Download button (bottom-left, shown on hover) — hidden when video is in batch queue */}
-        {!downloadStatus && (
-          <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        {/* Download button (bottom-left, shown on hover) */}
+        <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           <button
             onClick={(e) => { e.stopPropagation(); download(video) }}
             disabled={isDownloading}
@@ -282,7 +275,6 @@ export function VideoCard({
             )}
           </button>
         </div>
-        )}
 
         {/* Download progress bar (visible during download) */}
         {isDownloading && (
@@ -301,9 +293,6 @@ export function VideoCard({
             {formatDuration(video.duration)}
           </span>
         </div>
-
-        {/* Batch download progress indicator */}
-        <DownloadProgressBadge queueItem={downloadStatus} />
       </div>
 
       {/* Card content */}

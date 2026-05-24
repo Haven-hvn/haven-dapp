@@ -1,12 +1,12 @@
 'use client'
 
 import React from 'react'
-import { Check } from 'lucide-react'
+import { Check, Key, Download, Unlock, CheckCircle2, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { VideoCard } from './VideoCard'
 import { toast } from 'sonner'
 import type { Video } from '@/types'
-import type { DownloadQueueItem } from '@/hooks/useDownloadQueue'
+import type { QueueItemStatus } from '@/hooks/useDownloadQueue'
 
 export interface SelectableVideoCardProps {
   video: Video
@@ -17,7 +17,96 @@ export interface SelectableVideoCardProps {
   onToggleSelection: (video: Video) => void
   onClick: (video: Video) => void
   isCached: boolean
-  downloadStatus?: DownloadQueueItem
+  /** Queue status for this video (if it's being batch-processed) */
+  queueStatus?: QueueItemStatus
+  /** Queue progress (0-100) */
+  queueProgress?: number
+}
+
+/**
+ * Compact step indicator shown on the video card during batch pre-caching.
+ */
+function QueueOverlay({ status, progress }: { status: QueueItemStatus; progress: number }) {
+  const getIcon = () => {
+    switch (status) {
+      case 'pending':
+        return <Loader2 className="w-3 h-3 text-white/80" />
+      case 'downloading':
+        return <Download className="w-3 h-3 text-white" />
+      case 'decrypting':
+        return <Unlock className="w-3 h-3 text-white" />
+      case 'complete':
+        return <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
+      case 'error':
+        return null
+      default:
+        return null
+    }
+  }
+
+  const getLabel = () => {
+    switch (status) {
+      case 'pending':
+        return 'Queued'
+      case 'downloading':
+        return 'Fetching'
+      case 'decrypting':
+        return 'Decrypting'
+      case 'complete':
+        return 'Cached'
+      case 'error':
+        return 'Failed'
+      default:
+        return ''
+    }
+  }
+
+  if (status === 'complete') {
+    // Brief flash of success — the cached badge will take over
+    return (
+      <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center bg-black/30 rounded-t-lg transition-opacity duration-500">
+        <div className="flex items-center gap-1 px-2 py-1 rounded bg-green-600/90 text-white text-xs font-medium">
+          <CheckCircle2 className="w-3.5 h-3.5" />
+          <span>Ready</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (status === 'error') {
+    return (
+      <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center bg-black/30 rounded-t-lg">
+        <div className="px-2 py-1 rounded bg-red-600/90 text-white text-xs font-medium">
+          Failed
+        </div>
+      </div>
+    )
+  }
+
+  const showProgressBar = status === 'downloading' || status === 'decrypting'
+
+  return (
+    <div className="absolute inset-0 z-20 pointer-events-none rounded-t-lg">
+      {/* Step indicator badge (top-left area, below any existing badges) */}
+      <div className="absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/70 text-white text-xs">
+        {getIcon()}
+        <span>{getLabel()}</span>
+      </div>
+
+      {/* Progress bar at the very bottom of the thumbnail */}
+      {showProgressBar && (
+        <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/30">
+          <div
+            className={cn(
+              'h-full transition-all duration-300',
+              status === 'downloading' ? 'bg-blue-500' : 'bg-purple-500'
+            )}
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function SelectableVideoCard({
@@ -29,10 +118,26 @@ export function SelectableVideoCard({
   onToggleSelection,
   onClick,
   isCached,
-  downloadStatus,
+  queueStatus,
+  queueProgress = 0,
 }: SelectableVideoCardProps) {
+  const isInQueue = queueStatus && queueStatus !== 'complete'
+
   if (!isSelectMode) {
-    return <VideoCard video={video} onClick={onClick} isCached={isCached} downloadStatus={downloadStatus} />
+    return (
+      <div className="relative">
+        {queueStatus && (
+          <div className="relative">
+            <VideoCard video={video} onClick={onClick} isCached={isCached || queueStatus === 'complete'} />
+            {/* Queue overlay on thumbnail area only */}
+            <div className="absolute top-0 left-0 right-0 aspect-video">
+              <QueueOverlay status={queueStatus} progress={queueProgress} />
+            </div>
+          </div>
+        )}
+        {!queueStatus && <VideoCard video={video} onClick={onClick} isCached={isCached} />}
+      </div>
+    )
   }
 
   const handleClick = () => {
@@ -90,7 +195,7 @@ export function SelectableVideoCard({
 
       {/* Render VideoCard without its own click handler */}
       <div className="pointer-events-none">
-        <VideoCard video={video} isCached={isCached} downloadStatus={downloadStatus} />
+        <VideoCard video={video} isCached={isCached} />
       </div>
     </div>
   )

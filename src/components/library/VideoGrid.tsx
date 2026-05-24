@@ -29,12 +29,10 @@ import { ViewToggle } from "./ViewToggle";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SelectableVideoCard } from "./SelectableVideoCard";
 import { MultiSelectToolbar } from "./MultiSelectToolbar";
-import { DownloadQueuePanel } from "./DownloadQueuePanel";
 import { useMultiSelect } from "@/hooks/useMultiSelect";
 import { useDownloadQueue } from "@/hooks/useDownloadQueue";
 import type { ViewMode, VideoFilters } from "@/types";
 import type { VideoSortField, SortOrder } from "@/hooks/useVideoSearch";
-import type { DownloadQueueItem } from "@/hooks/useDownloadQueue";
 import { Cloud } from "lucide-react";
 
 // Lazy load VideoCard for better initial load performance
@@ -116,18 +114,6 @@ export function VideoGrid() {
     completedCount,
     totalCount: queueTotalCount,
   } = useDownloadQueue();
-
-  // Build a map of videoId -> DownloadQueueItem for quick lookup in cards
-  const downloadStatusMap = useMemo(
-    () => {
-      const map = new Map<string, DownloadQueueItem>()
-      for (const item of queue) {
-        map.set(item.video.id, item)
-      }
-      return map
-    },
-    [queue]
-  )
 
   const handleVideoClick = useCallback(
     (video: { id: string }) => {
@@ -302,20 +288,24 @@ export function VideoGrid() {
           }
         >
           <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
-            {paginatedVideos.map((video) => (
-              <SelectableVideoCard
-                key={video.id}
-                video={video}
-                isSelectMode={isSelectMode}
-                isSelected={isSelected(video.id)}
-                selectionOrder={getSelectionOrder(video.id)}
-                isMaxReached={isMaxReached}
-                onToggleSelection={toggleSelection}
-                onClick={handleVideoClick}
-                isCached={cacheStatus.get(video.id) ?? false}
-                downloadStatus={downloadStatusMap.get(video.id)}
-              />
-            ))}
+            {paginatedVideos.map((video) => {
+              const queueItem = queue.find((q) => q.video.id === video.id)
+              return (
+                <SelectableVideoCard
+                  key={video.id}
+                  video={video}
+                  isSelectMode={isSelectMode}
+                  isSelected={isSelected(video.id)}
+                  selectionOrder={getSelectionOrder(video.id)}
+                  isMaxReached={isMaxReached}
+                  onToggleSelection={toggleSelection}
+                  onClick={handleVideoClick}
+                  isCached={cacheStatus.get(video.id) ?? false}
+                  queueStatus={queueItem?.status}
+                  queueProgress={queueItem?.progress}
+                />
+              )
+            })}
           </div>
         </Suspense>
       ) : (
@@ -353,17 +343,6 @@ export function VideoGrid() {
         </div>
       )}
 
-      {/* Download Queue Panel */}
-      <DownloadQueuePanel
-        queue={queue}
-        isProcessing={isProcessing}
-        currentItem={currentItem}
-        completedCount={completedCount}
-        totalCount={queueTotalCount}
-        onCancel={cancelQueue}
-        onClear={clearQueue}
-        onRemoveItem={dequeue}
-      />
     </div>
   );
 }
