@@ -282,6 +282,7 @@ export function VideoCard({
             )}
           </button>
         </div>
+        )}
 
         {/* Download progress bar (visible during download) */}
         {isDownloading && (
@@ -291,7 +292,6 @@ export function VideoCard({
               style={{ width: `${progress}%` }}
             />
           </div>
-        )}
         )}
 
         {/* Duration badge (bottom-right) */}
