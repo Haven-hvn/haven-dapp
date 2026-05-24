@@ -16,6 +16,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { useWalletClient } from 'wagmi'
 import { batchDecryptContentKeys } from '@/lib/haven-aol/haven-aol-batch-decrypt'
 import { fetchPinnedContent } from '@/services/ipfsService'
+import { extractHavenEncryptedPayload } from '@/lib/encrypted-payload'
 import { decryptChunkedFile } from '@/lib/chunked-decrypt'
 import { getCachedKey } from '@/lib/aes-key-cache'
 import { requirePieceCid } from '@/lib/download-cid'
@@ -258,10 +259,13 @@ export function useDownloadQueue(): UseDownloadQueueReturn {
             statusText: 'Decrypting…',
           })
 
+          // Extract raw encrypted payload from CAR container
+          const encryptedData = await extractHavenEncryptedPayload(fetchResult.data)
+
           const tDecryptStart = performance.now()
           let chunkCount = 0
           const plaintext = await decryptChunkedFile(
-            fetchResult.data,
+            encryptedData,
             cached.key,
             {
               signal,
