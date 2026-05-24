@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { Check, Key, Download, Unlock, CheckCircle2, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { VideoCard } from './VideoCard'
@@ -61,7 +61,19 @@ function QueueOverlay({ status, progress }: { status: QueueItemStatus; progress:
     }
   }
 
-  if (status === 'complete') {
+  const [dismissed, setDismissed] = useState(false)
+
+  useEffect(() => {
+    if (status === 'complete') {
+      setDismissed(false)
+      const timer = setTimeout(() => setDismissed(true), 2500)
+      return () => clearTimeout(timer)
+    } else {
+      setDismissed(false)
+    }
+  }, [status])
+
+  if (status === 'complete' && !dismissed) {
     // Brief flash of success — the cached badge will take over
     return (
       <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center bg-black/30 rounded-t-lg transition-opacity duration-500">
