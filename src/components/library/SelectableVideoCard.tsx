@@ -142,7 +142,7 @@ export function SelectableVideoCard({
           <div className="relative">
             <VideoCard video={video} onClick={onClick} isCached={isCached || queueStatus === 'complete'} />
             {/* Queue overlay on thumbnail area only */}
-            <div className="absolute top-0 left-0 right-0 aspect-video">
+            <div className="absolute top-0 left-0 right-0 aspect-video pointer-events-none">
               <QueueOverlay status={queueStatus} progress={queueProgress} />
             </div>
           </div>
