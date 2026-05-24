@@ -34,6 +34,7 @@ import { useMultiSelect } from "@/hooks/useMultiSelect";
 import { useDownloadQueue } from "@/hooks/useDownloadQueue";
 import type { ViewMode, VideoFilters } from "@/types";
 import type { VideoSortField, SortOrder } from "@/hooks/useVideoSearch";
+import type { DownloadQueueItem } from "@/hooks/useDownloadQueue";
 import { Cloud } from "lucide-react";
 
 // Lazy load VideoCard for better initial load performance
@@ -115,6 +116,18 @@ export function VideoGrid() {
     completedCount,
     totalCount: queueTotalCount,
   } = useDownloadQueue();
+
+  // Build a map of videoId -> DownloadQueueItem for quick lookup in cards
+  const downloadStatusMap = useMemo(
+    () => {
+      const map = new Map<string, DownloadQueueItem>()
+      for (const item of queue) {
+        map.set(item.video.id, item)
+      }
+      return map
+    },
+    [queue]
+  )
 
   const handleVideoClick = useCallback(
     (video: { id: string }) => {
@@ -300,6 +313,7 @@ export function VideoGrid() {
                 onToggleSelection={toggleSelection}
                 onClick={handleVideoClick}
                 isCached={cacheStatus.get(video.id) ?? false}
+                downloadStatus={downloadStatusMap.get(video.id)}
               />
             ))}
           </div>

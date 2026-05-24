@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { VideoCard } from './VideoCard'
 import { toast } from 'sonner'
 import type { Video } from '@/types'
+import type { DownloadQueueItem } from '@/hooks/useDownloadQueue'
 
 export interface SelectableVideoCardProps {
   video: Video
@@ -16,6 +17,7 @@ export interface SelectableVideoCardProps {
   onToggleSelection: (video: Video) => void
   onClick: (video: Video) => void
   isCached: boolean
+  downloadStatus?: DownloadQueueItem
 }
 
 export function SelectableVideoCard({
@@ -27,9 +29,10 @@ export function SelectableVideoCard({
   onToggleSelection,
   onClick,
   isCached,
+  downloadStatus,
 }: SelectableVideoCardProps) {
   if (!isSelectMode) {
-    return <VideoCard video={video} onClick={onClick} isCached={isCached} />
+    return <VideoCard video={video} onClick={onClick} isCached={isCached} downloadStatus={downloadStatus} />
   }
 
   const handleClick = () => {
@@ -87,7 +90,7 @@ export function SelectableVideoCard({
 
       {/* Render VideoCard without its own click handler */}
       <div className="pointer-events-none">
-        <VideoCard video={video} isCached={isCached} />
+        <VideoCard video={video} isCached={isCached} downloadStatus={downloadStatus} />
       </div>
     </div>
   )
