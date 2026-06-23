@@ -10,8 +10,17 @@
 import { fetchAttestationPublicKey } from 'haven-aol'
 import { getOrCreateAgent, getHavenAolConfig } from './haven-aol/haven-aol-client'
 import { parseEntityPayload } from './arkiv'
-import { verifyAttestation, attestationMatchesEntity } from './attestation'
-import type { Attestation, CommunityVideo, TokenGate } from '@/types/attestation'
+import {
+  verifyAttestation,
+  verifyMerkleAttestation,
+  attestationMatchesEntity,
+} from './attestation'
+import {
+  isMerkleAttestation,
+  type Attestation,
+  type CommunityVideo,
+  type TokenGate,
+} from '@/types/attestation'
 import type { PublicArkivClient, Entity } from '@arkiv-network/sdk'
 import { eq } from '@arkiv-network/sdk/query'
 import type { Transport, Chain } from 'viem'
@@ -192,8 +201,13 @@ export async function verifyFeed(
       return { ...video, verified: false }
     }
 
-    // 1. Verify signature is valid and not expired
-    const sigValid = verifyAttestation(video.attestation, canisterPubKey)
+    // 1. Verify signature is valid and not expired. v2 batch attestations
+    //    carry a `merkleProof` + `merkleRoot` and are verified by
+    //    reconstructing the proof to the signed root; legacy single-CID
+    //    attestations are verified directly against the leaf preimage.
+    const sigValid = isMerkleAttestation(video.attestation)
+      ? verifyMerkleAttestation(video.attestation, canisterPubKey)
+      : verifyAttestation(video.attestation, canisterPubKey)
 
     // 2. Verify attestation matches this entity (anti-replay).
     //    cid_hash binds the attestation to specific content — without it, an
