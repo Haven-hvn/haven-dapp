@@ -22,9 +22,9 @@ import {
 } from '../haven-aol-gate-key-cache'
 
 // ---------------------------------------------------------------------------
-// Mock @dfinity/vetkeys so our tests don't need BLS12-381 curve setup.
+// Mock @icp-sdk/vetkeys so our tests don't need BLS12-381 curve setup.
 // ---------------------------------------------------------------------------
-vi.mock('@dfinity/vetkeys', () => {
+vi.mock('@icp-sdk/vetkeys', () => {
   class MockVetKey {
     readonly #bytes: Uint8Array
     constructor(bytes: Uint8Array) { this.#bytes = bytes }
@@ -116,7 +116,7 @@ describe('GateKeyCache get/put/clear', () => {
 
   it('round-trips a VetKey', () => {
     const cache = new GateKeyCache()
-    const { VetKey } = require('@dfinity/vetkeys')
+    const { VetKey } = require('@icp-sdk/vetkeys')
     const vk = VetKey.deserialize(new Uint8Array([1, 2, 3, 4, 5]))
     cache.put('k', vk)
     const retrieved = cache.get('k')
@@ -126,7 +126,7 @@ describe('GateKeyCache get/put/clear', () => {
 
   it('get returns distinct VetKey instances per call', () => {
     const cache = new GateKeyCache()
-    const { VetKey } = require('@dfinity/vetkeys')
+    const { VetKey } = require('@icp-sdk/vetkeys')
     cache.put('k', VetKey.deserialize(new Uint8Array([1, 2, 3])))
     const a = cache.get('k')!
     const b = cache.get('k')!
@@ -136,7 +136,7 @@ describe('GateKeyCache get/put/clear', () => {
 
   it('put stores the serialized bytes, not a reference to the VetKey', () => {
     const cache = new GateKeyCache()
-    const { VetKey } = require('@dfinity/vetkeys')
+    const { VetKey } = require('@icp-sdk/vetkeys')
     const original = VetKey.deserialize(new Uint8Array([10, 20, 30]))
     cache.put('k', original)
     // Mutate the original's underlying buffer (in our mock via the mock's bytes).
@@ -148,7 +148,7 @@ describe('GateKeyCache get/put/clear', () => {
 
   it('clear() removes every entry', () => {
     const cache = new GateKeyCache()
-    const { VetKey } = require('@dfinity/vetkeys')
+    const { VetKey } = require('@icp-sdk/vetkeys')
     const vk = () => VetKey.deserialize(new Uint8Array([1]))
     cache.put('a', vk())
     cache.put('b', vk())
@@ -160,14 +160,14 @@ describe('GateKeyCache get/put/clear', () => {
 
   it('rejects empty put keys', () => {
     const cache = new GateKeyCache()
-    const { VetKey } = require('@dfinity/vetkeys')
+    const { VetKey } = require('@icp-sdk/vetkeys')
     expect(() => cache.put('', VetKey.deserialize(new Uint8Array([1])))).toThrow(/non-empty string/)
   })
 })
 
 describe('Singleton', () => {
   it('clearGateKeyCache() empties the module-level singleton', () => {
-    const { VetKey } = require('@dfinity/vetkeys')
+    const { VetKey } = require('@icp-sdk/vetkeys')
     const key = GateKeyCache.makeKey({
       chain: 'EthMainnet',
       tokenAddress: SAMPLE_TOKEN,
@@ -199,7 +199,7 @@ describe('Cache discipline — no persistent storage', () => {
 
 describe('Cache lookup ignores Date.now() (proposal §1.7 scenario (D))', () => {
   it('an entry put at epoch=100 is retrievable after the local clock jumps to epoch 9999', () => {
-    const { VetKey } = require('@dfinity/vetkeys')
+    const { VetKey } = require('@icp-sdk/vetkeys')
     const cache = new GateKeyCache()
     const key = GateKeyCache.makeKey({
       chain: 'EthMainnet',

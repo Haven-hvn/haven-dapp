@@ -2,7 +2,7 @@
  * Haven-AOL v3 — in-memory VetKey instance cache.
  *
  * Separate from `GateKeyCache` (which stores `Uint8Array` bytes) because
- * the `VetKey` type from `@dfinity/vetkeys` is a class, not a `Uint8Array`,
+ * the `VetKey` type from `@icp-sdk/vetkeys` is a class, not a `Uint8Array`,
  * and cannot be round-tripped through the byte cache without the class
  * being directly importable by the dapp.
  *

@@ -12,7 +12,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 // Mock heavy IndexedDB / OPFS deps so the security-cleanup module
 // imports without exploding in node test env.
-vi.mock('@dfinity/vetkeys', () => {
+vi.mock('@icp-sdk/vetkeys', () => {
   class MockVk {
     readonly #b: Uint8Array
     constructor(b: Uint8Array) { this.#b = b }
@@ -28,7 +28,7 @@ vi.mock('../../aes-key-cache', () => ({ clearAllKeys: vi.fn() }))
 vi.mock('../haven-aol-nonce', () => ({ clearNonce: vi.fn() }))
 vi.mock('../haven-aol-client', () => ({ clearAgentCache: vi.fn() }))
 
-import { VetKey } from '@dfinity/vetkeys'
+import { VetKey } from '@icp-sdk/vetkeys'
 import { GateKeyCache, gateKeyCache } from '../haven-aol-gate-key-cache'
 import { v3VetKeyHas, v3VetKeySet, clearV3VetKeyCache } from '../haven-aol-v3-cache'
 import { onWalletDisconnect, onAccountChange } from '../../security-cleanup'

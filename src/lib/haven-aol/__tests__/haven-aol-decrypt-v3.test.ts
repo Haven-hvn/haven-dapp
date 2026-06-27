@@ -31,9 +31,9 @@ let recoverCalls = 0
 let ibeDecryptCalls = 0
 
 // ---------------------------------------------------------------------------
-// Mock @dfinity/vetkeys so the gate-key cache can deserialize VetKeys.
+// Mock @icp-sdk/vetkeys so the gate-key cache can deserialize VetKeys.
 // ---------------------------------------------------------------------------
-vi.mock('@dfinity/vetkeys', () => {
+vi.mock('@icp-sdk/vetkeys', () => {
   class MockVk {
     readonly #b: Uint8Array
     constructor(b: Uint8Array) { this.#b = b }

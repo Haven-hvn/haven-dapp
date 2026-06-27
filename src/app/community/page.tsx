@@ -6,6 +6,7 @@ import { useUserCommunities, useCommunityFeedForGate } from '@/hooks/useCommunit
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { LibraryLayout } from '@/components/layout/LibraryLayout'
 import { CommunityCard } from '@/components/community/CommunityCard'
+import { CommunityAccessNotice } from '@/components/community/CommunityAccessNotice'
 import Link from 'next/link'
 import type { TokenGate } from '@/types/attestation'
 
@@ -85,8 +86,33 @@ function CommunityFeedContent() {
   const { videos, isLoading, error, refetch } = useCommunityFeedForGate(gateToken)
 
   const gate = gateToken
-    ? communities.find((g) => g.tokenAddress === gateToken) ?? null
+    ? communities.find(
+        (g) => g.tokenAddress.toLowerCase() === gateToken.toLowerCase()
+      ) ?? null
     : null
+
+  // A user is a "member" of this community (in the loose Haven sense) when
+  // they have uploaded a video gated by this token themselves — that's the
+  // only way `useUserCommunities` surfaces a gate. Anyone else (a visitor
+  // following a shared link, or a holder who hasn't uploaded yet) gets the
+  // access notice so they understand what they're looking at and why
+  // playback may fail.
+  const isMember = gate !== null
+
+  // When the visitor isn't a known member we don't have a `TokenGate` from
+  // `useUserCommunities` (since that hook only looks at the viewer's own
+  // entities). Synthesize one from the first feed video — the community-feed
+  // query carries the entity's own `gate_chain` / `gate_threshold` attrs, so
+  // we get a complete picture to show in the access notice.
+  const displayGate: TokenGate | null =
+    gate ??
+    (gateToken && videos.length > 0
+      ? {
+          tokenAddress: gateToken,
+          chain: videos[0].gateChain,
+          threshold: videos[0].gateThreshold,
+        }
+      : null)
 
   if (!gateToken) {
     return <CommunityListContent />
@@ -136,19 +162,30 @@ function CommunityFeedContent() {
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs text-white/60">
             <span className="w-2 h-2 rounded-full bg-emerald-400/60" />
-            {gate
-              ? `${gate.tokenAddress.slice(0, 6)}...${gate.tokenAddress.slice(-4)}`
+            {displayGate
+              ? `${displayGate.tokenAddress.slice(0, 6)}...${displayGate.tokenAddress.slice(-4)}`
               : `${gateToken.slice(0, 6)}...${gateToken.slice(-4)}`}
-            {gate && <span className="text-white/30">({gate.chain})</span>}
+            {displayGate?.chain && (
+              <span className="text-white/30">({displayGate.chain})</span>
+            )}
           </span>
         </div>
       </div>
+
+      <CommunityAccessNotice
+        gate={displayGate}
+        gateTokenAddress={gateToken}
+        isMember={isMember}
+        hasFeedContent={videos.length > 0}
+      />
 
       {videos.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-white/40">No community content yet for this gate.</p>
           <p className="text-sm text-white/25 mt-1">
-            Content will appear here when community members upload gated videos.
+            {isMember
+              ? 'Content will appear here when community members upload gated videos.'
+              : "Either nothing has been published here yet, or this token doesn't correspond to a Haven community. Double-check the link."}
           </p>
         </div>
       ) : (
