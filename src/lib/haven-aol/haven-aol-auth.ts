@@ -274,3 +274,133 @@ export async function retryWithBumpedNonce(
 ): Promise<SignedGateRequest> {
   return retryWithFreshGateNonce(walletClient)
 }
+
+// =============================================================================
+// v3 single-CID signed gate request (Sprint 5 — additive)
+// =============================================================================
+//
+// The v3 EIP-712 type string is
+// `GateRequestV3(address evmAddress,bytes transportPublicKey,uint256 epoch,uint256 nonce)`
+// — note there is NO `cidHash` field. v3 derivation is corpus-scoped, so a
+// v3 signature authorises one `(community, epoch)` request without naming
+// any CIDs. Sprint 3's SDK owns the typed-data builder; we import.
+
+/**
+ * Result of a v3 EIP-712 signing flow. Shape mirrors `SignedGateRequest`
+ * (the v1 result) except the message commits to `epoch` instead of a CID.
+ */
+export interface SignedGateRequestV3 {
+  /** Ephemeral transport secret key for VetKD unwrap. */
+  transportSecretKey: TransportSecretKey
+  /** Ephemeral transport public key bytes. */
+  transportPublicKey: Uint8Array
+  /** The epoch the user signed for. */
+  epoch: bigint
+  /** The nonce used in the signature. */
+  nonce: bigint
+  /** Raw 65-byte signature. */
+  signature: Uint8Array
+  /** EIP-712 chain ID. */
+  eip712ChainId: bigint
+  /** EIP-712 verifying contract. */
+  eip712VerifyingContract: string
+}
+
+export interface CreateSignedGateRequestV3Options {
+  /** Optional explicit nonce (default: random 256-bit). */
+  nonce?: bigint
+}
+
+/**
+ * Create a v3 signed gate request using the connected wallet. Single-CID
+ * variant (the dapp's main path — every video view goes through here).
+ *
+ * @param walletClient Connected wallet (wagmi `useWalletClient` shape).
+ * @param epoch         The epoch the request authorises. MUST come from
+ *                      `metadata.epoch` of the file being decrypted, NEVER
+ *                      from `currentEpoch()` — see Key Design Decision #7.
+ * @param options       Optional retry parameters.
+ */
+export async function createSignedGateRequestV3(
+  walletClient: WalletClientLike,
+  epoch: bigint,
+  options?: CreateSignedGateRequestV3Options
+): Promise<SignedGateRequestV3> {
+  const { buildGateRequestV3TypedData } = await import('haven-aol')
+
+  const config = getHavenAolConfig()
+  const address = walletClient.account.address
+
+  if (!address) {
+    throw new HavenAolDecryptError(
+      'Wallet not connected. Please connect your wallet.',
+      'WALLET_NOT_CONNECTED'
+    )
+  }
+  if (typeof epoch !== 'bigint' || epoch < 0n) {
+    throw new HavenAolDecryptError(
+      `Invalid epoch for v3 gate request: ${String(epoch)}`,
+      'METADATA_INVALID'
+    )
+  }
+
+  const { secretKey, publicKey } = createTransportKeyPair()
+  const nonce = options?.nonce ?? createRandomGateNonce()
+
+  const typedData = buildGateRequestV3TypedData({
+    evmAddress: address,
+    transportPublicKey: publicKey,
+    epoch,
+    nonce,
+    eip712ChainId: config.eip712ChainId,
+    eip712VerifyingContract: config.eip712VerifyingContract,
+  })
+
+  let signatureHex: string
+  try {
+    signatureHex = await walletClient.signTypedData({
+      domain: typedData.domain as unknown as Record<string, unknown>,
+      types: typedData.types as unknown as Record<string, unknown[]>,
+      primaryType: typedData.primaryType,
+      message: typedData.message as unknown as Record<string, unknown>,
+    })
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
+    if (msg.includes('rejected') || msg.includes('denied') || msg.includes('cancelled')) {
+      throw new HavenAolDecryptError(
+        'Signature request was rejected. Please approve the signature to decrypt the video.',
+        'SIGNING_REJECTED'
+      )
+    }
+    throw new HavenAolDecryptError(
+      `Failed to sign v3 gate request: ${msg}`,
+      'SIGNING_REJECTED'
+    )
+  }
+
+  const signature = parseSignatureHex(signatureHex)
+
+  return {
+    transportSecretKey: secretKey,
+    transportPublicKey: publicKey,
+    epoch,
+    nonce,
+    signature,
+    eip712ChainId: config.eip712ChainId,
+    eip712VerifyingContract: config.eip712VerifyingContract,
+  }
+}
+
+/**
+ * Retry helper — re-sign a v3 gate request with a fresh nonce after a rare
+ * `NonceAlreadyUsed` from the canister. Same epoch is preserved (a nonce
+ * collision is independent of which epoch we're requesting).
+ */
+export async function retryWithFreshV3GateNonce(
+  walletClient: WalletClientLike,
+  epoch: bigint
+): Promise<SignedGateRequestV3> {
+  return createSignedGateRequestV3(walletClient, epoch, {
+    nonce: createRandomGateNonce(),
+  })
+}
