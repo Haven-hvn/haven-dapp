@@ -1,5 +1,6 @@
 'use client'
 
+import { Suspense } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useAccount } from 'wagmi'
 import { useHydration } from '@/hooks/useHydration'
@@ -12,38 +13,28 @@ interface ProtectedRouteProps {
   fallback?: React.ReactNode
 }
 
-/**
- * ProtectedRoute
- *
- * Gates child content behind a connected wallet WITHOUT redirecting the user
- * away from their requested URL. When a visitor arrives at a protected route
- * (e.g. via a shared community link like `/community?c=0xabc...`):
- *
- *   • Pre-hydration / mid-connect → loading screen.
- *   • Connected → render children.
- *   • Not connected → render an inline "Connect to continue" screen that
- *     preserves the URL. Once they connect via AppKit modal the wagmi
- *     account state flips and the children render in place.
- *
- * This is critical for shareable deep-links: redirecting to `/` would erase
- * the gate the user was trying to view, so when they finally connect they'd
- * land on the home page with no idea where they were going.
- */
+function ConnectScreen() {
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const qs = searchParams?.toString()
+  const requestedPath = qs ? `${pathname}?${qs}` : pathname || '/'
+  return <ConnectPrompt requestedPath={requestedPath} />
+}
+
 export function ProtectedRoute({ children, fallback }: ProtectedRouteProps) {
   const { isConnected, isConnecting } = useAccount()
   const isHydrated = useHydration()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
 
   if (!isHydrated || isConnecting) {
     return fallback || <LoadingScreen />
   }
 
   if (!isConnected) {
-    // Reconstruct the URL the user was trying to reach so we can show it.
-    const qs = searchParams?.toString()
-    const requestedPath = qs ? `${pathname}?${qs}` : pathname || '/'
-    return <ConnectPrompt requestedPath={requestedPath} />
+    return (
+      <Suspense fallback={<LoadingScreen />}>
+        <ConnectScreen />
+      </Suspense>
+    )
   }
 
   return <>{children}</>
