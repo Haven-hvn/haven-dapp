@@ -32,11 +32,8 @@ import {
   type WalletClientLike,
 } from './haven-aol-auth'
 import { HavenAolDecryptError, mapGateError } from './haven-aol-errors'
-import {
-  GateKeyCache,
-  gateKeyCache,
-  type GateKeyCacheKeyParts,
-} from './haven-aol-gate-key-cache'
+import { GateKeyCache, type GateKeyCacheKeyParts } from './haven-aol-gate-key-cache'
+import { v3VetKeyGet, v3VetKeySet, v3VetKeyHas } from './haven-aol-v3-cache'
 import { getCachedKey, setCachedKey, getVideoIdFromMetadata } from '../aes-key-cache'
 
 // =============================================================================
@@ -102,7 +99,7 @@ export async function prefetchGateKeyV3(
 ): Promise<boolean> {
   const { cacheKey, walletClient } = args
   const key = GateKeyCache.makeKey(cacheKey)
-  if (gateKeyCache.has(key)) {
+  if (v3VetKeyHas(key)) {
     return true
   }
 
@@ -147,7 +144,7 @@ export async function prefetchGateKeyV3(
       result.ok.verificationKey,
       derivationInput,
     )
-    gateKeyCache.put(key, vetKey)
+    v3VetKeySet(key, vetKey)
     return true
   } catch {
     // Best-effort — swallow. The first user-initiated decrypt will retry.
@@ -219,10 +216,10 @@ async function decryptContentKeyV3Impl(
 
   abort()
 
-  // Step 2: gate-key cache lookup. On hit we skip the entire canister
-  // round-trip + signature + recoverVetKey pipeline and go straight to
-  // IBE-decrypt.
-  let vetKey = gateKeyCache.get(gateCacheKey)
+  // Step 2: v3 VetKey instance cache lookup. On hit we skip the entire
+  // canister round-trip + signature + recoverVetKey pipeline and go
+  // straight to IBE-decrypt.
+  let vetKey = v3VetKeyGet(gateCacheKey)
   let fromGateKeyCache = vetKey !== null
 
   if (!vetKey) {
@@ -289,7 +286,7 @@ async function decryptContentKeyV3Impl(
 
     // Cache the unwrapped VetKey for the rest of the session. Subsequent
     // CIDs in the same `(community, epoch)` skip every step above.
-    gateKeyCache.put(gateCacheKey, vetKey)
+    v3VetKeySet(gateCacheKey, vetKey)
     fromGateKeyCache = false
   }
 

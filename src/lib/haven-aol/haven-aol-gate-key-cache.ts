@@ -79,10 +79,6 @@ function coerceBigInt(label: string, value: bigint | number | string): bigint {
 }
 
 function validateChain(chain: Chain): asserts chain is Chain {
-  // The cache must not become a place where invalid chains slip through. We
-  // intentionally accept any non-empty string here because Sprint 3's SDK
-  // owns the canonical `VALID_CHAINS` list — duplicating it would create a
-  // second source of truth. The caller (decrypt module) validates upstream.
   if (typeof chain !== 'string' || chain.length === 0) {
     throw new TypeError(`chain must be a non-empty string, got ${typeof chain}`)
   }

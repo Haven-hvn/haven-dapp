@@ -30,34 +30,57 @@ let canisterCalls = 0
 let recoverCalls = 0
 let ibeDecryptCalls = 0
 
-vi.mock('haven-aol', async () => ({
-  // Re-export real-ish SDK surface with deterministic stubs.
-  recoverVetKey: vi.fn((_enc, _sk, _vk, _input) => {
-    recoverCalls++
-    return new Uint8Array(FAKE_VETKEY)
-  }),
-  ibeDecryptAesKey: vi.fn((_enc, _vetKey) => {
-    ibeDecryptCalls++
-    return new Uint8Array([0xAA, 0xBB, 0xCC, 0xDD]) // fake AES key
-  }),
-  computeDerivationInputV3: vi.fn(async () => new Uint8Array(32)),
-  buildGateRequestV3TypedData: vi.fn(() => ({
-    domain: {},
-    primaryType: 'GateRequestV3',
-    types: {},
-    message: {},
-  })),
-  createTransportKeyPair: vi.fn(() => ({
-    secretKey: new Uint8Array(32),
-    publicKey: new Uint8Array(32),
-  })),
-  parseSignatureHex: vi.fn(() => new Uint8Array(65)),
-  GATE_METADATA_VERSION_V3: 3 as const,
-  currentEpoch: vi.fn(() => 9999),
-  parseGateMetadataV3: vi.fn((x: unknown) => (x && typeof x === 'object' && (x as { version?: number }).version === 3 ? x : null)),
-  isGateMetadataV3: vi.fn((x: unknown) => x !== null && typeof x === 'object' && (x as { version?: number }).version === 3),
-  VALID_CHAINS: ['EthMainnet', 'EthSepolia', 'ArbitrumOne', 'BaseMainnet', 'OptimismMainnet'] as const,
-}))
+// ---------------------------------------------------------------------------
+// Mock @dfinity/vetkeys so the gate-key cache can deserialize VetKeys.
+// ---------------------------------------------------------------------------
+vi.mock('@dfinity/vetkeys', () => {
+  class MockVk {
+    readonly #b: Uint8Array
+    constructor(b: Uint8Array) { this.#b = b }
+    serialize(): Uint8Array { return new Uint8Array(this.#b) }
+    static deserialize(b: Uint8Array): MockVk { return new MockVk(b) }
+  }
+  return { VetKey: MockVk }
+})
+
+// ---------------------------------------------------------------------------
+// Mock haven-aol — returns a serializable mock VetKey.
+// ---------------------------------------------------------------------------
+vi.mock('haven-aol', () => {
+  class MockVk {
+    readonly #b: Uint8Array
+    constructor(b: Uint8Array) { this.#b = b }
+    serialize(): Uint8Array { return new Uint8Array(this.#b) }
+    static deserialize(b: Uint8Array): MockVk { return new MockVk(b) }
+  }
+  return {
+    recoverVetKey: vi.fn((_enc, _sk, _vk, _input) => {
+      recoverCalls++
+      return MockVk.deserialize(FAKE_VETKEY)
+    }),
+    ibeDecryptAesKey: vi.fn((_enc, _vetKey) => {
+      ibeDecryptCalls++
+      return new Uint8Array([0xAA, 0xBB, 0xCC, 0xDD]) // fake AES key
+    }),
+    computeDerivationInputV3: vi.fn(async () => new Uint8Array(32)),
+    buildGateRequestV3TypedData: vi.fn(() => ({
+      domain: {},
+      primaryType: 'GateRequestV3',
+      types: {},
+      message: {},
+    })),
+    createTransportKeyPair: vi.fn(() => ({
+      secretKey: new Uint8Array(32),
+      publicKey: new Uint8Array(32),
+    })),
+    parseSignatureHex: vi.fn(() => new Uint8Array(65)),
+    GATE_METADATA_VERSION_V3: 3 as const,
+    currentEpoch: vi.fn(() => 9999),
+    parseGateMetadataV3: vi.fn((x: unknown) => (x && typeof x === 'object' && (x as { version?: number }).version === 3 ? x : null)),
+    isGateMetadataV3: vi.fn((x: unknown) => x !== null && typeof x === 'object' && (x as { version?: number }).version === 3),
+    VALID_CHAINS: ['EthMainnet', 'EthSepolia', 'ArbitrumOne', 'BaseMainnet', 'OptimismMainnet'] as const,
+  }
+})
 
 vi.mock('../haven-aol-client', () => ({
   getHavenAolConfig: () => ({
@@ -104,7 +127,8 @@ vi.mock('../../aes-key-cache', () => ({
 
 // Import AFTER mocks are declared.
 import { decryptContentKeyV3, prefetchGateKeyV3 } from '../haven-aol-decrypt-v3'
-import { clearGateKeyCache, GateKeyCache, gateKeyCache } from '../haven-aol-gate-key-cache'
+import { GateKeyCache } from '../haven-aol-gate-key-cache'
+import { clearV3VetKeyCache, v3VetKeyHas } from '../haven-aol-v3-cache'
 
 const wallet = {
   account: { address: '0xABCDef1234567890abcDEF1234567890ABCDeF12' },
@@ -127,7 +151,7 @@ beforeEach(() => {
   canisterCalls = 0
   recoverCalls = 0
   ibeDecryptCalls = 0
-  clearGateKeyCache()
+  clearV3VetKeyCache()
 })
 
 describe('decryptContentKeyV3 — cache + canister wiring', () => {
@@ -149,7 +173,7 @@ describe('decryptContentKeyV3 — cache + canister wiring', () => {
       threshold: '1',
       epoch: 100,
     })
-    expect(gateKeyCache.has(key)).toBe(true)
+    expect(v3VetKeyHas(key)).toBe(true)
   })
 
   it('second decrypt of same (community, epoch) is ZERO canister calls', async () => {
@@ -215,7 +239,7 @@ describe('prefetchGateKeyV3 — best-effort pre-warm', () => {
       threshold: 1n,
       epoch: 100n,
     })
-    expect(gateKeyCache.has(key)).toBe(true)
+    expect(v3VetKeyHas(key)).toBe(true)
   })
 
   it('returns true without re-fetching when cache already warm', async () => {

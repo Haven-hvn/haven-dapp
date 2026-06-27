@@ -44,10 +44,8 @@ import {
   type WalletClientLike,
 } from './haven-aol-auth'
 import { HavenAolDecryptError, mapGateError } from './haven-aol-errors'
-import {
-  GateKeyCache,
-  gateKeyCache,
-} from './haven-aol-gate-key-cache'
+import { GateKeyCache } from './haven-aol-gate-key-cache'
+import { v3VetKeyGet, v3VetKeySet } from './haven-aol-v3-cache'
 import {
   getCachedKey,
   setCachedKey,
@@ -191,8 +189,9 @@ export async function batchDecryptContentKeysV3(
   const gateParams = assertHomogeneousGate(toDerive)
   const gateCacheKey = GateKeyCache.makeKey(gateParams)
 
-  // Step 2: gate-key cache lookup — single point of fan-out for the batch.
-  let vetKey: Uint8Array | null = gateKeyCache.get(gateCacheKey)
+  // Step 2: v3 VetKey instance cache — single point of fan-out for the batch.
+  // (Separate from GateKeyCache which stores Uint8Array bytes.)
+  let vetKey = v3VetKeyGet(gateCacheKey)
   let fromGateKeyCache = vetKey !== null
 
   if (!vetKey) {
@@ -207,7 +206,7 @@ export async function batchDecryptContentKeysV3(
 
     // v3 batches share one VetKey, so a single `requestDecryptionKeyV3` call
     // is functionally equivalent to `batchRequestDecryptionKeyV3` for the
-    // purpose of populating the gate-key cache. We use the single endpoint
+    // purpose of populating the cache. We use the single endpoint
     // because it doesn't require the canister to validate a CID list.
     const result = await requestDecryptionKeyV3(agent, config.canisterId, {
       chain: gateParams.chain,
@@ -237,7 +236,7 @@ export async function batchDecryptContentKeysV3(
       result.ok.verificationKey,
       derivationInput,
     )
-    gateKeyCache.put(gateCacheKey, vetKey)
+    v3VetKeySet(gateCacheKey, vetKey)
     fromGateKeyCache = false
   }
 

@@ -23,6 +23,7 @@ import { clearAgentCache } from './haven-aol/haven-aol-client'
 // the AES-key cache (proposal §6.3, KDD #6). New addition only; v1 behavior
 // above this line is unchanged.
 import { clearGateKeyCache } from './haven-aol/haven-aol-gate-key-cache'
+import { clearV3VetKeyCache } from './haven-aol/haven-aol-v3-cache'
 
 // ============================================================================
 // Types
@@ -138,6 +139,7 @@ export function onWalletDisconnect(address: string): void {
   clearNonce(address)
   clearAllKeys()
   clearGateKeyCache() // Sprint 5 — v3 in-memory cache must clear with v1's
+  clearV3VetKeyCache() // v3 VetKey instance cache
   clearAgentCache()
 
   // Optionally clear video cache
@@ -182,6 +184,7 @@ export function onAccountChange(oldAddress: string, newAddress: string): void {
   clearNonce(oldAddress)
   clearAllKeys()
   clearGateKeyCache() // Sprint 5 — v3 in-memory cache must clear with v1's
+  clearV3VetKeyCache() // v3 VetKey instance cache
   clearAgentCache()
 
   // Optionally clear video cache
@@ -286,6 +289,7 @@ export async function onSecurityClear(): Promise<SecurityClearResult> {
   try {
     clearAllKeys()
     clearGateKeyCache() // Sprint 5 — v3 in-memory cache must clear with v1's
+    clearV3VetKeyCache() // v3 VetKey instance cache
     results.keysCleared = true
   } catch (err) {
     console.error('[SecurityCleanup] Failed to clear keys:', err)

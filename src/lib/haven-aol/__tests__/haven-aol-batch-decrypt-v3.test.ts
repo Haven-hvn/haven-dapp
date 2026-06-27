@@ -13,21 +13,45 @@ const SAMPLE_TOKEN = '0x1234567890abcdef1234567890abcdef12345678'
 let canisterCalls = 0
 let ibeCalls = 0
 
-vi.mock('haven-aol', async () => ({
-  recoverVetKey: vi.fn(() => new Uint8Array([1, 2, 3])),
-  ibeDecryptAesKey: vi.fn(() => {
-    ibeCalls++
-    return new Uint8Array([9, 9, 9])
-  }),
-  computeDerivationInputV3: vi.fn(async () => new Uint8Array(32)),
-  buildGateRequestV3TypedData: vi.fn(() => ({ domain: {}, primaryType: 'X', types: {}, message: {} })),
-  createTransportKeyPair: vi.fn(() => ({ secretKey: new Uint8Array(32), publicKey: new Uint8Array(32) })),
-  parseSignatureHex: vi.fn(() => new Uint8Array(65)),
-  GATE_METADATA_VERSION_V3: 3 as const,
-  parseGateMetadataV3: vi.fn(),
-  isGateMetadataV3: vi.fn(),
-  VALID_CHAINS: ['EthMainnet', 'EthSepolia', 'ArbitrumOne', 'BaseMainnet', 'OptimismMainnet'] as const,
-}))
+// ---------------------------------------------------------------------------
+// Mock @dfinity/vetkeys so the gate-key cache can deserialize VetKeys.
+// ---------------------------------------------------------------------------
+vi.mock('@dfinity/vetkeys', () => {
+  class MockVk {
+    readonly #b: Uint8Array
+    constructor(b: Uint8Array) { this.#b = b }
+    serialize(): Uint8Array { return new Uint8Array(this.#b) }
+    static deserialize(b: Uint8Array): MockVk { return new MockVk(b) }
+  }
+  return { VetKey: MockVk }
+})
+
+// ---------------------------------------------------------------------------
+// Mock haven-aol — returns a serializable mock VetKey.
+// ---------------------------------------------------------------------------
+vi.mock('haven-aol', () => {
+  class MockVk {
+    readonly #b: Uint8Array
+    constructor(b: Uint8Array) { this.#b = b }
+    serialize(): Uint8Array { return new Uint8Array(this.#b) }
+    static deserialize(b: Uint8Array): MockVk { return new MockVk(b) }
+  }
+  return {
+    recoverVetKey: vi.fn(() => MockVk.deserialize(new Uint8Array([1, 2, 3]))),
+    ibeDecryptAesKey: vi.fn(() => {
+      ibeCalls++
+      return new Uint8Array([9, 9, 9])
+    }),
+    computeDerivationInputV3: vi.fn(async () => new Uint8Array(32)),
+    buildGateRequestV3TypedData: vi.fn(() => ({ domain: {}, primaryType: 'X', types: {}, message: {} })),
+    createTransportKeyPair: vi.fn(() => ({ secretKey: new Uint8Array(32), publicKey: new Uint8Array(32) })),
+    parseSignatureHex: vi.fn(() => new Uint8Array(65)),
+    GATE_METADATA_VERSION_V3: 3 as const,
+    parseGateMetadataV3: vi.fn(),
+    isGateMetadataV3: vi.fn(),
+    VALID_CHAINS: ['EthMainnet', 'EthSepolia', 'ArbitrumOne', 'BaseMainnet', 'OptimismMainnet'] as const,
+  }
+})
 
 vi.mock('../haven-aol-client', () => ({
   getHavenAolConfig: () => ({
@@ -64,7 +88,7 @@ vi.mock('../../aes-key-cache', () => ({
 }))
 
 import { batchDecryptContentKeysV3 } from '../haven-aol-batch-decrypt-v3'
-import { clearGateKeyCache } from '../haven-aol-gate-key-cache'
+import { clearV3VetKeyCache } from '../haven-aol-v3-cache'
 
 const wallet = {
   account: { address: '0xABCDef1234567890abcDEF1234567890ABCDeF12' },
@@ -90,7 +114,7 @@ function v3Video(id: string, cid: string, epoch: number) {
 beforeEach(() => {
   canisterCalls = 0
   ibeCalls = 0
-  clearGateKeyCache()
+  clearV3VetKeyCache()
 })
 
 describe('batchDecryptContentKeysV3 — v3-specific contract', () => {
