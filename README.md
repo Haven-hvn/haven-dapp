@@ -1,6 +1,6 @@
 # Haven - Decentralized Video Library
 
-A Web3-powered video streaming platform with encrypted content using [Always Online (AOL)](https://github.com/HavenCTO/haven-aol), IPFS/Filecoin storage, and wallet-based authentication.
+A Web3-powered video streaming platform with encrypted content using [Always Online (AOL)](https://github.com/haven-hvn/haven-aol), IPFS/Filecoin storage, and wallet-based authentication.
 
 **Always Online (AOL)** is an ICP-native protocol for conditional, token-gated access using VetKD keys. AOL enables smart access patterns across web3—DAOs, DataDAOs, agent swarms, and shared resources.
 
@@ -9,7 +9,7 @@ A Web3-powered video streaming platform with encrypted content using [Always Onl
 - **Framework**: [Next.js 16](https://nextjs.org/) with App Router
 - **Styling**: Tailwind CSS + shadcn/ui
 - **Web3**: wagmi, viem, @reown/appkit (Web3Modal)
-- **Encryption / access control**: [Haven-AOL](https://github.com/HavenCTO/haven-aol) (ICP VetKD + EIP-712 gates)
+- **Encryption / access control**: [Haven-AOL](https://github.com/Haven-hvn/haven-aol) (ICP VetKD + EIP-712 gates)
 - **Storage**: IPFS/Filecoin via Arkiv SDK
 - **Testing**: Playwright + Synpress (MetaMask automation)
 
@@ -153,7 +153,7 @@ function MyComponent() {
 
 ### Haven-AOL (playback)
 
-Content keys are released through conditional gates: the user signs an EIP-712 `GateRequest`, the Haven-AOL ICP canister verifies access (e.g. token balance on EVM), and the browser unwraps the VetKD-protected AES key. See the [haven-aol](https://github.com/HavenCTO/haven-aol) repository for the protocol spec and TypeScript SDK.
+Content keys are released through conditional gates: the user signs an EIP-712 `GateRequest`, the Haven-AOL ICP canister verifies access (e.g. token balance on EVM), and the browser unwraps the VetKD-protected AES key. See the [haven-aol](https://github.com/haven-hvn/haven-aol) repository for the protocol spec and TypeScript SDK.
 
 ```typescript
 import { decryptContentKey } from '@/lib/haven-aol';
@@ -167,7 +167,7 @@ const { aesKey, fromCache } = await decryptContentKey({
 });
 ```
 
-Upload and encryption are handled by [haven-cli](https://github.com/HavenCTO/haven-cli); this dapp focuses on read/playback.
+Upload and encryption are handled by [haven-cli](https://github.com/haven-hvn/haven-cli); this dapp focuses on read/playback.
 
 ### E2E Testing with MetaMask
 
@@ -207,7 +207,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
 
 - [Next.js Documentation](https://nextjs.org/docs)
 - [wagmi Documentation](https://wagmi.sh/)
-- [Haven-AOL (Always Online)](https://github.com/HavenCTO/haven-aol)
+- [Haven-AOL (Always Online)](https://github.com/haven-hvn/haven-aol)
 - [AppKit Documentation](https://docs.reown.com/appkit/overview)
 - [Playwright Documentation](https://playwright.dev/)
 
