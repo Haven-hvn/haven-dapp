@@ -9,9 +9,8 @@
  */
 
 import {
-  asPieceCID,
-  createPieceCIDStream,
-  getSizeFromPieceCID,
+  tryFrom as pieceCIDTryFrom,
+  transformStream,
 } from '@filoz/synapse-core/piece'
 
 export type PieceDownloadProgressFn = (downloaded: number, total: number) => void
@@ -62,7 +61,7 @@ export function resolveExpectedPieceByteLength(
   }
 
   try {
-    return getSizeFromPieceCID(pieceCid)
+    return Number(pieceCIDTryFrom(pieceCid)?.paddedSize ?? 0)
   } catch {
     return 0
   }
@@ -76,7 +75,7 @@ export async function streamDownloadAndValidatePiece(
 ): Promise<Uint8Array> {
   const { url, expectedPieceCid, signal, onProgress } = options
 
-  const parsedPieceCid = asPieceCID(expectedPieceCid)
+  const parsedPieceCid = pieceCIDTryFrom(expectedPieceCid)
   if (parsedPieceCid == null) {
     throw new PieceDownloadError(`Invalid piece CID: ${expectedPieceCid}`)
   }
@@ -109,7 +108,7 @@ export async function streamDownloadAndValidatePiece(
   )
   onProgress?.(0, expectedTotal)
 
-  const { stream: pieceCidStream, getPieceCID } = createPieceCIDStream()
+  const { transform: pieceCidTransform, result: pieceCidResult } = transformStream()
   const chunks: Uint8Array[] = []
   let downloaded = 0
 
@@ -123,7 +122,7 @@ export async function streamDownloadAndValidatePiece(
   })
 
   const pipelineStream = response.body
-    .pipeThrough(pieceCidStream)
+    .pipeThrough(pieceCidTransform)
     .pipeThrough(collectStream)
 
   const reader = pipelineStream.getReader()
@@ -143,7 +142,7 @@ export async function streamDownloadAndValidatePiece(
     throw new PieceDownloadError('Response body is empty')
   }
 
-  const calculatedPieceCid = getPieceCID()
+  const calculatedPieceCid = await pieceCidResult
   if (calculatedPieceCid == null) {
     throw new PieceDownloadError('Failed to calculate PieceCID from stream')
   }

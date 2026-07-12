@@ -450,7 +450,6 @@ export async function listStagedVideos(): Promise<string[]> {
     const dir = await getStagingDir()
     const videos: string[] = []
 
-    // @ts-expect-error - TypeScript doesn't know about values() yet
     for await (const [name, handle] of dir.entries()) {
       if (handle.kind === 'file' && name.endsWith(STAGING_EXTENSION)) {
         // Extract videoId from filename (remove extension)
@@ -485,7 +484,6 @@ export async function getTotalStagingSize(): Promise<number> {
     const dir = await getStagingDir()
     let totalSize = 0
 
-    // @ts-expect-error - TypeScript doesn't know about values() yet
     for await (const [, handle] of dir.entries()) {
       if (handle.kind === 'file') {
         const fileHandle = handle as FileSystemFileHandle

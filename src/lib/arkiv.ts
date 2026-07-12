@@ -11,15 +11,13 @@
 
 import { 
   createPublicClient, 
-  http, 
   type Entity, 
   type QueryOptions, 
   type QueryReturnType,
   type PublicArkivClient,
 } from '@arkiv-network/sdk'
-import type { Hex } from 'viem'
+import { http, type Hex, type Transport, type Chain } from 'viem'
 import { braga } from '@arkiv-network/sdk/chains'
-import { type Transport, type Chain } from 'viem'
 import {
   parseCreatedAtBlock,
   pickLatestArkivEntity,

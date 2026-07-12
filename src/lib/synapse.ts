@@ -13,7 +13,7 @@
 
 import { Synapse } from '@filoz/synapse-sdk'
 import {
-  asPieceCID,
+  tryFrom as pieceCIDTryFrom,
   chainResolver,
   filbeamResolver,
   resolvePieceUrl,
@@ -158,7 +158,7 @@ async function downloadForCatalogOwner(
   catalogOwner: string,
   options?: Pick<SynapseDownloadOptions, 'withCDN' | 'signal' | 'onProgress'>
 ): Promise<Uint8Array> {
-  const parsed = asPieceCID(pieceCid)
+  const parsed = pieceCIDTryFrom(pieceCid)
   if (parsed == null) {
     throw new SynapseError(
       `Invalid piece CID: ${pieceCid}`,
