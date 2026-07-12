@@ -1,0 +1,295 @@
+/**
+ * Synapse SDK Utilities
+ *
+ * Client-side module for retrieving data from Filecoin Onchain Cloud
+ * via the Synapse SDK (owner-aware `resolvePieceUrl` + `downloadAndValidate`,
+ * with optional direct `storage.download` fallback).
+ *
+ * No private key or funded wallet is required — the SDK auto-generates
+ * a throwaway key for initialization. Downloads of public data are free.
+ *
+ * @module lib/synapse
+ */
+
+import { Synapse } from '@filoz/synapse-sdk'
+import {
+  asPieceCID,
+  chainResolver,
+  filbeamResolver,
+  resolvePieceUrl,
+  type resolvePieceUrl as ResolvePieceUrlTypes,
+} from '@filoz/synapse-core/piece'
+import {
+  isPieceCidVerificationFailure,
+  PieceDownloadError,
+  streamDownloadAndValidatePiece,
+} from './piece-download'
+import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
+import {
+  classifyRetrievalFailure,
+  getSynapseErrorMessageForCode,
+  type SynapseErrorCode,
+} from './synapse-errors'
+
+export type { SynapseErrorCode } from './synapse-errors'
+export { classifyRetrievalFailure, getSynapseErrorMessageForCode } from './synapse-errors'
+
+// ============================================================================
+// Types
+// ============================================================================
+
+/** FilBeam first, PDP chain fallback (legacy non-CDN deals may skip FilBeam via 402). */
+const PIECE_URL_RESOLVERS: ResolvePieceUrlTypes.ResolverFnType[] = [
+  filbeamResolver,
+  chainResolver,
+]
+
+export interface SynapseConfig {
+  /** Enable CDN for faster retrieval */
+  withCDN?: boolean
+}
+
+export interface SynapseDownloadOptions {
+  /**
+   * Arkiv entity owner (uploader wallet). Used for `resolvePieceUrl` so FOC
+   * dataset discovery targets the uploader, not the throwaway SDK account.
+   */
+  catalogOwner?: string
+  /** Optional SP address — skips resolver chain when known */
+  providerAddress?: `0x${string}`
+  /** Override CDN for this download */
+  withCDN?: boolean
+  /** Cancel in-flight resolution/download */
+  signal?: AbortSignal
+  /** Bytes received / expected (expected from Content-Length or PieceCID size) */
+  onProgress?: (downloaded: number, total: number) => void
+}
+
+export class SynapseError extends Error {
+  constructor(
+    message: string,
+    public readonly code: SynapseErrorCode,
+    public readonly pieceCid?: string
+  ) {
+    super(message)
+    this.name = 'SynapseError'
+  }
+}
+
+export function synapseErrorFromUnknown(
+  error: unknown,
+  pieceCid?: string
+): SynapseError {
+  if (error instanceof SynapseError) {
+    return error
+  }
+  const message = error instanceof Error ? error.message : String(error)
+  return new SynapseError(
+    message,
+    classifyRetrievalFailure(message),
+    pieceCid
+  )
+}
+
+type SynapseInstance = Awaited<ReturnType<typeof Synapse.create>>
+
+// ============================================================================
+// Singleton Instance
+// ============================================================================
+
+let synapseInstance: SynapseInstance | null = null
+
+/**
+ * Get or create the Synapse SDK singleton instance.
+ *
+ * Uses a throwaway generated key for SDK initialization since downloads
+ * of public data don't require a funded wallet. The account is only needed
+ * to bootstrap the SDK's provider discovery.
+ *
+ * @returns Synapse SDK instance
+ */
+export function getSynapseInstance(): SynapseInstance {
+  if (synapseInstance) {
+    return synapseInstance
+  }
+
+  const key = generatePrivateKey()
+
+  const cdnEnv =
+    process.env.NEXT_PUBLIC_SYNAPSE_ENABLE_CDN ?? process.env.SYNAPSE_ENABLE_CDN
+
+  synapseInstance = Synapse.create({
+    account: privateKeyToAccount(key),
+    source: 'haven-dapp',
+    withCDN: cdnEnv == null || String(cdnEnv).trim().toLowerCase() !== 'false',
+  })
+
+  return synapseInstance
+}
+
+/**
+ * Reset the Synapse SDK instance.
+ * Useful for testing or reconfiguration.
+ */
+export function resetSynapseInstance(): void {
+  synapseInstance = null
+}
+
+// ============================================================================
+// Download Functions
+// ============================================================================
+
+const OWNER_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/
+
+function normalizeCatalogOwner(address: string): `0x${string}` {
+  const trimmed = address.trim()
+  if (!OWNER_ADDRESS_RE.test(trimmed)) {
+    throw new SynapseError(
+      `Invalid catalog owner address: ${address}`,
+      'INVALID_OWNER'
+    )
+  }
+  return trimmed.toLowerCase() as `0x${string}`
+}
+
+async function downloadForCatalogOwner(
+  synapse: SynapseInstance,
+  pieceCid: string,
+  catalogOwner: string,
+  options?: Pick<SynapseDownloadOptions, 'withCDN' | 'signal' | 'onProgress'>
+): Promise<Uint8Array> {
+  const parsed = asPieceCID(pieceCid)
+  if (parsed == null) {
+    throw new SynapseError(
+      `Invalid piece CID: ${pieceCid}`,
+      'INVALID_CID',
+      pieceCid
+    )
+  }
+
+  if (options?.signal?.aborted) {
+    throw new SynapseError('Download aborted', 'ABORTED', pieceCid)
+  }
+
+  const owner = normalizeCatalogOwner(catalogOwner)
+  const url = await resolvePieceUrl({
+    address: owner,
+    client: synapse.client,
+    pieceCid: parsed,
+    resolvers: PIECE_URL_RESOLVERS,
+    signal: options?.signal,
+  })
+
+  if (options?.signal?.aborted) {
+    throw new SynapseError('Download aborted', 'ABORTED', pieceCid)
+  }
+
+  return streamDownloadAndValidatePiece({
+    expectedPieceCid: pieceCid,
+    url,
+    signal: options?.signal,
+    onProgress: options?.onProgress,
+  })
+}
+
+async function downloadViaStorageManager(
+  synapse: SynapseInstance,
+  pieceCid: string,
+  options?: Pick<SynapseDownloadOptions, 'providerAddress' | 'withCDN'>
+): Promise<Uint8Array> {
+  const bytes = await synapse.storage.download({
+    pieceCid,
+    ...(options?.providerAddress != null
+      ? { providerAddress: options.providerAddress }
+      : {}),
+    ...(options?.withCDN != null ? { withCDN: options.withCDN } : {}),
+  })
+  return new Uint8Array(bytes)
+}
+
+/**
+ * Download data from Filecoin via Synapse SDK using a piece CID.
+ *
+ * When `catalogOwner` is set (Arkiv entity owner), resolves the piece URL
+ * against the uploader's FOC datasets before downloading. Falls back to
+ * `storage.download` only if owner-aware resolution fails.
+ *
+ * @param pieceCid - The piece CID (content identifier) to download
+ * @param options - Optional owner address and provider hints
+ * @returns Downloaded data as Uint8Array
+ * @throws SynapseError on download failure
+ */
+export async function downloadFromSynapse(
+  pieceCid: string,
+  options?: SynapseDownloadOptions
+): Promise<Uint8Array> {
+  if (!pieceCid || typeof pieceCid !== 'string' || pieceCid.trim().length === 0) {
+    throw new SynapseError(
+      `Invalid piece CID: ${pieceCid}`,
+      'INVALID_CID',
+      pieceCid
+    )
+  }
+
+  const normalizedPieceCid = pieceCid.trim()
+
+  try {
+    const synapse = getSynapseInstance()
+
+    if (options?.providerAddress != null) {
+      return await downloadViaStorageManager(synapse, normalizedPieceCid, options)
+    }
+
+    if (options?.catalogOwner != null && options.catalogOwner.trim().length > 0) {
+      try {
+        return await downloadForCatalogOwner(
+          synapse,
+          normalizedPieceCid,
+          options.catalogOwner,
+          options
+        )
+      } catch (ownerError) {
+        throw synapseErrorFromUnknown(ownerError, normalizedPieceCid)
+      }
+    }
+
+    return await downloadViaStorageManager(synapse, normalizedPieceCid, options)
+  } catch (error) {
+    throw synapseErrorFromUnknown(error, normalizedPieceCid)
+  }
+}
+
+const SYNAPSE_ERROR_TITLES: Record<SynapseErrorCode, string> = {
+  INVALID_CID: 'Invalid Filecoin reference',
+  INVALID_OWNER: 'Missing uploader address',
+  PIECE_NOT_FOUND: 'Video not on Filecoin',
+  PIECE_VERIFICATION_FAILED: 'Download didn’t match this video',
+  STILL_PROPAGATING: 'Still storing on Filecoin',
+  CDN_RAIL_MISMATCH: 'Upload needs CDN',
+  NETWORK_ERROR: 'Connection problem',
+  TIMEOUT: 'Download timed out',
+  ABORTED: 'Cancelled',
+  DOWNLOAD_FAILED: 'Could not load from Filecoin',
+}
+
+/**
+ * Short title for player error overlay.
+ */
+export function getSynapseErrorTitle(code: SynapseErrorCode): string {
+  return SYNAPSE_ERROR_TITLES[code]
+}
+
+/**
+ * Get a user-friendly error message for a Synapse error.
+ */
+export function getSynapseErrorMessage(error: unknown): string {
+  if (error instanceof SynapseError) {
+    return getSynapseErrorMessageForCode(error.code)
+  }
+
+  if (error instanceof Error) {
+    return getSynapseErrorMessageForCode(classifyRetrievalFailure(error.message))
+  }
+
+  return getSynapseErrorMessageForCode('DOWNLOAD_FAILED')
+}

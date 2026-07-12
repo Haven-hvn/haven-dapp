@@ -1,0 +1,155 @@
+import type { Metadata, Viewport } from "next";
+import localFont from "next/font/local";
+import "./globals.css";
+import ContextProvider from '@/context';
+import { AuthProvider } from "@/components/providers/AuthProvider";
+import { HavenAolProvider } from "@/components/providers/HavenAolProvider";
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { ThemeScript } from "@/components/providers/ThemeScript";
+import { ErrorProvider } from "@/components/providers/ErrorProvider";
+import { ServiceWorkerProvider } from "@/components/providers/ServiceWorkerProvider";
+import { SecurityCleanupProvider } from "@/components/providers/SecurityCleanupProvider";
+import { CacheProvider } from "@/components/providers/CacheProvider";
+import { WebVitals } from "@/components/analytics/WebVitals";
+
+const geistSans = localFont({
+  src: "./fonts/GeistVF.woff",
+  variable: "--font-geist-sans",
+  weight: "100 900",
+});
+const geistMono = localFont({
+  src: "./fonts/GeistMonoVF.woff",
+  variable: "--font-geist-mono",
+  weight: "100 900",
+});
+
+export const metadata: Metadata = {
+  title: {
+    default: "Haven - Decentralized Video Library",
+    template: "%s | Haven",
+  },
+  description: "Access your encrypted video collection from anywhere using your Web3 wallet. Secure, private, and decentralized video storage powered by IPFS, Filecoin, and Haven-AOL.",
+  keywords: [
+    "web3",
+    "video",
+    "ipfs",
+    "filecoin",
+    "haven-aol",
+    "encrypted",
+    "decentralized",
+    "video library",
+    "encrypted video",
+    "decentralized storage",
+    "web3 video",
+    "crypto video",
+  ],
+  authors: [{ name: "Haven" }],
+  creator: "Haven",
+  publisher: "Haven",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://haven.video"),
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: "/",
+    siteName: "Haven",
+    title: "Haven - Decentralized Video Library",
+    description: "Access your encrypted video collection from anywhere using your Web3 wallet. Secure, private, and decentralized video storage powered by IPFS, Filecoin, and Haven-AOL.",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Haven - Decentralized Video Library",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Haven - Decentralized Video Library",
+    description: "Access your encrypted video collection from anywhere using your Web3 wallet. Secure, private, and decentralized video storage powered by IPFS, Filecoin, and Haven-AOL.",
+    images: ["/og-image.png"],
+    creator: "@havenvideo",
+  },
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+    ],
+    shortcut: "/favicon.ico",
+    other: [
+      {
+        rel: "mask-icon",
+        url: "/safari-pinned-tab.svg",
+        color: "#5bbad5",
+      },
+    ],
+  },
+  manifest: "/site.webmanifest",
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  category: "technology",
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0A0A0F" },
+  ],
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  viewportFit: "cover",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      </head>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        <ThemeProvider defaultTheme="dark" enableSystem>
+          <ThemeScript />
+          <ServiceWorkerProvider>
+            <ContextProvider>
+              <SecurityCleanupProvider>
+                <CacheProvider>
+                  <AuthProvider>
+                    <HavenAolProvider>
+                      <ErrorProvider>
+                        {children}
+                      </ErrorProvider>
+                    </HavenAolProvider>
+                  </AuthProvider>
+                </CacheProvider>
+              </SecurityCleanupProvider>
+            </ContextProvider>
+          </ServiceWorkerProvider>
+        </ThemeProvider>
+        <WebVitals />
+      </body>
+    </html>
+  );
+}

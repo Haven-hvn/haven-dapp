@@ -1,0 +1,60 @@
+{
+  "compilerOptions": {
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "haven-aol": [
+        "./haven-aol-main/packages/typescript/src/index.ts"
+      ]
+    },
+    "target": "ES2020"
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/__tests__/**",
+    "haven-cli",
+    "haven-cli-main",
+    "haven-aol-main/src",
+    "haven-aol-main/tests",
+    "haven-aol-main/packages/typescript/src/test",
+    "web3-shoutbox-platform",
+    "monad-lightswitch",
+    "e2e",
+    "appkit-main",
+    "arkiv-sdk-js-main",
+    "lit-js-sdk-master",
+    "planning"
+  ]
+}

@@ -1,0 +1,63 @@
+/**
+ * Sidebar Component
+ * 
+ * Desktop navigation sidebar. Hidden on mobile devices.
+ * For mobile navigation, use the MobileNav component instead.
+ * 
+ * @module components/layout/Sidebar
+ */
+
+'use client'
+
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { Library, Settings, Users } from 'lucide-react'
+import { cn } from '@/lib/utils'
+
+const navItems = [
+  { href: '/library', label: 'Library', icon: Library },
+  { href: '/community', label: 'Community', icon: Users },
+  { href: '/settings', label: 'Settings', icon: Settings },
+]
+
+export function Sidebar() {
+  const pathname = usePathname()
+  
+  return (
+    <aside className="w-64 border-r border-white/[0.06] bg-[#0A0A0F] h-full flex flex-col">
+      <div className="p-6 safe-area-top">
+        <Link href="/library" className="flex items-center gap-2 touch-manipulation">
+          <img src="/favicon.ico" alt="Haven" className="w-8 h-8 rounded-lg" />
+          <span className="text-xl font-bold">Haven</span>
+        </Link>
+      </div>
+      
+      <nav className="px-3 py-2 flex-1">
+        {navItems.map((item) => {
+          const Icon = item.icon
+          const isActive = pathname.startsWith(item.href)
+          
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors min-h-[44px] touch-manipulation',
+                isActive 
+                  ? 'bg-primary/10 text-primary' 
+                  : 'text-muted-foreground hover:bg-accent'
+              )}
+            >
+              <Icon className="w-5 h-5 flex-shrink-0" />
+              <span>{item.label}</span>
+            </Link>
+          )
+        })}
+      </nav>
+      
+      <div className="p-4 border-t border-white/[0.06] text-xs text-white/40 safe-area-bottom">
+        Haven v1.0
+      </div>
+    </aside>
+  )
+}

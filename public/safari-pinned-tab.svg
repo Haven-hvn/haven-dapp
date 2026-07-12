@@ -1,0 +1,16 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 20010904//EN"
+ "http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">
+<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
+ width="100.000000pt" height="100.000000pt" viewBox="0 0 100 100"
+ preserveAspectRatio="xMidYMid meet">
+<metadata>
+Haven Logo - Minimalist H Mark
+</metadata>
+<g transform="translate(0,100) scale(0.1,-0.1)"
+fill="#000000" stroke="none">
+<!-- H shape -->
+<path d="M280 720 L280 280 L420 280 L420 440 L580 440 L580 280 L720 280 L720 720 
+         L580 720 L580 560 L420 560 L420 720 Z"/>
+</g>
+</svg>
