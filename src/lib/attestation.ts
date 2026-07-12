@@ -19,8 +19,8 @@
  * @module lib/attestation
  */
 
-import { ed25519 } from '@noble/curves/ed25519.js'
-import { sha256 } from '@noble/hashes/sha2.js'
+import { ed25519 } from '@noble/curves/ed25519'
+import { sha256 } from '@noble/hashes/sha2'
 import type {
   Attestation,
   MerkleAttestation,
