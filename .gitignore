@@ -2,7 +2,7 @@
 
 # dependencies
 /node_modules
-/haven-aol-main
+/haven-aol
 /.pnp
 .pnp.js
 .yarn/install-state.gz

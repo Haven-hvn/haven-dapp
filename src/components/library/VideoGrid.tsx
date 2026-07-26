@@ -391,8 +391,8 @@ function EmptyState() {
       </div>
       <h3 className="text-lg font-semibold mb-2">No videos yet</h3>
       <p className="text-muted-foreground max-w-sm mx-auto">
-        Videos you upload from the Haven desktop app will appear here. Make sure
-        Arkiv sync is enabled in your desktop app settings.
+        Videos you upload from the Haven desktop app/Haven CLI will appear here. Make sure
+        Arkiv sync is enabled.
       </p>
     </div>
   );

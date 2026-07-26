@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { ConnectButton } from '@/components/auth/ConnectButton'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
-import { ArrowRight, Shield, Video, Lock, Calendar } from 'lucide-react'
+import { ArrowRight, Shield, Video, Lock, Calendar} from 'lucide-react'
 import { TokenGatedEventsEmbed } from '@/components/events/TokenGatedEventsEmbed'
 
 /**
@@ -72,7 +72,7 @@ export default function LandingPage() {
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
               </Link>
               <a 
-                href="https://github.com/haven-project" 
+                href="https://github.com/Haven-hvn" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-lg border border-white/10 text-white/80 font-medium hover:bg-white/[0.04] hover:border-white/20 transition-all duration-300"
@@ -101,7 +101,7 @@ export default function LandingPage() {
             </div>
           </div>
           
-          {/* Right Column — Upcoming Video Drops (Events Widget) */}
+           {/* Right Column — Upcoming Video Drops (Events Widget) */}
           <div className="w-full lg:w-[400px] xl:w-[440px] flex-shrink-0">
             <div className="sticky top-24 rounded-2xl bg-white/[0.03] border border-white/[0.06] overflow-hidden">
               {/* Widget Header */}
@@ -136,37 +136,67 @@ export default function LandingPage() {
         </div>
       </main>
       
-      {/* Footer */}
+                {/* Footer */}
       <footer className="relative z-10 border-t border-white/[0.06] py-8">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-white/40">
-          <p>© 2026 Haven. All rights reserved.</p>
-          <div className="flex items-center gap-6">
-            <a href="#" className="hover:text-white/60 transition-colors">Privacy</a>
-            <a href="#" className="hover:text-white/60 transition-colors">Terms</a>
-            <a href="#" className="hover:text-white/60 transition-colors">GitHub</a>
-          </div>
+        <div className="max-w-7xl mx-auto px-6 flex items-center justify-center gap-8">
+          <a
+            href="https://github.com/Haven-hvn"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 text-white/40 hover:text-white transition-colors"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="w-5 h-5"
+            >
+              <path d="M12 .297a12 12 0 0 0-3.794 23.39c.6.111.82-.261.82-.577v-2.02c-3.338.726-4.043-1.416-4.043-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.09-.745.083-.73.083-.73 1.205.085 1.84 1.237 1.84 1.237 1.07 1.834 2.807 1.304 3.492.997.108-.775.418-1.304.762-1.604-2.665-.303-5.467-1.333-5.467-5.932 0-1.311.469-2.382 1.236-3.221-.124-.304-.536-1.524.117-3.176 0 0 1.008-.323 3.3 1.23a11.47 11.47 0 0 1 6.006 0c2.291-1.553 3.297-1.23 3.297-1.23.655 1.652.243 2.872.12 3.176.77.839 1.235 1.91 1.235 3.221 0 4.61-2.807 5.625-5.48 5.921.43.372.814 1.102.814 2.222v3.293c0 .319.216.694.825.576A12.003 12.003 0 0 0 12 .297z" />
+            </svg>
+            
+          </a>
+
+          <a
+            href="https://x.com/havenplay3r"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 text-white/40 hover:text-white transition-colors"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="w-5 h-5"
+            >
+              <path d="M18.901 1H22.58l-8.04 9.19L24 23h-7.406l-5.8-7.584L4.15 23H.47l8.6-9.832L0 1h7.594l5.243 6.926L18.901 1zM17.61 20.8h2.04L6.48 3.09H4.29L17.61 20.8z" />
+            </svg>
+          </a>
         </div>
       </footer>
     </div>
   )
 }
 
-function FeatureCard({ 
-  icon: Icon, 
-  title, 
-  description 
-}: { 
+function FeatureCard({
+  icon: Icon,
+  title,
+  description,
+}: {
   icon: React.ComponentType<{ className?: string }>
   title: string
-  description: string 
+  description: string
 }) {
   return (
     <div className="group p-5 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:border-[#00F5FF]/30 hover:bg-white/[0.05] transition-all duration-300">
       <div className="w-10 h-10 rounded-lg bg-[#00F5FF]/10 flex items-center justify-center mb-4 group-hover:bg-[#00F5FF]/20 transition-colors">
         <Icon className="w-5 h-5 text-[#00F5FF]" />
       </div>
-      <h3 className="text-base font-semibold mb-2 text-white/90">{title}</h3>
-      <p className="text-sm text-white/50 leading-relaxed">{description}</p>
+      <h3 className="text-base font-semibold mb-2 text-white/90">
+        {title}
+      </h3>
+      <p className="text-sm text-white/50 leading-relaxed">
+        {description}
+      </p>
     </div>
   )
 }

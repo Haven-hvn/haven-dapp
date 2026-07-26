@@ -63,7 +63,7 @@ const nextConfig = {
     // Resolve haven-aol source directly (the package uses .js extensions in imports)
     config.resolve.alias = {
       ...config.resolve.alias,
-      'haven-aol': join(__dirname, 'haven-aol-main/packages/typescript/src/index.ts'),
+      'haven-aol': join(__dirname, 'haven-aol/packages/typescript/src/index.ts'),
       '@react-native-async-storage/async-storage': join(__dirname, 'src/mocks/react-native-async-storage.js'),
       ws: join(__dirname, 'src/mocks/ws.js'),
     };

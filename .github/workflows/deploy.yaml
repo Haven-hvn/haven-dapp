@@ -16,7 +16,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Haven-hvn/haven-aol
-          path: haven-aol-main
+          path: haven-aol
+        
 
       - name: Check if API key exists
         shell: bash
@@ -60,7 +61,7 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Install Haven-AOL SDK dependencies
-        working-directory: haven-aol-main/packages/typescript
+        working-directory: haven-aol/packages/typescript
         run: npm ci
 
       - name: Build Next.js app

@@ -1096,7 +1096,7 @@ usage data.
 
 | Phase | Title                                                | Cost     | Trigger to build                                     |
 |-------|------------------------------------------------------|----------|------------------------------------------------------|
-| §A    | Haven-AOL canister cycle balance                     | 1.5 days | Motoko PR landed on `haven-aol-main/src/backend/main.mo` |
+| §A    | Haven-AOL canister cycle balance                     | 1.5 days | Motoko PR landed on `haven-aol/src/backend/main.mo` |
 | §B    | Burn-rate "days remaining" projections               | 1 day    | After 14 days of snapshot data accumulated client-side |
 | §C    | Arkiv entity-owner balance                           | 0.5 day  | `mainnet.arkiv.network` DNS starts resolving         |
 | §D    | Filecoin Pay subgraph rows (rails, approvals, settlements) | 2 days | Real demand from ops for per-rail visibility   |

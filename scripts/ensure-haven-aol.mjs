@@ -4,11 +4,11 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const sdkDir = join(root, 'haven-aol-main', 'packages', 'typescript');
+const sdkDir = join(root, 'haven-aol', 'packages', 'typescript');
 
 if (!existsSync(join(sdkDir, 'package.json'))) {
   console.log(
-    'Skipping haven-aol SDK install: clone https://github.com/Haven-hvn/haven-aol to haven-aol-main'
+    'Skipping haven-aol SDK install: clone https://github.com/Haven-hvn/haven-aol to haven-aol'
   );
   process.exit(0);
 }
