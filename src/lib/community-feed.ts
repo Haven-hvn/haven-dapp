@@ -40,7 +40,7 @@ export async function getCanisterAttestPublicKey(): Promise<Uint8Array> {
 
   const agent = await getOrCreateAgent()
   const config = getHavenAolConfig()
-  const pubKeyBytes = await fetchAttestationPublicKey(agent, config.canisterId)
+  const pubKeyBytes = await fetchAttestationPublicKey(agent as any, config.canisterId)
   cachedCanisterPubKey = pubKeyBytes
   return pubKeyBytes
 }

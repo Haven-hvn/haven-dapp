@@ -211,7 +211,7 @@ async function decryptContentKeyImpl(
     }
 
     const requestStartMs = performance.now()
-    result = await requestDecryptionKey(agent, config.canisterId, {
+    result = await requestDecryptionKey(agent as any, config.canisterId, {
       ...gateRequestBase,
       transportPublicKey: signedRequest.transportPublicKey,
       nonce: signedRequest.nonce,

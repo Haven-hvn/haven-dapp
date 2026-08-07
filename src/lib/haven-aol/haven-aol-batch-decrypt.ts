@@ -184,7 +184,7 @@ export async function batchDecryptContentKeys(
     onProgress?.('Requesting decryption keys from network...')
 
     // Call canister
-    const result = await batchRequestDecryptionKey(agent, config.canisterId, {
+    const result = await batchRequestDecryptionKey(agent as any, config.canisterId, {
       chain,
       tokenAddress,
       threshold,
