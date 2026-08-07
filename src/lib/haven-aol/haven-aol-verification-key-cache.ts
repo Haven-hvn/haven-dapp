@@ -9,7 +9,8 @@
  */
 
 import { fetchVerificationKey } from 'haven-aol'
-import type { HttpAgent } from '@icp-sdk/core/agent'
+// HttpAgent from main app (6.1.0) vs haven-aol (5.4.0) have incompatible private fields - use any
+type HttpAgent = any
 
 let cachedVerificationKey: Uint8Array | null = null
 let inflightPromise: Promise<Uint8Array> | null = null

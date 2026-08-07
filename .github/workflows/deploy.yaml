@@ -1,4 +1,4 @@
-name: Deploy to Orbiter
+name: Deploy to PinMe
 
 on:
   push:
@@ -19,31 +19,27 @@ jobs:
           path: haven-aol
         
 
-      - name: Check if API key exists
+      - name: Check PinMe AppKey
         shell: bash
         run: |
-          if [ -z "${{ secrets.ORBITER_API_KEY }}" ]; then
-            echo "🚨 ORBITER_API_KEY not found ! Please follow these steps:"
+          if [ -z "${{ secrets.PINME_APPKEY }}" ]; then
+            echo "🚨 PINME_APPKEY not found! Please follow these steps:"
             echo ""
-            echo "1. Go to https://app.orbiter.host/api-keys"
-            echo "2. Generate a new API key"
-            echo "3. Go to https://github.com/${{ github.repository }}/settings/secrets/actions"
-            echo "4. Click 'New repository secret'"
-            echo "5. Name: ORBITER_API_KEY"
-            echo "6. Value: Your API key from step 2"
-            echo "7. Click 'Add secret'"
+            echo "1. Install PinMe CLI: npm install -g pinme"
+            echo "2. Login: pinme login"
+            echo "3. Show AppKey: pinme show-appkey  (or pinme appkey)"
+            echo "4. Copy the AppKey"
+            echo "5. Go to https://github.com/${{ github.repository }}/settings/secrets/actions"
+            echo "6. Click 'New repository secret'"
+            echo "7. Name: PINME_APPKEY"
+            echo "8. Value: Your AppKey from step 3"
+            echo "9. Click 'Add secret'"
             echo ""
+            echo "Docs: https://github.com/glitternetwork/pinme"
             echo "Once done, re-run this workflow."
             exit 1
           fi
-
-      - name: Check if Site ID exists
-        shell: bash
-        run: |
-          if [ -z "${{ secrets.ORBITER_SITE_ID }}" ]; then
-            echo "🚨 ORBITER_SITE_ID not found! Please add the secret."
-            exit 1
-          fi
+          echo "✅ PINME_APPKEY is set"
 
       - name: Validate package manifests
         shell: bash
@@ -54,7 +50,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '26.7'
           cache: npm
 
       - name: Install dependencies
@@ -67,7 +63,7 @@ jobs:
       - name: Build Next.js app
         env:
           NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}
-          NEXT_PUBLIC_APP_URL: "https://haven.orbiter.website/"
+          NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL || 'https://haven.pinme.eth.limo/' }}
           NEXT_PUBLIC_ALCHEMY_API_KEY: ${{ secrets.NEXT_PUBLIC_ALCHEMY_API_KEY }}
           NEXT_PUBLIC_ALCHEMY_RPC: ${{ secrets.NEXT_PUBLIC_ALCHEMY_RPC }}
           NEXT_PUBLIC_ARKIV_RPC_URL: ${{ secrets.NEXT_PUBLIC_ARKIV_RPC_URL || 'https://braga.hoodi.arkiv.network/rpc' }}
@@ -83,11 +79,37 @@ jobs:
             echo "❌ Build failed: ./out directory not found"
             exit 1
           fi
+          if [ ! -f "./out/index.html" ]; then
+            echo "❌ Build failed: ./out/index.html not found"
+            exit 1
+          fi
           echo "✅ Build successful: ./out directory exists"
           ls -la ./out
+          echo "--- out/index.html head ---"
+          head -20 ./out/index.html
 
-      - name: Deploy to Orbiter
+      - name: Setup PinMe CLI
+        run: |
+          npx pinme@2.0.12 --version
+          npx pinme@2.0.12 --help | head -20
+
+      - name: Authenticate PinMe
         env:
-          ORBITER_API_KEY: ${{ secrets.ORBITER_API_KEY }}
-          SOURCE: github-action
-        run: npx orbiter-cli update ./out --siteId ${{ secrets.ORBITER_SITE_ID }}
+          PINME_APPKEY: ${{ secrets.PINME_APPKEY }}
+        run: |
+          npx pinme@2.0.12 set-appkey "$PINME_APPKEY"
+          npx pinme@2.0.12 show-appkey
+
+      - name: Deploy to PinMe (IPFS)
+        env:
+          PINME_DOMAIN: ${{ vars.PINME_DOMAIN || secrets.PINME_DOMAIN }}
+        run: |
+          echo "Uploading ./out to IPFS via PinMe..."
+          if [ -n "$PINME_DOMAIN" ]; then
+            echo "Binding domain: $PINME_DOMAIN"
+            npx pinme@2.0.12 upload ./out --domain "$PINME_DOMAIN"
+          else
+            npx pinme@2.0.12 upload ./out
+          fi
+          echo "✅ PinMe upload completed"
+          echo "Check upload history: npx pinme@2.0.12 list -l 5"

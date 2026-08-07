@@ -13,10 +13,11 @@ This guide covers the deployment process for the Haven Web DApp, including envir
 
 ## Prerequisites
 
-- Node.js 18+ and npm 9+
+- Node.js 26.7+ and npm 11+ (pinned via `.nvmrc` / `engines`)
 - Git
 - WalletConnect Project ID
 - Alchemy API Key (optional but recommended)
+- PinMe AppKey (for `pinme upload` — get via `pinme login` → `pinme show-appkey` at https://pinme.eth.limo)
 
 ## Environment Variables
 
@@ -77,29 +78,45 @@ npm run analyze
 
 ## Deployment Options
 
-### IPFS (Fully Decentralized)
+### PinMe (Primary — IPFS, current)
 
-1. **Build static export**:
-   ```bash
-   npm run export
-   ```
+Haven is a static export (`next.config.mjs` `output: 'export'` → `out/`) and is deployed via [PinMe](https://github.com/glitternetwork/pinme) (IPFS, `pinme upload`).
 
-2. **Upload to IPFS** using one of:
-   - [Pinata](https://pinata.cloud)
-   - [Fleek](https://fleek.co)
-   - [Web3.Storage](https://web3.storage)
-   - CLI: `npx ipfs-deploy out/`
+**Local deploy:**
+```bash
+npm ci --legacy-peer-deps
+npm run build          # verifies ./out/index.html
+npm install -g pinme   # or npx pinme@2.0.12
+pinme login            # browser login
+pinme show-appkey      # copy AppKey
+pinme set-appkey <AppKey>
+pinme upload ./out                    # IPFS upload → CID + gateway URL
+pinme upload ./out --domain my-site   # optional subdomain binding (requires wallet balance)
+pinme upload ./out --domain example.com --dns  # DNS domain
+```
 
-3. **Configure custom domain** (optional):
-   - Use [ENS](https://ens.domains) for `.eth` domains
-   - Use [Unstoppable Domains](https://unstoppabledomains.com)
-   - Configure DNSLink for traditional domains
+**CI deploy (GitHub Actions `Deploy to PinMe`):**
+- Workflow: [.github/workflows/deploy.yaml](.github/workflows/deploy.yaml) on `push` to `main`
+- Node `26.7`, `npm ci --legacy-peer-deps`, `haven-aol` checkout, `npm run build` → verify `./out`
+- Auth: `npx pinme@2.0.12 set-appkey ${{ secrets.PINME_APPKEY }}` (fail fast if missing, links to https://pinme.eth.limo)
+- Upload: `npx pinme@2.0.12 upload ./out` (or `--domain ${{ vars.PINME_DOMAIN || secrets.PINME_DOMAIN }}` if set)
+- Secrets: `PINME_APPKEY` (required), optional `PINME_DOMAIN` (via `vars`/`secrets`), plus `NEXT_PUBLIC_*` (WalletConnect, Alchemy, Arkiv, Lit)
+- Previous Orbiter secrets (`ORBITER_API_KEY`/`ORBITER_SITE_ID` / `npx orbiter-cli`) are deprecated — see rollback note below.
+
+**Custom domain:**
+- Subdomain (no dot): `pinme upload ./out --domain my-site` → `https://my-site.pinme.eth.limo`
+- DNS (dot): `pinme upload ./out --domain example.com` (or `--dns` force) — requires DNS ownership
+- Check domains: `pinme my-domains` / `pinme domain`
+
+**Previous Orbiter flow (archived):**
+- Used `npx orbiter-cli update ./out --siteId $ORBITER_SITE_ID` with `ORBITER_API_KEY`/`ORBITER_SITE_ID` at `https://app.orbiter.host`. Revert `deploy.yaml` to the pre-PinMe commit to rollback; `out/` is reproducible via `npm run build`.
 
 ### Other Hosting Options
 
 - **Netlify**: Connect GitHub repo and set build command to `npm run build`
 - **Railway**: Use Dockerfile or Nixpacks deployment
 - **AWS Amplify**: Connect repository and use default Next.js settings
+- **IPFS alternatives** (if not using PinMe): [Pinata](https://pinata.cloud), [Fleek](https://fleek.co), [Web3.Storage](https://web3.storage), `npx ipfs-deploy out/`
 
 ## Performance Monitoring
 
@@ -149,7 +166,7 @@ The following security headers are configured in `next.config.mjs`:
 
 1. **Check Node.js version**:
    ```bash
-   node --version  # Should be 18+
+   node --version  # Should be 26.7.0 (see .nvmrc / engines)
    ```
 
 2. **Clear cache**:
@@ -176,7 +193,17 @@ The following security headers are configured in `next.config.mjs`:
 
 ## Rollback Procedure
 
-### GitHub Actions
+### GitHub Actions (PinMe)
+
+1. Revert the `deploy.yaml` PinMe commit (`git revert <sha>`) to restore `orbiter-cli` flow (requires `ORBITER_API_KEY`/`ORBITER_SITE_ID` secrets)
+2. Push to `main` to trigger redeploy, or manually trigger from Actions tab
+3. `out/` is reproducible: `npm ci --legacy-peer-deps && npm run build` on Node 26.7
+
+### Rollback to Orbiter (archived)
+
+- Orbiter used `npx orbiter-cli update ./out --siteId $ORBITER_SITE_ID` at `https://app.orbiter.host`. Keep Orbiter secrets until PinMe is verified.
+
+### GitHub Actions (general)
 
 1. Revert the problematic commit
 2. Push to trigger new deployment

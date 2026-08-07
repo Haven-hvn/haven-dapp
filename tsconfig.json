@@ -21,13 +21,12 @@
         "name": "next"
       }
     ],
-        "baseUrl": ".",
     "paths": {
       "@/*": [
         "./src/*"
       ],
       "haven-aol": [
-        "../haven-aol/packages/typescript/src/index.ts"
+        "./haven-aol/packages/typescript/src/index.ts"
       ]
     },
     "target": "ES2020"
