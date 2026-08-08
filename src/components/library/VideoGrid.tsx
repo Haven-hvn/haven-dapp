@@ -10,7 +10,7 @@
  * @module components/library/VideoGrid
  */
 
-import { useState, Suspense, lazy, useMemo, useCallback, useEffect } from "react";
+import { Suspense, lazy, useMemo, useCallback } from "react";
 import {
   LIBRARY_PAGE_SIZE,
   clampPage,
@@ -22,6 +22,7 @@ import { LibraryPagination } from "./LibraryPagination";
 import { useRouter } from "next/navigation";
 import { useVideoSearch } from "@/hooks/useVideoSearch";
 import { useCacheStatus } from "@/hooks/useCacheStatus";
+import { useLibraryQueryState } from "@/hooks/useLibraryQueryState";
 import { VideoListItem } from "./VideoListItem";
 import { SearchBar } from "./SearchBar";
 import { FilterControls } from "./FilterControls";
@@ -31,9 +32,8 @@ import { SelectableVideoCard } from "./SelectableVideoCard";
 import { MultiSelectToolbar } from "./MultiSelectToolbar";
 import { useMultiSelect } from "@/hooks/useMultiSelect";
 import { useDownloadQueue } from "@/hooks/useDownloadQueue";
-import type { ViewMode, VideoFilters } from "@/types";
-import type { VideoSortField, SortOrder } from "@/hooks/useVideoSearch";
 import { Cloud } from "lucide-react";
+import type { ViewMode } from "@/types";
 
 // Lazy load VideoCard for better initial load performance
 const VideoCard = lazy(() =>
@@ -80,12 +80,18 @@ function VideoCardSkeleton() {
  * - Multi-select batch download with queue panel
  */
 export function VideoGrid() {
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filters, setFilters] = useState<VideoFilters>({});
-  const [sortBy] = useState<VideoSortField>("date");
-  const [sortOrder] = useState<SortOrder>("desc");
-  const [page, setPage] = useState(1);
+  const {
+    searchQuery,
+    filters,
+    viewMode,
+    page,
+    sortBy,
+    sortOrder,
+    setSearchQuery,
+    setFilters,
+    setViewMode,
+    setPage,
+  } = useLibraryQueryState()
 
   const router = useRouter();
 
@@ -143,10 +149,6 @@ export function VideoGrid() {
     sortOrder,
   });
 
-  useEffect(() => {
-    setPage(1);
-  }, [searchQuery, filters, sortBy, sortOrder]);
-
   const totalPages = useMemo(
     () => getPageCount(filteredCount, LIBRARY_PAGE_SIZE),
     [filteredCount]
@@ -156,12 +158,6 @@ export function VideoGrid() {
     () => clampPage(page, totalPages),
     [page, totalPages]
   );
-
-  useEffect(() => {
-    if (page !== currentPage) {
-      setPage(currentPage);
-    }
-  }, [page, currentPage]);
 
   const paginatedVideos = useMemo(
     () => slicePage(videos, currentPage, LIBRARY_PAGE_SIZE),
