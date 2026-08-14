@@ -23,6 +23,7 @@ import { useVideoDownload } from '@/hooks/useVideoDownload'
 import { VideoPlayerControls } from './VideoPlayerControls'
 import { CacheAwareProgress } from './CacheAwareProgress'
 import { CacheIndicator } from './CacheIndicator'
+import { HolderIdentity } from '@/components/profile/HolderIdentity'
 import { ErrorOverlay } from './ErrorOverlay'
 import {
   getPlaybackErrorPresentation,
@@ -183,7 +184,7 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
         )}
       </div>
       
-      {/* Video info */}
+      {/* Video info — holder identity embedded */}
       <div className="shrink-0 p-3 sm:p-4 border-t border-white/10 safe-area-x safe-area-bottom overflow-y-auto max-h-[30vh]">
         <h1 className="text-base sm:text-lg font-semibold text-white">{video.title}</h1>
         {video.description && (
@@ -193,11 +194,17 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
           <span>{formatDuration(video.duration)}</span>
           <span className="hidden sm:inline">•</span>
           <span>{new Date(video.createdAt).toLocaleDateString()}</span>
-          {video.creatorHandle && (
-            <>
-              <span className="hidden sm:inline">•</span>
-              <span>@{video.creatorHandle}</span>
-            </>
+          <span className="hidden sm:inline">•</span>
+          {video.creatorHandle ? (
+            <span>@{video.creatorHandle}</span>
+          ) : (
+            <HolderIdentity
+              address={video.owner}
+              gateToken={(video.encryptionMetadata as unknown as { tokenAddress?: string })?.tokenAddress ?? null}
+              gateChain={(video.encryptionMetadata as unknown as { chain?: string })?.chain ?? null}
+              size="sm"
+              showTokenId
+            />
           )}
         </div>
       </div>

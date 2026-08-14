@@ -20,6 +20,7 @@ import { Cloud, Download, Loader2 } from 'lucide-react'
 import type { Video } from '../../types/video'
 import { CacheStatusBadge, getArkivStatusFromVideo } from './CacheStatusBadge'
 import { useVideoDownload } from '@/hooks/useVideoDownload'
+import { HolderIdentity } from '@/components/profile/HolderIdentity'
 
 // =============================================================================
 // Types
@@ -309,14 +310,21 @@ export function VideoCard({
           </p>
         )}
 
-        {/* Metadata row */}
+        {/* Metadata row — holder identity (NFT avatar when gated) */}
         <div className="flex items-center gap-2 mt-2 text-xs text-gray-500 dark:text-gray-400">
           <span>{formatDate(video.createdAt)}</span>
-          {video.creatorHandle && (
-            <>
-              <span>·</span>
-              <span>@{video.creatorHandle}</span>
-            </>
+          <span>·</span>
+          {video.creatorHandle ? (
+            <span>@{video.creatorHandle}</span>
+          ) : (
+            <HolderIdentity
+              address={video.owner}
+              gateToken={(video.encryptionMetadata as unknown as { tokenAddress?: string })?.tokenAddress ?? null}
+              gateChain={(video.encryptionMetadata as unknown as { chain?: string })?.chain ?? null}
+              size="sm"
+              compact
+              className="[&>span]:text-gray-500"
+            />
           )}
         </div>
 

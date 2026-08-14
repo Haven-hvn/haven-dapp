@@ -13,6 +13,7 @@ import Link from 'next/link'
 import { Lock, Sparkles, Cloud } from 'lucide-react'
 import type { Video } from '@/types'
 import { formatDuration, formatDate } from '@/lib/format'
+import { HolderIdentity } from '@/components/profile/HolderIdentity'
 
 interface VideoListItemProps {
   /** Video data to display */
@@ -115,12 +116,20 @@ export function VideoListItem({ video, isCached = false }: VideoListItemProps) {
             {formattedDate}
           </p>
           
-          {/* Additional metadata row */}
+          {/* Additional metadata row — holder identity */}
           <div className="flex items-center gap-2 sm:gap-3 mt-1.5 sm:mt-2">
-            {video.creatorHandle && (
+            {video.creatorHandle ? (
               <span className="text-xs text-muted-foreground">
                 @{video.creatorHandle}
               </span>
+            ) : (
+              <HolderIdentity
+                address={video.owner}
+                gateToken={(video.encryptionMetadata as unknown as { tokenAddress?: string })?.tokenAddress ?? null}
+                gateChain={(video.encryptionMetadata as unknown as { chain?: string })?.chain ?? null}
+                size="sm"
+                compact
+              />
             )}
             {video.isEncrypted && (
               <span className="hidden sm:inline-flex items-center gap-1 text-xs text-muted-foreground">

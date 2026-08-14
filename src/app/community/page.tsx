@@ -7,6 +7,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { LibraryLayout } from '@/components/layout/LibraryLayout'
 import { CommunityCard } from '@/components/community/CommunityCard'
 import { CommunityAccessNotice } from '@/components/community/CommunityAccessNotice'
+import { HolderIdentity } from '@/components/profile/HolderIdentity'
 import Link from 'next/link'
 import type { TokenGate } from '@/types/attestation'
 
@@ -207,18 +208,15 @@ function CommunityFeedContent() {
                 )}
               </div>
 
-              <div className="flex items-center gap-2 text-xs text-white/40">
-                <span className="font-mono">
-                  {video.creatorAddress.slice(0, 6)}...{video.creatorAddress.slice(-4)}
-                </span>
-                {video.verified && (
-                  <span className="inline-flex items-center gap-0.5 text-emerald-400/80">
-                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    Verified
-                  </span>
-                )}
+              <div className="flex items-center gap-1 text-xs text-white/40">
+                <HolderIdentity
+                  address={video.creatorAddress}
+                  gateToken={video.gateToken}
+                  gateChain={video.gateChain}
+                  verified={video.verified}
+                  size="sm"
+                  showTokenId
+                />
               </div>
 
               <div className="mt-3 flex items-center gap-2 text-xs text-white/25">
