@@ -8,6 +8,7 @@ import { LibraryLayout } from '@/components/layout/LibraryLayout'
 import { CommunityCard } from '@/components/community/CommunityCard'
 import { CommunityAccessNotice } from '@/components/community/CommunityAccessNotice'
 import * as React from 'react'
+import { useAccount } from '@/hooks/useAccount'
 import { HolderIdentity } from '@/components/profile/HolderIdentity'
 import Link from 'next/link'
 import type { TokenGate } from '@/types/attestation'
@@ -16,6 +17,13 @@ function CommunityListContent() {
   const router = useRouter()
   const { communities, isLoading, error, refetch } = useUserCommunities()
   const [gatingChain, setGatingChain] = React.useState<string>('all')
+  const { chainId, isConnected } = useAccount()
+  React.useEffect(() => {
+    if (!isConnected || !chainId) return
+    const m: Record<number, string> = { 1: 'EthMainnet', 11155111: 'EthSepolia', 8453: 'BaseMainnet', 42161: 'ArbitrumOne', 10: 'OptimismMainnet' }
+    const next = m[chainId] ?? 'all'
+    setGatingChain((prev) => (prev === 'all' ? next : prev))
+  }, [chainId, isConnected])
 
   if (isLoading) {
     return (
