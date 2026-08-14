@@ -30,11 +30,11 @@ function gatewayNormalize(url: string | null): string | null {
 
 function chainToRpc(chain: string): string {
   const c = chain.toLowerCase()
-  if (c === 'base' || c === 'basemainnet' || c === '8453' || c === 'basesepolia' || c === '84532') return 'https://base.meowrpc.com'
-  if (c === 'arbitrum' || c === 'arbitrumone' || c === '42161') return 'https://arb1.arbitrum.io/rpc'
-  if (c === 'optimism' || c === 'optimismmainnet' || c === '10') return 'https://mainnet.optimism.io'
-  if (c === 'polygon' || c === 'matic' || c === '137') return 'https://polygon-rpc.com'
-  return 'https://eth.llamarpc.com'
+  if (c === 'base' || c === 'basemainnet' || c === '8453' || c === 'basesepolia' || c === '84532') return 'https://base-rpc.publicnode.com'
+  if (c === 'arbitrum' || c === 'arbitrumone' || c === '42161') return 'https://arbitrum-one-rpc.publicnode.com'
+  if (c === 'optimism' || c === 'optimismmainnet' || c === '10') return 'https://optimism-rpc.publicnode.com'
+  if (c === 'polygon' || c === 'matic' || c === '137') return 'https://polygon-bor-rpc.publicnode.com'
+  return 'https://ethereum.publicnode.com'
 }
 
 // Minimal ABI for public chain reads
