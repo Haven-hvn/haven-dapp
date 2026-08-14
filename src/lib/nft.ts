@@ -1,13 +1,14 @@
 /**
- * NFT identity helper — collection NFT as profile picture.
+ * NFT identity helper — fully public, no API key.
  *
  * Haven gates on a collection contract (ERC-721, threshold >=1).
- * The holder's specific tokenId image becomes their identity avatar,
- * exactly like a private-tracker avatar.
+ * Collection image lives on IPFS; its CID is reachable via
+ * contractURI() / tokenURI() onchain → fetch via public IPFS gateway.
+ * ERC20 logos come from trustwallet assets (public HEAD probe).
  *
- * Uses Alchemy NFT API when NEXT_PUBLIC_ALCHEMY_API_KEY is set.
- * Falls back gracefully (null) when not configured — HolderIdentity
- * then shows Blockie/ENS fallback.
+ * Holder avatar = collection image for everyone in that DAO (same visual
+ * that should hit home for newcomers). When Alchemy key is present we still
+ * try per-holder tokenId for extra fidelity, but it is not required.
  *
  * @module lib/nft
  */
@@ -27,21 +28,109 @@ function gatewayNormalize(url: string | null): string | null {
   return url
 }
 
-function chainToAlchemyNetwork(chain: string): string {
+function chainToRpc(chain: string): string {
   const c = chain.toLowerCase()
-  if (c === 'ethmainnet' || c === 'ethereum' || c === 'eth' || c === 'mainnet' || c === '1') return 'eth-mainnet'
-  if (c === 'ethsepolia' || c === 'sepolia' || c === '11155111') return 'eth-sepolia'
-  if (c === 'base' || c === 'basemainnet' || c === '8453') return 'base-mainnet'
-  if (c === 'basesepolia' || c === '84532') return 'base-sepolia'
-  if (c === 'arbitrum' || c === 'arbitrumone' || c === '42161' || c === 'arbitrummainnet') return 'arb-mainnet'
-  if (c === 'optimism' || c === 'optimismmainnet' || c === 'op' || c === '10') return 'opt-mainnet'
-  if (c === 'polygon' || c === 'matic' || c === '137') return 'polygon-mainnet'
-  return 'eth-mainnet'
+  if (c === 'base' || c === 'basemainnet' || c === '8453' || c === 'basesepolia' || c === '84532') return 'https://base.meowrpc.com'
+  if (c === 'arbitrum' || c === 'arbitrumone' || c === '42161') return 'https://arb1.arbitrum.io/rpc'
+  if (c === 'optimism' || c === 'optimismmainnet' || c === '10') return 'https://mainnet.optimism.io'
+  if (c === 'polygon' || c === 'matic' || c === '137') return 'https://polygon-rpc.com'
+  return 'https://eth.llamarpc.com'
+}
+
+// Minimal ABI for public chain reads
+const ERC721_ABI = [
+  { name: 'contractURI', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
+  { name: 'tokenURI', type: 'function', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ type: 'string' }] },
+  { name: 'name', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
+] as const
+
+async function viemRead(
+  rpcUrl: string,
+  contractAddress: string,
+  functionName: string,
+  args: unknown[] = [],
+  signal?: AbortSignal
+): Promise<string | null> {
+  try {
+    const { createPublicClient, http } = await import('viem')
+    const client = createPublicClient({ transport: http(rpcUrl) })
+    const abiEntry = ERC721_ABI.find((a) => a.name === functionName)
+    if (!abiEntry) return null
+    const res = (await client.readContract({
+      address: contractAddress as `0x${string}`,
+      abi: [abiEntry] as unknown as never[],
+      functionName: functionName as never,
+      args: args as never,
+    })) as string
+    if (signal?.aborted) return null
+    return res ?? null
+  } catch {
+    return null
+  }
+}
+
+async function fetchJsonFromUri(uri: string | null, signal?: AbortSignal): Promise<Record<string, unknown> | null> {
+  if (!uri) return null
+  const url = gatewayNormalize(uri)
+  if (!url) return null
+  try {
+    const res = await fetch(url, { signal, cache: 'no-store' as RequestCache, headers: { Accept: 'application/json' } })
+    if (!res.ok) return null
+    const j = (await res.json()) as Record<string, unknown>
+    return j
+  } catch {
+    return null
+  }
 }
 
 /**
- * Fetch the first NFT owned by `owner` in `contractAddress` on `chain`.
- * Returns null when not configured, not a holder, or on error (never throws).
+ * Fully public: resolve collection image from contractURI / tokenURI via public RPC + IPFS gateway.
+ * Returns { image, name } or null. Never throws. Caches caller-side via tanstack.
+ */
+export async function fetchCollectionImagePublic(
+  contractAddress: string,
+  chain: string,
+  signal?: AbortSignal
+): Promise<{ image: string | null; name: string | null } | null> {
+  if (!contractAddress) return null
+  const rpc = chainToRpc(chain)
+
+  // 1) contractURI → JSON → image
+  const contractUri = await viemRead(rpc, contractAddress, 'contractURI', [], signal)
+  if (contractUri) {
+    const json = await fetchJsonFromUri(contractUri, signal)
+    if (json) {
+      const img = gatewayNormalize((json.image as string | null) ?? (json.image_url as string | null) ?? null)
+      const name = (json.name as string | null) ?? null
+      if (img) return { image: img, name }
+    }
+  }
+  // 2) tokenURI(1) then tokenURI(0) → JSON → image (covers collections without contractURI)
+  for (const tokenId of [1n, 0n]) {
+    const uri = await viemRead(rpc, contractAddress, 'tokenURI', [tokenId], signal)
+    if (!uri) continue
+    const json = await fetchJsonFromUri(uri, signal)
+    if (!json) continue
+    const img = gatewayNormalize((json.image as string | null) ?? (json.image_url as string | null) ?? null)
+    const name = (json.name as string | null) ?? null
+    if (img) return { image: img, name }
+  }
+  // 3) TrustWallet ERC20 logo probe (works for tokens, harmless for NFTs)
+  const trustLogo = `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/${contractAddress}/logo.png`
+  try {
+    const head = await fetch(trustLogo, { method: 'HEAD', signal, cache: 'no-store' as RequestCache })
+    if (head.ok) {
+      const name = await viemRead(rpc, contractAddress, 'name', [], signal)
+      return { image: trustLogo, name: name ?? null }
+    }
+  } catch {}
+  return null
+}
+
+/**
+ * Fully public holder fetch — returns collection image for any holder (same image for all members of DAO).
+ * Keeps HolderNft shape for HolderIdentity compatibility.
+ * If Alchemy key present, tries per-holder tokenId for fidelity, otherwise falls back to collection image.
  */
 export async function fetchHolderNft(
   owner: string,
@@ -49,93 +138,74 @@ export async function fetchHolderNft(
   chain: string,
   signal?: AbortSignal
 ): Promise<HolderNft | null> {
+  if (!owner || !contractAddress) return null
+
+  // Try Alchemy per-holder when key present (more precise tokenId), but not required
   const apiKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY?.trim()
   const alchemyRpc = process.env.NEXT_PUBLIC_ALCHEMY_RPC?.trim()
-
-  // Try to derive key from RPC URL like https://eth-mainnet.g.alchemy.com/v2/<key>
-  let key = apiKey
+  let key: string | null = apiKey ?? null
   if (!key && alchemyRpc) {
     const m = alchemyRpc.match(/\/v2\/([^/?#]+)/)
     if (m) key = m[1]
   }
-  if (!key) return null
-  if (!owner || !contractAddress) return null
+  if (key) {
+    try {
+      const c = chain.toLowerCase()
+      let network = 'eth-mainnet'
+      if (c === 'base' || c === 'basemainnet' || c === '8453') network = 'base-mainnet'
+      else if (c === 'ethsepolia' || c === 'sepolia') network = 'eth-sepolia'
+      else if (c === 'arbitrum' || c === 'arbitrumone') network = 'arb-mainnet'
+      else if (c === 'optimism' || c === 'optimismmainnet') network = 'opt-mainnet'
+      const url =
+        `https://${network}.g.alchemy.com/nft/v3/${key}/getNFTsForOwner` +
+        `?owner=${encodeURIComponent(owner)}&contractAddresses[]=${encodeURIComponent(contractAddress)}&withMetadata=true&pageSize=1`
+      const r = await fetch(url, { signal, cache: 'no-store' as RequestCache })
+      if (r.ok) {
+        const j = (await r.json()) as {
+          ownedNfts?: Array<{
+            tokenId: string
+            name?: string | null
+            contract?: { name?: string | null; address?: string }
+            image?: { cachedUrl?: string | null; thumbnailUrl?: string | null; originalUrl?: string | null }
+            raw?: { metadata?: { image?: string | null } }
+          }>
+        }
+        const nft = j.ownedNfts?.[0]
+        if (nft) {
+          const rawImage = nft.image?.cachedUrl ?? nft.image?.thumbnailUrl ?? nft.image?.originalUrl ?? nft.raw?.metadata?.image ?? null
+          return {
+            tokenId: nft.tokenId,
+            name: nft.name ?? null,
+            collectionName: nft.contract?.name ?? null,
+            image: gatewayNormalize(rawImage),
+            contractAddress,
+          }
+        }
+      }
+    } catch {}
+  }
 
-  const network = chainToAlchemyNetwork(chain)
-  const url =
-    `https://${network}.g.alchemy.com/nft/v3/${key}/getNFTsForOwner` +
-    `?owner=${encodeURIComponent(owner)}` +
-    `&contractAddresses[]=${encodeURIComponent(contractAddress)}` +
-    `&withMetadata=true&pageSize=1`
-
-  try {
-    const res = await fetch(url, { signal, cache: 'no-store' as RequestCache })
-    if (!res.ok) return null
-    const json = (await res.json()) as {
-      ownedNfts?: Array<{
-        tokenId: string
-        name?: string | null
-        contract?: { name?: string | null; address?: string }
-        image?: { cachedUrl?: string | null; thumbnailUrl?: string | null; originalUrl?: string | null; pngUrl?: string | null }
-        raw?: { metadata?: { image?: string | null } }
-      }>
-    }
-    const nft = json.ownedNfts?.[0]
-    if (!nft) return null
-
-    const rawImage =
-      nft.image?.cachedUrl ??
-      nft.image?.thumbnailUrl ??
-      nft.image?.pngUrl ??
-      nft.image?.originalUrl ??
-      nft.raw?.metadata?.image ??
-      null
-
-    return {
-      tokenId: nft.tokenId,
-      name: nft.name ?? null,
-      collectionName: nft.contract?.name ?? null,
-      image: gatewayNormalize(rawImage),
-      contractAddress: nft.contract?.address ?? contractAddress,
-    }
-  } catch {
-    return null
+  // Fully public fallback: collection image via contractURI + IPFS gateway (same for every holder — that *is* the DAO identity)
+  const meta = await fetchCollectionImagePublic(contractAddress, chain, signal)
+  if (!meta?.image) return null
+  return {
+    tokenId: '1',
+    name: meta.name,
+    collectionName: meta.name,
+    image: meta.image,
+    contractAddress,
   }
 }
 
 /**
- * Fetch collection-level metadata (name/image) for a contract.
- * Used by CommunityCard when no specific holder is available.
+ * Collection meta (fully public) — used by CommunityCard.
  */
 export async function fetchCollectionMeta(
   contractAddress: string,
   chain: string,
   signal?: AbortSignal
 ): Promise<{ name: string | null; image: string | null } | null> {
-  const apiKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY?.trim()
-  const alchemyRpc = process.env.NEXT_PUBLIC_ALCHEMY_RPC?.trim()
-  let key = apiKey
-  if (!key && alchemyRpc) {
-    const m = alchemyRpc.match(/\/v2\/([^/?#]+)/)
-    if (m) key = m[1]
-  }
-  if (!key) return null
-  const network = chainToAlchemyNetwork(chain)
-  const url = `https://${network}.g.alchemy.com/nft/v3/${key}/getContractMetadata?contractAddress=${encodeURIComponent(contractAddress)}`
-  try {
-    const res = await fetch(url, { signal, cache: 'no-store' as RequestCache })
-    if (!res.ok) return null
-    const json = (await res.json()) as {
-      name?: string | null
-      openSeaMetadata?: { imageUrl?: string | null }
-      contractMetadata?: { openSea?: { imageUrl?: string | null } }
-    }
-    const name = json.name ?? null
-    const image = gatewayNormalize(
-      json.openSeaMetadata?.imageUrl ?? json.contractMetadata?.openSea?.imageUrl ?? null
-    )
-    return { name, image }
-  } catch {
-    return null
-  }
+  const meta = await fetchCollectionImagePublic(contractAddress, chain, signal)
+  if (!meta) return null
+  return { name: meta.name, image: meta.image }
 }
