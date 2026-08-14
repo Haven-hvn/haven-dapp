@@ -7,6 +7,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { LibraryLayout } from '@/components/layout/LibraryLayout'
 import { CommunityCard } from '@/components/community/CommunityCard'
 import { CommunityAccessNotice } from '@/components/community/CommunityAccessNotice'
+import * as React from 'react'
 import { HolderIdentity } from '@/components/profile/HolderIdentity'
 import Link from 'next/link'
 import type { TokenGate } from '@/types/attestation'
@@ -14,6 +15,7 @@ import type { TokenGate } from '@/types/attestation'
 function CommunityListContent() {
   const router = useRouter()
   const { communities, isLoading, error, refetch } = useUserCommunities()
+  const [gatingChain, setGatingChain] = React.useState<string>('all')
 
   if (isLoading) {
     return (
@@ -66,15 +68,39 @@ function CommunityListContent() {
     router.push(`/community?c=${encodeURIComponent(gate.tokenAddress)}`)
   }
 
+  const filtered = gatingChain === 'all' ? communities : communities.filter(g => g.chain.toLowerCase() === gatingChain.toLowerCase())
+
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {communities.map((gate) => (
-        <CommunityCard
-          key={`${gate.chain}:${gate.tokenAddress}`}
-          gate={gate}
-          onClick={handleCommunityClick}
-        />
-      ))}
+    <div>
+      <div className="flex items-center gap-3 mb-4">
+        <label className="text-xs text-white/50">Gating chain</label>
+        <select
+          value={gatingChain}
+          onChange={e => setGatingChain(e.target.value)}
+          className="px-2 py-1.5 rounded-md bg-white/[0.06] border border-white/[0.08] text-xs text-white/80"
+          title="haven-aol VALID_CHAINS — DFINITY EVM RPC"
+        >
+          <option value="all">All chains</option>
+          <option value="EthMainnet">EthMainnet</option>
+          <option value="BaseMainnet">BaseMainnet</option>
+          <option value="ArbitrumOne">ArbitrumOne</option>
+          <option value="OptimismMainnet">OptimismMainnet</option>
+          <option value="EthSepolia">EthSepolia</option>
+        </select>
+        <span className="text-xs text-white/30">{filtered.length} DAOs · RPC via DFINITY</span>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {filtered.map((gate) => (
+          <CommunityCard
+            key={`${gate.chain}:${gate.tokenAddress}`}
+            gate={gate}
+            onClick={handleCommunityClick}
+          />
+        ))}
+      </div>
+      {!filtered.length && communities.length > 0 && (
+        <p className="text-sm text-white/40 mt-4">No communities on {gatingChain}.</p>
+      )}
     </div>
   )
 }
