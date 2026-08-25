@@ -41,8 +41,8 @@ export interface PreparedEncryptedContent {
   encryptedData: Uint8Array
   fetchResult: FetchResult
   keyFromCache: boolean
-  /** Which Haven-AOL protocol version was used (1 or 3). */
-  version: 1 | 3
+  /** Which Haven-AOL protocol version was used (1, 3, or 4). */
+  version: 1 | 3 | 4
 }
 
 /**
@@ -58,7 +58,7 @@ function assertEncryptedVideoReady(video: Video): EncryptionMetadata {
   const parsed = parseAnyGateMetadata(video.encryptionMetadata)
   if (!parsed) {
     throw new Error(
-      'Invalid content encryption metadata — expected Haven-AOL gate v1 (version: 1) or v3 (version: 3)'
+      'Invalid content encryption metadata — expected Haven-AOL gate v1/v3/v4'
     )
   }
   return parsed

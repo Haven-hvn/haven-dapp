@@ -21,6 +21,7 @@ import type { Video } from '../../types/video'
 import { CacheStatusBadge, getArkivStatusFromVideo } from './CacheStatusBadge'
 import { useVideoDownload } from '@/hooks/useVideoDownload'
 import { HolderIdentity } from '@/components/profile/HolderIdentity'
+import { DripLockedChip } from '@/components/video/DripLockNotice'
 
 // =============================================================================
 // Types
@@ -214,11 +215,12 @@ export function VideoCard({
 
         {/* Encrypted indicator */}
         {video.isEncrypted && (
-          <div className="absolute top-2 left-2">
+          <div className="absolute top-2 left-2 flex items-center gap-1">
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-black/60 text-white">
               <LockIcon className="h-3 w-3" />
               <span className="sr-only">Encrypted</span>
             </span>
+            {video.drip && <DripLockedChip drip={video.drip} />}
           </div>
         )}
 

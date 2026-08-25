@@ -28,6 +28,10 @@ export type HavenAolErrorCode =
   | 'WALLET_NOT_CONNECTED'
   | 'SIGNING_REJECTED'
   | 'DECRYPTION_FAILED'
+  // Protocol v4: live market cap below the chunk's unlock target.
+  | 'MARKET_CAP_NOT_REACHED'
+  // Protocol v4: malformed/stale oracle response.
+  | 'ORACLE_INVALID'
   | 'CANCELLED'
   | 'UNKNOWN'
 
@@ -112,6 +116,32 @@ export function mapGateError(gateError: unknown): HavenAolDecryptError {
     return new HavenAolDecryptError(
       `EVM RPC error while verifying balance: ${err.EvmRpcError}. Please try again.`,
       'EVM_RPC_ERROR'
+    )
+  }
+
+  // Protocol v4: market-cap gate not satisfied (whole USD on both fields).
+  if ('MarketCapNotReached' in err) {
+    const details = err.MarketCapNotReached as { required?: bigint; actual?: bigint }
+    const fmt = (n?: bigint) => {
+      if (typeof n !== 'bigint') return '?'
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0,
+        notation: 'compact',
+      }).format(Number(n))
+    }
+    return new HavenAolDecryptError(
+      `Market cap ${fmt(details.actual)} has not reached the unlock target ${fmt(details.required)} yet.`,
+      'MARKET_CAP_NOT_REACHED'
+    )
+  }
+
+  // Protocol v4: oracle returned a malformed or stale answer.
+  if ('InvalidOracle' in err) {
+    return new HavenAolDecryptError(
+      `Price oracle error: ${err.InvalidOracle}. Please try again shortly.`,
+      'ORACLE_INVALID'
     )
   }
 

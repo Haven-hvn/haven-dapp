@@ -7,22 +7,47 @@
  * @module types/video
  */
 
-import type { GateMetadataJson, GateMetadataV3Json } from '@/lib/haven-aol'
+import type { GateMetadataJson, GateMetadataV3Json, GateMetadataV4Json } from '@/lib/haven-aol'
+
+/**
+ * V4 drip unlock metadata — parsed from Arkiv attributes (filterable) and
+ * payload extras (additive v4 fields on the v1 gate record).
+ */
+export interface DripInfo {
+  /** 'v4' marker from `gate_version`. */
+  gateVersion: 'v4'
+  /** Market-cap unlock target in whole USD for this chunk. */
+  marketCapTargetUsd: number
+  /** 0-based position of this chunk within the drip. */
+  dripIndex: number
+  /** Total chunks in the drip. */
+  dripTotal: number
+  /** Stable id grouping all chunks of one publish. */
+  dripId: string
+  /** Gate token address whose market cap gates this chunk. */
+  gateToken: string
+  /** Chain the gate token lives on (Haven-AOL chain variant name). */
+  gateChain?: string
+  /** Bond/oracle contract address stored by the publisher (future use). */
+  oracleAddress?: string
+}
 
 /**
  * Haven-AOL gate metadata (Arkiv `encryption_metadata` / `cid_encryption_metadata`).
  *
- * A gate record is either:
+ * A gate record is one of:
  *   • v1 (`{ version: 1, cid, chain, tokenAddress, threshold, encryptedAesKey }`) — the
- *     legacy per-CID Haven-AOL format, or
+ *     legacy per-CID Haven-AOL format,
  *   • v3 (`{ version: 3, chain, tokenAddress, threshold, epoch, encryptedAesKey }`) — the
- *     corpus-scoped format introduced in Haven-AOL Protocol v3.
+ *     corpus-scoped format introduced in Haven-AOL Protocol v3, or
+ *   • v4 (`{ version: 4, …, marketCapTarget, oracleAddress }`) — the market-cap-gated
+ *     drip format (Haven V4).
  *
- * Consumers that need to narrow should switch on `version` — `1` → v1, `3` → v3 — or
- * use the `parseAnyGateMetadata` / `decryptAnyContentKey` helpers in `@/lib/haven-aol`
- * which handle both shapes.
+ * Consumers that need to narrow should switch on `version` — `1` → v1, `3` → v3,
+ * `4` → v4 — or use the `parseAnyGateMetadata` / `decryptAnyContentKey` helpers in
+ * `@/lib/haven-aol` which handle all shapes.
  */
-export type EncryptionMetadata = GateMetadataJson | GateMetadataV3Json
+export type EncryptionMetadata = GateMetadataJson | GateMetadataV3Json | GateMetadataV4Json
 
 
 // ============================================================================
@@ -104,6 +129,12 @@ export interface Video {
 
   /** Haven-AOL gate v1 metadata for encrypted_cid decryption */
   cidEncryptionMetadata?: EncryptionMetadata
+
+  /**
+   * V4 drip unlock info. Present when `gate_version === 'v4'` — the entity is
+   * one chunk of a market-cap-gated drip release.
+   */
+  drip?: DripInfo
 
   /** Original MIME type (payload content_mime_type) */
   contentMimeType?: string

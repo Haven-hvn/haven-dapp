@@ -37,8 +37,10 @@
     "@base-org/account": "^2.5.9",
     "@filoz/synapse-sdk": "1.1.1",
     "@icp-sdk/core": "6.1.0",
+    "@icp-sdk/vetkeys": "^0.5.0",
     "@ipld/car": "5.4.7",
     "@ipld/dag-pb": "4.1.7",
+    "@mint.club/v2-sdk": "^2.0.0",
     "@noble/curves": "2.3.0",
     "@noble/hashes": "2.3.0",
     "@radix-ui/react-dialog": "1.1.23",
@@ -91,7 +93,8 @@
     "fake-indexeddb": "6.2.5",
     "postcss": "8.5.26",
     "tailwindcss": "4.3.3",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "vitest": "^4.1.11"
   },
   "engines": {
     "node": "26.7.0",

@@ -25,6 +25,7 @@ import { CacheAwareProgress } from './CacheAwareProgress'
 import { CacheIndicator } from './CacheIndicator'
 import { HolderIdentity } from '@/components/profile/HolderIdentity'
 import { ErrorOverlay } from './ErrorOverlay'
+import { DripLockNotice } from '@/components/video/DripLockNotice'
 import {
   getPlaybackErrorPresentation,
   PlaybackLoadError,
@@ -80,6 +81,27 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
   const showPlayer = videoUrl && !error
   // Show progress overlay only when loading AND not yet streaming
   const showProgress = isLoading && !isStreaming && !error
+
+  // V4 market-cap gate: drip chunks stay locked until the live cap meets
+  // the chunk's target. Early return AFTER all hooks — DripLockNotice owns
+  // its own polling and fails closed when price data is unavailable.
+  if (!showPlayer && video?.drip) {
+    return (
+      <div className="flex flex-col h-dvh min-h-0 overflow-hidden bg-black">
+        <div className="flex shrink-0 items-center justify-between p-3 sm:p-4 border-b border-white/10 safe-area-x">
+          <Link
+            href="/library"
+            className="flex items-center gap-2 text-white/80 hover:text-white transition-colors touch-manipulation min-h-[44px]"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            <span className="hidden sm:inline">Back to Library</span>
+            <span className="sm:hidden">Back</span>
+          </Link>
+        </div>
+        <DripLockNotice drip={video.drip} />
+      </div>
+    )
+  }
   
   return (
     <div className="flex flex-col h-dvh min-h-0 overflow-hidden bg-black">

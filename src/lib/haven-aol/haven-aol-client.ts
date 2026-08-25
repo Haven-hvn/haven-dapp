@@ -186,7 +186,7 @@ const BatchGateRequestV3Type = IDL.Record({
   eip712VerifyingContract: IDL.Text,
 })
 
-const GateErrorV3Variant = IDL.Variant({
+const GateErrorFieldsV3 = {
   InsufficientBalance: IDL.Record({ required: IDL.Nat, actual: IDL.Nat }),
   InvalidAddress: IDL.Text,
   InvalidThreshold: IDL.Null,
@@ -195,6 +195,16 @@ const GateErrorV3Variant = IDL.Variant({
   InvalidSignature: IDL.Text,
   NonceAlreadyUsed: IDL.Null,
   InvalidEpoch: IDL.Null,
+}
+
+const GateErrorV3Variant = IDL.Variant(GateErrorFieldsV3)
+
+// Protocol v4 extends the shared error variant with the market-cap gate
+// outcomes (mirrors backend.did; additive variants are wire-compatible).
+const GateErrorV4Variant = IDL.Variant({
+  ...GateErrorFieldsV3,
+  MarketCapNotReached: IDL.Record({ required: IDL.Nat, actual: IDL.Nat }),
+  InvalidOracle: IDL.Text,
 })
 
 const GateResultV3Variant = IDL.Variant({
@@ -377,6 +387,119 @@ export async function batchRequestDecryptionKeyV3(
           cid: entry.cid,
           encryptedKey: new Uint8Array(entry.encrypted_key),
         })),
+        verificationKey: new Uint8Array(raw.ok.verification_key),
+      },
+    }
+  }
+  return { err: raw.err }
+}
+
+// =============================================================================
+// v4 Candid surface (market-cap-gated drip — additive)
+// =============================================================================
+//
+// The v4 request mirrors GateRequestV3 plus `marketCapTarget` (whole USD)
+// and `oracleAddress` (Chainlink aggregator proxy). The error variant adds
+// `MarketCapNotReached` / `InvalidOracle`. Candid shape mirrors the
+// canister's backend.did v4 service entries.
+
+const GateRequestV4Type = IDL.Record({
+  chain: ChainV3Variant,
+  tokenAddress: IDL.Text,
+  threshold: IDL.Nat,
+  epoch: IDL.Nat,
+  marketCapTarget: IDL.Nat,
+  oracleAddress: IDL.Text,
+  evmAddress: IDL.Text,
+  transportPublicKey: IDL.Vec(IDL.Nat8),
+  nonce: IDL.Nat,
+  signature: IDL.Vec(IDL.Nat8),
+  eip712ChainId: IDL.Nat,
+  eip712VerifyingContract: IDL.Text,
+})
+
+interface HavenAolCanisterV4Actor {
+  requestDecryptionKeyV4: ActorMethod<
+    [unknown],
+    { ok: { encrypted_key: Uint8Array | number[]; verification_key: Uint8Array | number[] } } | { err: unknown }
+  >
+}
+
+const v4IdlFactory = () =>
+  IDL.Service({
+    requestDecryptionKeyV4: IDL.Func([GateRequestV4Type], [IDL.Variant({ ok: IDL.Record({ encrypted_key: IDL.Vec(IDL.Nat8), verification_key: IDL.Vec(IDL.Nat8) }), err: GateErrorV4Variant })], []),
+  })
+
+const v4ActorCache = new WeakMap<HttpAgent, Map<string, ActorSubclass<HavenAolCanisterV4Actor>>>()
+
+function getOrCreateV4Actor(
+  agent: HttpAgent,
+  canisterId: string,
+): ActorSubclass<HavenAolCanisterV4Actor> {
+  let perAgent = v4ActorCache.get(agent)
+  if (!perAgent) {
+    perAgent = new Map()
+    v4ActorCache.set(agent, perAgent)
+  }
+  let actor = perAgent.get(canisterId)
+  if (!actor) {
+    actor = Actor.createActor<HavenAolCanisterV4Actor>(v4IdlFactory, { agent, canisterId })
+    perAgent.set(canisterId, actor)
+  }
+  return actor
+}
+
+/** Wire shape passed to `requestDecryptionKeyV4`. */
+export interface GateRequestV4Wire {
+  chain: Chain
+  tokenAddress: string
+  threshold: bigint
+  epoch: bigint
+  /** Unlock target in whole USD. */
+  marketCapTarget: bigint
+  /** Chainlink aggregator proxy for the token's USD price. */
+  oracleAddress: string
+  evmAddress: string
+  transportPublicKey: Uint8Array
+  nonce: bigint
+  signature: Uint8Array
+  eip712ChainId: bigint
+  eip712VerifyingContract: string
+}
+
+/**
+ * Call the canister's `requestDecryptionKeyV4` endpoint.
+ *
+ * The canister refuses with `{ MarketCapNotReached }` until the live USD
+ * market cap of `tokenAddress` (via `oracleAddress`) reaches
+ * `marketCapTarget`; on success it derives under the "accessol_v4" context
+ * with the target baked into the preimage.
+ */
+export async function requestDecryptionKeyV4(
+  agent: HttpAgent,
+  canisterId: string,
+  request: GateRequestV4Wire,
+): Promise<GateResultV3> {
+  const actor = getOrCreateV4Actor(agent, canisterId)
+  const raw = await actor.requestDecryptionKeyV4({
+    chain: buildChainVariant(request.chain),
+    tokenAddress: request.tokenAddress,
+    threshold: request.threshold,
+    epoch: request.epoch,
+    marketCapTarget: request.marketCapTarget,
+    oracleAddress: request.oracleAddress,
+    evmAddress: request.evmAddress,
+    transportPublicKey: request.transportPublicKey,
+    nonce: request.nonce,
+    signature: request.signature,
+    eip712ChainId: request.eip712ChainId,
+    eip712VerifyingContract: request.eip712VerifyingContract,
+  })
+
+  if ('ok' in raw) {
+    return {
+      ok: {
+        encryptedKey: new Uint8Array(raw.ok.encrypted_key),
         verificationKey: new Uint8Array(raw.ok.verification_key),
       },
     }

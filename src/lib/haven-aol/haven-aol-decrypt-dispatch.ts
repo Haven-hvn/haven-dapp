@@ -13,18 +13,22 @@
  * @module lib/haven-aol/haven-aol-decrypt-dispatch
  */
 
-import type { GateMetadataV3Json } from 'haven-aol'
+import type { GateMetadataV3Json, GateMetadataV4Json } from 'haven-aol'
 import { decryptContentKey, type DecryptContentKeyResult } from './haven-aol-decrypt'
 import {
   decryptContentKeyV3,
   type DecryptContentKeyV3Result,
 } from './haven-aol-decrypt-v3'
+import {
+  decryptContentKeyV4,
+  type DecryptContentKeyV4Result,
+} from './haven-aol-decrypt-v4'
 import type { GateMetadataJson } from './haven-aol-metadata'
 import type { WalletClientLike } from './haven-aol-auth'
 import { HavenAolDecryptError } from './haven-aol-errors'
 
 export interface DecryptAnyContentKeyOptions {
-  encryptionMetadata: GateMetadataJson | GateMetadataV3Json
+  encryptionMetadata: GateMetadataJson | GateMetadataV3Json | GateMetadataV4Json
   encryptedCid?: string
   walletClient: WalletClientLike
   onProgress?: (message: string) => void
@@ -36,7 +40,7 @@ export interface DecryptAnyContentKeyResult {
   aesKey: Uint8Array
   fromCache: boolean
   /** Which protocol version was used. */
-  version: 1 | 3
+  version: 1 | 3 | 4
   /** Whether the v3 gate-key cache supplied the upstream VetKey. Undefined for v1. */
   fromGateKeyCache?: boolean
 }
@@ -46,7 +50,9 @@ export interface DecryptAnyContentKeyResult {
  * `metadata.version` and routes:
  *
  *   • `version === 1` → `decryptContentKey` (existing v1 path, untouched).
- *   • `version === 3` → `decryptContentKeyV3` (new v3 path).
+ *   • `version === 3` → `decryptContentKeyV3` (corpus + epoch path).
+ *   • `version === 4` → `decryptContentKeyV4` (market-cap-gated drip path;
+ *     the canister rejects with MarketCapNotReached until unlocked).
  *   • anything else → `HavenAolDecryptError('METADATA_INVALID')`.
  *
  * Useful in the community feed / video-detail pages where the caller does
@@ -91,6 +97,20 @@ export async function decryptAnyContentKey(
       fromCache: result.fromAesCache,
       version: 3,
       fromGateKeyCache: result.fromGateKeyCache,
+    }
+  }
+
+  if (meta.version === 4) {
+    const result: DecryptContentKeyV4Result = await decryptContentKeyV4({
+      encryptionMetadata: meta,
+      walletClient: options.walletClient,
+      onProgress: options.onProgress,
+      signal: options.signal,
+    })
+    return {
+      aesKey: result.aesKey,
+      fromCache: result.fromAesCache,
+      version: 4,
     }
   }
 

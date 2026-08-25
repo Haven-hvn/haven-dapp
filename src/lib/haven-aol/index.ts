@@ -83,9 +83,13 @@ export {
   GATE_METADATA_VERSION_V3,
   parseGateMetadataV3,
   isGateMetadataV3,
+  // v4 (market-cap-gated drip — additive)
+  GATE_METADATA_VERSION_V4,
+  parseGateMetadataV4,
+  isGateMetadataV4,
   parseAnyGateMetadata,
 } from './haven-aol-metadata'
-export type { GateMetadataJson, GateMetadataV3Json } from './haven-aol-metadata'
+export type { GateMetadataJson, GateMetadataV3Json, GateMetadataV4Json } from './haven-aol-metadata'
 
 export {
   HavenAolDecryptError,

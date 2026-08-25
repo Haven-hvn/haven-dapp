@@ -404,3 +404,125 @@ export async function retryWithFreshV3GateNonce(
     nonce: createRandomGateNonce(),
   })
 }
+
+// =============================================================================
+// v4 single-CID signed gate request (market-cap-gated drip — additive)
+// =============================================================================
+//
+// The v4 EIP-712 type string is
+// `GateRequestV4(address evmAddress,bytes transportPublicKey,uint256 epoch,uint256 marketCapTarget,uint256 nonce)`
+// — the signature COMMITS to the unlock target being requested, so a reader
+// cannot sign once at a low target and later claim a higher-unlocked chunk.
+
+/** Result of a v4 EIP-712 signing flow. Mirrors `SignedGateRequestV3` + target. */
+export interface SignedGateRequestV4 {
+  transportSecretKey: TransportSecretKey
+  transportPublicKey: Uint8Array
+  /** The epoch the user signed for. */
+  epoch: bigint
+  /** The market-cap unlock target (whole USD) the user signed for. */
+  marketCapTarget: bigint
+  nonce: bigint
+  signature: Uint8Array
+  eip712ChainId: bigint
+  eip712VerifyingContract: string
+}
+
+/**
+ * Create a v4 signed gate request using the connected wallet.
+ *
+ * @param walletClient    Connected wallet (wagmi `useWalletClient` shape).
+ * @param epoch           From `metadata.epoch` of the chunk — never
+ *                        `currentEpoch()` (Key Design Decision #7).
+ * @param marketCapTarget Whole-USD unlock target from the chunk metadata.
+ */
+export async function createSignedGateRequestV4(
+  walletClient: WalletClientLike,
+  epoch: bigint,
+  marketCapTarget: bigint,
+  options?: { nonce?: bigint }
+): Promise<SignedGateRequestV4> {
+  const { buildGateRequestV4TypedData } = await import('haven-aol')
+
+  const config = getHavenAolConfig()
+  const address = walletClient.account.address
+
+  if (!address) {
+    throw new HavenAolDecryptError(
+      'Wallet not connected. Please connect your wallet.',
+      'WALLET_NOT_CONNECTED'
+    )
+  }
+  if (typeof epoch !== 'bigint' || epoch < 0n) {
+    throw new HavenAolDecryptError(
+      `Invalid epoch for v4 gate request: ${String(epoch)}`,
+      'METADATA_INVALID'
+    )
+  }
+  if (typeof marketCapTarget !== 'bigint' || marketCapTarget < 0n) {
+    throw new HavenAolDecryptError(
+      `Invalid marketCapTarget for v4 gate request: ${String(marketCapTarget)}`,
+      'METADATA_INVALID'
+    )
+  }
+
+  const { secretKey, publicKey } = createTransportKeyPair()
+  const nonce = options?.nonce ?? createRandomGateNonce()
+
+  const typedData = buildGateRequestV4TypedData({
+    evmAddress: address,
+    transportPublicKey: publicKey,
+    epoch,
+    marketCapTarget,
+    nonce,
+    eip712ChainId: config.eip712ChainId,
+    eip712VerifyingContract: config.eip712VerifyingContract,
+  })
+
+  let signatureHex: string
+  try {
+    signatureHex = await walletClient.signTypedData({
+      domain: typedData.domain as unknown as Record<string, unknown>,
+      types: typedData.types as unknown as Record<string, unknown[]>,
+      primaryType: typedData.primaryType,
+      message: typedData.message as unknown as Record<string, unknown>,
+    })
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
+    if (msg.includes('rejected') || msg.includes('denied') || msg.includes('cancelled')) {
+      throw new HavenAolDecryptError(
+        'Signature request was rejected. Please approve the signature to decrypt the video.',
+        'SIGNING_REJECTED'
+      )
+    }
+    throw new HavenAolDecryptError(
+      `Failed to sign v4 gate request: ${msg}`,
+      'SIGNING_REJECTED'
+    )
+  }
+
+  return {
+    transportSecretKey: secretKey,
+    transportPublicKey: publicKey,
+    epoch,
+    marketCapTarget,
+    nonce,
+    signature: parseSignatureHex(signatureHex),
+    eip712ChainId: config.eip712ChainId,
+    eip712VerifyingContract: config.eip712VerifyingContract,
+  }
+}
+
+/**
+ * Retry helper — re-sign a v4 gate request with a fresh nonce after a rare
+ * `NonceAlreadyUsed`. Epoch and target are preserved.
+ */
+export async function retryWithFreshV4GateNonce(
+  walletClient: WalletClientLike,
+  epoch: bigint,
+  marketCapTarget: bigint
+): Promise<SignedGateRequestV4> {
+  return createSignedGateRequestV4(walletClient, epoch, marketCapTarget, {
+    nonce: createRandomGateNonce(),
+  })
+}

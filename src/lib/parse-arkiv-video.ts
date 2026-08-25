@@ -5,12 +5,59 @@
  */
 
 import type { Video } from '../types/video'
+import type { DripInfo } from '@/types/video'
 import { parseAnyGateMetadata } from './haven-aol'
 import { parseEntityPayload, type ArkivEntity } from './arkiv'
 import {
   getArkivEntityCreatedAtBlock,
   parseVideoCreatedAt,
 } from './arkiv-recency'
+
+/**
+ * Parse V4 drip fields from merged attribute/payload data.
+ *
+ * Attributes are the filterable source of truth (`gate_version`,
+ * `market_cap_target_usd`, `drip_index`, …); the payload carries the same
+ * fields under camelCase names. Either surface is accepted — attributes win
+ * when both agree to be present.
+ */
+export function parseDripInfo(
+  data: Record<string, unknown>,
+  payloadData: Record<string, unknown>
+): DripInfo | undefined {
+  const gateVersion = data['gate_version'] ?? payloadData['gateVersion']
+  if (gateVersion !== 'v4') return undefined
+
+  const rawTarget = data['market_cap_target_usd'] ?? payloadData['marketCapTargetUsd']
+  const target = Number(rawTarget)
+  const dripIndex = Number(data['drip_index'] ?? payloadData['dripIndex'] ?? 0)
+  const dripTotal = Number(data['drip_total'] ?? payloadData['dripTotal'] ?? 1) || 1
+  const dripId = String(
+    data['drip_id'] ?? payloadData['dripId'] ?? ''
+  )
+  const oracleAddress =
+    (data['oracle_address'] as string | undefined) ??
+    (payloadData['oracleAddress'] as string | undefined)
+
+  if (!Number.isFinite(target) || target <= 0 || !dripId) return undefined
+
+  const gateToken = String(
+    data['gate_token'] ?? payloadData['tokenAddress'] ?? ''
+  )
+
+  return {
+    gateVersion: 'v4',
+    marketCapTargetUsd: target,
+    dripIndex: Number.isFinite(dripIndex) ? dripIndex : 0,
+    dripTotal,
+    dripId,
+    gateToken,
+    gateChain:
+      (data['gate_chain'] as string | undefined) ??
+      (payloadData['chain'] as string | undefined),
+    oracleAddress: oracleAddress || undefined,
+  }
+}
 
 
 /**
@@ -52,6 +99,7 @@ export function parseArkivEntityToVideo(entity: ArkivEntity): Video {
 
   const vlmJsonCid = (get('vlm_json_cid') as string) || undefined
   const createdAtBlock = getArkivEntityCreatedAtBlock(entity)
+  const drip = parseDripInfo(data, payloadData)
 
   return {
     id: entity.key,
@@ -67,6 +115,7 @@ export function parseArkivEntityToVideo(entity: ArkivEntity): Video {
 
     isEncrypted: Boolean(get('is_encrypted')),
     encryptionMetadata: encryptionMeta,
+    drip,
 
     cidEncryptionMetadata:
       parseAnyGateMetadata(get('cid_encryption_metadata')) ?? undefined,

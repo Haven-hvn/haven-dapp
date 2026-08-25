@@ -1,20 +1,43 @@
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { realpathSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// The haven-aol SDK may be a real checkout (CI) or a symlink (local dev).
+// Webpack resolves requesters through the REAL path, so ws.js aliases must
+// be keyed off the realpath to actually match.
+const havenAolReal = (() => {
+  try {
+    return realpathSync(join(__dirname, 'haven-aol'));
+  } catch {
+    return join(__dirname, 'haven-aol');
+  }
+})();
+
+function ethersWsAliasPaths(ethersRoot) {
+  return [
+    join(ethersRoot, 'lib.esm', 'providers', 'ws.js'),
+    join(ethersRoot, 'lib.commonjs', 'providers', 'ws.js'),
+  ];
+}
+
+const sdkEthersNodeModules = [
+  join(havenAolReal, 'packages', 'typescript', 'node_modules'),
+  join(havenAolReal, 'packages', 'typescript'), // hoisted layout fallback
+];
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Static export for JAMstack deployment
   output: 'export',
-  
+
   // Image optimization disabled for static export
   images: {
     unoptimized: true,
   },
-  
-  
+
   // Skip type checking during build (handled separately via `npm run type-check`)
   typescript: {
     ignoreBuildErrors: true,
@@ -90,17 +113,34 @@ const nextConfig = {
 
     // Resolve haven-aol source directly (the package uses .js extensions in imports)
     // and handle @/* alias for TS 7 compatibility (baseUrl removed)
-    // and fix ethers ws.js re-export for static export
+    // and fix ethers ws.js re-export for static export.
+    // ws.js aliases cover BOTH the literal checkout path and the realpath
+    // (webpack resolves requesters through real paths when the SDK is a symlink).
+    const wsAliasEntries = {};
+    for (const nm of sdkEthersNodeModules) {
+      for (const p of ethersWsAliasPaths(join(nm, 'ethers'))) {
+        wsAliasEntries[p] = join(__dirname, 'src/mocks/ws.js');
+      }
+    }
+    // Legacy literal-path aliases (non-symlinked checkouts, e.g. CI).
+    for (const base of [join(__dirname, 'haven-aol'), havenAolReal]) {
+      for (const p of ethersWsAliasPaths(
+        join(base, 'packages', 'typescript', 'node_modules', 'ethers')
+      )) {
+        wsAliasEntries[p] = join(__dirname, 'src/mocks/ws.js');
+      }
+      for (const p of ethersWsAliasPaths(join(__dirname, 'node_modules', 'ethers'))) {
+        wsAliasEntries[p] = join(__dirname, 'src/mocks/ws.js');
+      }
+    }
+
     config.resolve.alias = {
       ...config.resolve.alias,
       'haven-aol': join(__dirname, 'haven-aol/packages/typescript/src/index.ts'),
       '@': join(__dirname, 'src'),
       '@react-native-async-storage/async-storage': join(__dirname, 'src/mocks/react-native-async-storage.js'),
       ws: join(__dirname, 'src/mocks/ws.js'),
-      [join(__dirname, 'haven-aol/packages/typescript/node_modules/ethers/lib.esm/providers/ws.js')]: join(__dirname, 'src/mocks/ws.js'),
-      [join(__dirname, 'haven-aol/packages/typescript/node_modules/ethers/lib.commonjs/providers/ws.js')]: join(__dirname, 'src/mocks/ws.js'),
-      [join(__dirname, 'node_modules/ethers/lib.esm/providers/ws.js')]: join(__dirname, 'src/mocks/ws.js'),
-      [join(__dirname, 'node_modules/ethers/lib.commonjs/providers/ws.js')]: join(__dirname, 'src/mocks/ws.js'),
+      ...wsAliasEntries,
     };
 
     // Allow .js extension imports to resolve to .ts files (ESM convention in haven-aol source)

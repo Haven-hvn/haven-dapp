@@ -71,7 +71,13 @@ export default function LandingPage() {
                 Open Library
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
               </Link>
-              <a 
+              <Link
+                href="/publish"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-lg border border-[#00F5FF]/30 text-[#00F5FF] font-medium hover:bg-[#00F5FF]/10 transition-all duration-300"
+              >
+                Publish a Drip
+              </Link>
+              <a
                 href="https://github.com/Haven-hvn" 
                 target="_blank" 
                 rel="noopener noreferrer"

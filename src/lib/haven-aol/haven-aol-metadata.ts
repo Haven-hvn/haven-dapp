@@ -23,10 +23,14 @@
 import type { Chain } from 'haven-aol'
 import {
   GATE_METADATA_VERSION_V3 as SDK_GATE_METADATA_VERSION_V3,
+  GATE_METADATA_VERSION_V4 as SDK_GATE_METADATA_VERSION_V4,
   isGateMetadataV3 as sdkIsGateMetadataV3,
   parseGateMetadataV3 as sdkParseGateMetadataV3,
+  isGateMetadataV4 as sdkIsGateMetadataV4,
+  parseGateMetadataV4 as sdkParseGateMetadataV4,
   VALID_CHAINS,
   type GateMetadataV3Json,
+  type GateMetadataV4Json,
 } from 'haven-aol'
 
 export const GATE_METADATA_VERSION = 1 as const
@@ -218,10 +222,25 @@ export const parseGateMetadataV3 = sdkParseGateMetadataV3
  */
 export const isGateMetadataV3 = sdkIsGateMetadataV3
 
+// ── v4 additive surface (market-cap-gated drip) ──────────────────────
+
+/** The integer literal `4` that uploaders place in `version` for v4. */
+export const GATE_METADATA_VERSION_V4 = SDK_GATE_METADATA_VERSION_V4
+
+/** v4 gate-metadata JSON shape (re-exported from the SDK). */
+export type { GateMetadataV4Json }
+
+/** Strict v4 parser — thin re-export of the SDK's `parseGateMetadataV4`. */
+export const parseGateMetadataV4 = sdkParseGateMetadataV4
+
+/** Type guard for v4 metadata (re-exported from the SDK). */
+export const isGateMetadataV4 = sdkIsGateMetadataV4
+
 /**
  * Discriminated dispatcher. Inspects `raw.version` and routes:
  *   • `version === 1` → strict v1 parser (`parseGateMetadata` semantics).
  *   • `version === 3` → SDK v3 parser.
+ *   • `version === 4` → SDK v4 parser.
  *   • anything else (including `version === true`, which `=== 1` would
  *     accept in a naive integer comparison) → `null`.
  *
@@ -232,7 +251,7 @@ export const isGateMetadataV3 = sdkIsGateMetadataV3
  */
 export function parseAnyGateMetadata(
   raw: unknown
-): GateMetadataJson | GateMetadataV3Json | null {
+): GateMetadataJson | GateMetadataV3Json | GateMetadataV4Json | null {
   if (raw === null || raw === undefined) return null
 
   let parsed: unknown
@@ -267,6 +286,9 @@ export function parseAnyGateMetadata(
   }
   if (version === GATE_METADATA_VERSION_V3) {
     return sdkIsGateMetadataV3(parsed) ? (parsed as GateMetadataV3Json) : null
+  }
+  if (version === GATE_METADATA_VERSION_V4) {
+    return sdkIsGateMetadataV4(parsed) ? (parsed as GateMetadataV4Json) : null
   }
   return null
 }
