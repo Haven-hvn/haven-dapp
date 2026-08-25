@@ -187,3 +187,37 @@ export function formatUsdCompact(amount: number): string {
 function trimZeros(n: number): string {
   return n.toFixed(1).replace(/\.0$/, '')
 }
+
+// ============================================================================
+// Stage naming
+// ============================================================================
+
+const ROMAN: ReadonlyArray<[number, string]> = [
+  [10, 'X'], [9, 'IX'], [8, 'VIII'], [7, 'VII'], [6, 'VI'],
+  [5, 'V'], [4, 'IV'], [3, 'III'], [2, 'II'], [1, 'I'],
+]
+
+function romanize(n: number): string {
+  let rest = n
+  let out = ''
+  for (const [value, glyph] of ROMAN) {
+    while (rest >= value) {
+      out += glyph
+      rest -= value
+    }
+  }
+  return out
+}
+
+/**
+ * Creative display name for a stage position — the ladder reads like a
+ * film: `Teaser · Act I · Act II · Finale` (single-stage drips are one
+ * `Full drop`). Pure formatting; index must be within `[0, total)`.
+ */
+export function stageLabel(index: number, total: number): string {
+  if (!Number.isInteger(index) || !Number.isInteger(total)) return 'Stage'
+  if (total <= 1) return 'Full drop'
+  if (index === 0) return 'Teaser'
+  if (index === total - 1) return 'Finale'
+  return `Act ${romanize(index)}`
+}

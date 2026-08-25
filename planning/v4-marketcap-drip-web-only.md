@@ -92,3 +92,50 @@ reserve-token selection); the picker deep-links to creation instead.
 - arkiv-publish: attrs/payload builders (pure parts), metadata JSON passes
   `parseAnyGateMetadata`.
 - parse-arkiv-video: v4 mapping from synthetic entities.
+
+## Revision — staged per-unlock-stage publishing (implemented)
+
+The one-shot "publish everything on one drag-drop" flow was replaced by a
+STAGED workflow: each market-cap rung ("first mkt cap, then second, …") is
+its own upload, from any wallet, at any time.
+
+### Model (`src/lib/v4/drip-session.ts`)
+
+A `DripSession` is created once and freezes everything cross-upload
+consistency needs: shared `dripId`, contiguous byte ranges, SHA-256
+commitment of the FULL source file, gate snapshot, per-stage plans +
+committed results. Stages publish strictly in order
+(`nextPublishableIndex` — no gaps, no stranded middle chunks). Results are
+a contiguous prefix; manifests re-validate all of this fail-closed.
+
+### Why different uploaders are cryptographically safe
+
+IBE wrapping needs only PUBLIC inputs (canister dpk + the v4 identity
+chain/token/threshold/epoch/target/cid). Each stage generates its own fresh
+AES key, wraps it to its own identity, zeroizes it. No key material ever
+crosses uploaders or machines. Per-stage epochs are recorded in metadata
+and replayed by readers during derivation.
+
+### Workflow UI
+
+- Browse screen: local sessions with tick marks ("2/3 stages"), resume,
+  delete, import hand-off kit.
+- Create screen: drop film → configure ladder → "lock in plan" (hashes
+  file, persists session, uploads nothing yet).
+- Session screen: StageChecklist (done ✓ / up-next / locked rows with
+  uploader badges), StageRunner for exactly ONE stage (re-attach source →
+  SHA-256 verify badge → encrypt/pin/index pipeline → check mark moves),
+  live market preview, HandoffPanel (export/import manifest + watch link).
+- `published_by` attribute records which wallet released each stage.
+
+### Hand-off kits
+
+Manifest JSON = session state minus secrets (there are none). Teammate
+imports kit + original film; bytes are hash-verified against the
+commitment before any upload can start.
+
+### Tests
+
+- drip-session.test.ts: creation/commitment, sequential commits, source
+  verification, manifest tamper matrix, localStorage roundtrip, naming.
+- arkiv-publish.test.ts: `published_by` attr presence/lowercasing/omission.

@@ -3,16 +3,18 @@
  *
  * Each drip chunk becomes ONE Arkiv entity:
  *   - attributes are the filterable surface (`project`, `type`, `gate_*`,
- *     `gate_version="v4"`, `market_cap_target_usd`, `drip_index`) so
- *     `arkiv_query` can filter drips by target;
- *   - payload is the v1 gate-metadata JSON every existing reader already
- *     parses, extended with v4 fields (extra keys are ignored by the frozen
- *     v1 guard but survive parsing, giving forward compatibility).
+ *     `gate_version="v4"`, `market_cap_target_usd`, `drip_index`,
+ *     `published_by`) so `arkiv_query` can filter drips by target or
+ *     uploader;
+ *   - payload is the v4 gate-metadata JSON every existing reader already
+ *     parses, extended with drip-grouping extras (extra keys are ignored by
+ *     the frozen SDK guard but survive parsing, giving forward compat).
  *
- * The orchestrator runs per chunk: slice -> stream-encrypt -> pin to
- * Filecoin -> IBE-wrap content key -> index in Arkiv. Any chunk failure
- * aborts the run (already-published chunks remain live; the caller surfaces
- * partial state).
+ * `publishDripStage` runs ONE unlock stage end-to-end: slice -> stream-
+ * encrypt -> pin to Filecoin -> IBE-wrap content key -> index in Arkiv.
+ * The staged session workflow (`drip-session.ts`) calls it once per market-
+ * cap rung, possibly from different wallets/machines; `publishDripChunks`
+ * keeps the classic one-sitting whole-drip loop on top of it.
  *
  * @module lib/v4/arkiv-publish
  */
@@ -83,6 +85,8 @@ export function buildDripEntityBody(args: {
   dripId: string
   /** Publish epoch — pass once per run so all chunks share it. */
   epoch?: number
+  /** Publishing wallet — recorded as a filterable `published_by` attr. */
+  publisherAddress?: string
 }): DripEntityBody {
   const { plan, gate, pieceCid, encryptedHash, originalHash, mimeType, encryptedAesKeyB64, dripId } =
     args
@@ -110,6 +114,9 @@ export function buildDripEntityBody(args: {
     { key: 'drip_total', value: plan.dripTotal },
     { key: 'drip_id', value: dripId },
     { key: 'oracle_address', value: gate.oracleAddress.toLowerCase() },
+    ...(args.publisherAddress
+      ? [{ key: 'published_by', value: args.publisherAddress.toLowerCase() }]
+      : []),
   ]
 
   const metadata = buildGateMetadataV4({
@@ -222,26 +229,73 @@ export class DripPublishError extends Error {
   }
 }
 
-/**
- * Publish a full drip: n encrypted chunk entities sharing one `dripId`.
- *
- * Sequential on purpose — each chunk depends on the previous one's success
- * (a gap would strand locked content behind a missing middle chunk), and it
- * keeps wallet prompts predictable.
- */
-export async function publishDripChunks(args: PublishDripArgs): Promise<string[]> {
-  const { source, plans, gate, mimeType, wallet, signal, onChunkStage } = args
+/** Everything the session layer needs to record a committed stage. */
+export interface PublishStageResult {
+  pieceCid: string
+  entityKey: string
+  encryptedHash: string
+  originalHash: string
+  /** 30-day epoch frozen into this stage's metadata + IBE identity. */
+  epoch: number
+}
 
-  if (plans.length === 0) throw new DripPublishError('Drip has no chunks', -1, 'encrypting')
+export interface PublishDripStageArgs {
+  /**
+   * FULL source bytes — the stage's slice is taken from the plan so range
+   * math can never drift between session planning and encryption.
+   */
+  source: Uint8Array
+  plan: DripChunkPlan
+  gate: DripGateConfig
+  mimeType: string
+  wallet: PublisherWalletLike
+  signal?: AbortSignal
+  onChunkStage?: (progress: DripChunkProgress) => void
+  /** Publishing wallet — written to the `published_by` attribute. */
+  publisherAddress?: string
+  /**
+   * Shared drip-grouping id. Pass the session's `dripId` when publishing
+   * through a staged session; defaults to a fresh uuid (one-shot runs that
+   * never mix with sessions).
+   */
+  dripId?: string
+}
+
+/**
+ * Publish exactly ONE unlock stage of a drip.
+ *
+ * Pipeline: slice (per plan) → stream-encrypt with a FRESH AES key → pin to
+ * Filecoin → IBE-wrap the key to this chunk's v4 identity (chain, token,
+ * threshold, epoch, target, cid — byte-identical to the canister's
+ * `computeDerivationInputV4`) → index one Arkiv entity.
+ *
+ * Safe for cross-wallet/cross-machine staging: wrapping needs only PUBLIC
+ * inputs, and the fresh AES key is zeroized immediately after wrapping.
+ * ORDERING IS THE CALLER'S JOB — publish stages strictly in dripIndex order
+ * (see `drip-session.ts` `nextPublishableIndex`); a gap strands content.
+ */
+export async function publishDripStage(
+  args: PublishDripStageArgs
+): Promise<PublishStageResult> {
+  const { source, plan, gate, mimeType, wallet, signal, onChunkStage, publisherAddress } = args
+
   if (!VALID_CHAINS.includes(gate.chain)) {
-    throw new DripPublishError(`Unsupported chain ${gate.chain}`, -1, 'encrypting')
+    throw new DripPublishError(`Unsupported chain ${gate.chain}`, plan.dripIndex, 'encrypting')
+  }
+  const slice = source.slice(plan.startByte, plan.endByte)
+  if (slice.byteLength !== plan.endByte - plan.startByte) {
+    throw new DripPublishError(
+      `Source too small for stage ${plan.dripIndex} range [${plan.startByte}, ${plan.endByte})`,
+      plan.dripIndex,
+      'encrypting'
+    )
   }
 
   // Performs the Braga network switch (best-effort) before any writes.
   await createArkivWriteClient(wallet)
   const provider = extractProvider(wallet.transport)
   if (!provider) {
-    throw new DripPublishError('Wallet provider unavailable for Arkiv writes', -1, 'indexing')
+    throw new DripPublishError('Wallet provider unavailable for Arkiv writes', plan.dripIndex, 'indexing')
   }
   const arkivClient = createArkivWalletClient({
     chain: braga,
@@ -250,98 +304,136 @@ export async function publishDripChunks(args: PublishDripArgs): Promise<string[]
   })
   const synapse = await getUploadSynapse(wallet)
 
-  const dripId = crypto.randomUUID()
-  // One epoch for the whole run so metadata + IBE wrap can never disagree.
+  // One epoch per STAGE — staged uploads may land in different epochs; each
+  // entity records its own and readers replay it during derivation.
   const publishEpoch = currentDripEpoch()
-  const entityKeys: string[] = []
+  let lastStage: DripStage = 'encrypting'
+  const report = (p: DripChunkProgress) => {
+    lastStage = p.stage
+    onChunkStage?.(p)
+  }
 
+  report({ dripIndex: plan.dripIndex, stage: 'encrypting' })
+  const { encrypted, aesKey } = await havenStreamEncrypt(slice, { signal })
+  const encryptedHash = await sha256Hex(encrypted)
+  const originalHash = await sha256Hex(slice)
+
+  try {
+    // Pin ciphertext to Filecoin.
+    let uploaded = 0
+    const upload = await uploadEncryptedPiece(synapse, encrypted, {
+      signal,
+      onProgress: (p) =>
+        report({
+          dripIndex: plan.dripIndex,
+          stage: 'uploading',
+          bytesUploaded: p.bytesUploaded ?? uploaded,
+          totalBytes: p.totalBytes,
+        }),
+    }).then((r) => {
+      uploaded = r.size
+      return r
+    })
+
+    // IBE-wrap the content key to this chunk's v4 identity.
+    const derivationInput = await computeDripDerivationInput({
+      chain: gate.chain,
+      tokenAddress: gate.gateToken,
+      threshold: BigInt(thresholdOf(gate)),
+      epoch: BigInt(publishEpoch),
+      marketCapTarget: BigInt(Math.round(plan.marketCapTargetUsd)),
+      cid: upload.pieceCid,
+    })
+    const encryptedAesKeyB64 = await wrapAesKey(aesKey, derivationInput)
+
+    // Index the chunk entity in Arkiv.
+    report({
+      dripIndex: plan.dripIndex,
+      stage: 'indexing',
+      pieceCid: upload.pieceCid,
+    })
+    const body = buildDripEntityBody({
+      plan,
+      gate,
+      pieceCid: upload.pieceCid,
+      encryptedHash,
+      originalHash,
+      mimeType,
+      encryptedAesKeyB64,
+      dripId: args.dripId ?? crypto.randomUUID(),
+      epoch: publishEpoch,
+      publisherAddress: publisherAddress ?? wallet.account.address,
+    })
+
+    const { entityKey } = await arkivClient.createEntity({
+      payload: jsonToPayload(body.payloadJson),
+      contentType: 'application/json',
+      attributes: body.attributes,
+      expiresIn: DRIP_ENTITY_EXPIRES_IN_SECONDS,
+    })
+
+    report({
+      dripIndex: plan.dripIndex,
+      stage: 'done',
+      pieceCid: upload.pieceCid,
+      entityKey,
+    })
+
+    return {
+      pieceCid: upload.pieceCid,
+      entityKey,
+      encryptedHash,
+      originalHash,
+      epoch: publishEpoch,
+    }
+  } catch (error) {
+    if (signal?.aborted) throw new DOMException('Publish cancelled', 'AbortError')
+    throw new DripPublishError(
+      error instanceof Error ? error.message : String(error),
+      plan.dripIndex,
+      lastStage
+    )
+  } finally {
+    zeroAesKey(aesKey)
+  }
+}
+
+/**
+ * Publish a full drip in one sitting: n encrypted chunk entities sharing
+ * one `dripId`. Thin sequential wrapper over `publishDripStage` kept for
+ * bulk flows — each chunk depends on the previous one's success (a gap
+ * would strand locked content behind a missing middle chunk), and it keeps
+ * wallet prompts predictable.
+ */
+export async function publishDripChunks(args: PublishDripArgs): Promise<string[]> {
+  const { source, plans, gate, mimeType, wallet, signal, onChunkStage } = args
+
+  if (plans.length === 0) throw new DripPublishError('Drip has no chunks', -1, 'encrypting')
+
+  // One shared grouping id for the whole run.
+  const dripId = crypto.randomUUID()
+
+  const entityKeys: string[] = []
   for (const plan of plans) {
     if (signal?.aborted) throw new DOMException('Publish cancelled', 'AbortError')
-    let lastStage: DripStage = 'encrypting'
-    const report = (p: DripChunkProgress) => {
-      lastStage = p.stage
-      onChunkStage?.(p)
-    }
-    const slice = source.slice(plan.startByte, plan.endByte)
-
-    // 1. Encrypt in haven-cli streaming format.
-    report({ dripIndex: plan.dripIndex, stage: 'encrypting' })
-    const { encrypted, aesKey } = await havenStreamEncrypt(slice, { signal })
-    const encryptedHash = await sha256Hex(encrypted)
-    const originalHash = await sha256Hex(slice)
-
-    try {
-      // 2. Pin ciphertext to Filecoin.
-      let uploaded = 0
-      const upload = await uploadEncryptedPiece(synapse, encrypted, {
-        signal,
-        onProgress: (p) =>
-          report({
-            dripIndex: plan.dripIndex,
-            stage: 'uploading',
-            bytesUploaded: p.bytesUploaded ?? uploaded,
-            totalBytes: p.totalBytes,
-          }),
-      }).then((r) => {
-        uploaded = r.size
-        return r
-      })
-
-      // 3. IBE-wrap the content key to this chunk's v4 identity
-      //    (chain, token, threshold, epoch, target — byte-identical to the
-      //    canister's computeDerivationInputV4).
-      const derivationInput = await computeDripDerivationInput({
-        chain: gate.chain,
-        tokenAddress: gate.gateToken,
-        threshold: BigInt(thresholdOf(gate)),
-        epoch: BigInt(publishEpoch),
-        marketCapTarget: BigInt(Math.round(plan.marketCapTargetUsd)),
-        cid: upload.pieceCid,
-      })
-      const encryptedAesKeyB64 = await wrapAesKey(aesKey, derivationInput)
-
-      // 4. Index the chunk entity in Arkiv.
-      report({
-        dripIndex: plan.dripIndex,
-        stage: 'indexing',
-        pieceCid: upload.pieceCid,
-      })
-      const body = buildDripEntityBody({
-        plan,
-        gate,
-        pieceCid: upload.pieceCid,
-        encryptedHash,
-        originalHash,
-        mimeType,
-        encryptedAesKeyB64,
-        dripId,
-        epoch: publishEpoch,
-      })
-
-      const { entityKey } = await arkivClient.createEntity({
-        payload: jsonToPayload(body.payloadJson),
-        contentType: 'application/json',
-        attributes: body.attributes,
-        expiresIn: DRIP_ENTITY_EXPIRES_IN_SECONDS,
-      })
-
-      entityKeys.push(entityKey)
-      report({
-        dripIndex: plan.dripIndex,
-        stage: 'done',
-        pieceCid: upload.pieceCid,
-        entityKey,
-      })
-    } catch (error) {
-      if (signal?.aborted) throw new DOMException('Publish cancelled', 'AbortError')
-      throw new DripPublishError(
-        error instanceof Error ? error.message : String(error),
-        plan.dripIndex,
-        lastStage
-      )
-    } finally {
-      zeroAesKey(aesKey)
-    }
+    const result = await publishDripStage({
+      source,
+      plan,
+      gate,
+      mimeType,
+      wallet,
+      signal,
+      onChunkStage,
+      publisherAddress: wallet.account.address,
+      dripId,
+    }).catch((error: unknown) => {
+      // Re-tag pre-stage failures that never got a plan-scoped index.
+      if (error instanceof DripPublishError && error.dripIndex < 0) {
+        throw new DripPublishError(error.message, plan.dripIndex, error.stage)
+      }
+      throw error
+    })
+    entityKeys.push(result.entityKey)
   }
 
   return entityKeys

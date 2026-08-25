@@ -116,3 +116,20 @@ describe('buildDripEntityBody payload', () => {
     expect((body.payloadJson as { marketCapTarget?: number }).marketCapTarget).toBe(1_500_001)
   })
 })
+
+describe('buildDripEntityBody published_by (staged uploads)', () => {
+  it('records the publishing wallet lowercased when provided', () => {
+    const body = buildDripEntityBody({
+      ...BASE_ARGS,
+      publisherAddress: '0xAbCdEf0123456789AbCdEf0123456789AbCdEf01',
+    })
+    expect(findAttr(body.attributes, 'published_by')).toBe(
+      '0xabcdef0123456789abcdef0123456789abcdef01'
+    )
+  })
+
+  it('omits the attribute for one-shot runs without an explicit publisher', () => {
+    const body = buildDripEntityBody(BASE_ARGS)
+    expect(findAttr(body.attributes, 'published_by')).toBeUndefined()
+  })
+})
