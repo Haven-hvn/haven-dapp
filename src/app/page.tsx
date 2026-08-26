@@ -73,7 +73,7 @@ export default function LandingPage() {
                     Publish a Drip
                   </Link>
                   <a
-                    href="https://github.com/Haven-hvn"
+                    href="https://haven-hvn.github.io/docs/"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="label link-rule self-center py-2 sm:py-0"
