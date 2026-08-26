@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { gatewayNormalize } from '@/lib/ipfs'
 import { createArkivClient, parseEntityPayload } from '@/lib/arkiv'
 import { parseDripInfo } from '@/lib/parse-arkiv-video'
 import { formatUsdCompact } from '@/lib/v4/drip-plan'
@@ -30,8 +31,57 @@ function mintClubUrl(item: DropItem): string {
   return `https://mint.club/token/${chain}/${item.gateToken}`
 }
 
-function tokenLogoUrl(gateToken: string, chain: string): string {
-  return `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/${chain}/assets/${gateToken}/logo.png`
+function trustwalletLogo(gateToken: string, chain: string): string {
+  return `https://cdn.jsdelivr.net/gh/trustwallet/assets@master/blockchains/${chain}/assets/${gateToken}/logo.png`
+}
+function ipfsToHttp(u?: string): string | null {
+  if (!u) return null
+  try { return gatewayNormalize(u) } catch { return null }
+}
+
+function TokenLogo({ item }: { item: DropItem }) {
+  const [src, setSrc] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    async function resolve() {
+      // For POLYCAT demo use SDK to get real IPFS logo — works even if not on TrustWallet
+      if (item.id === 'demo-1') {
+        try {
+          const { mintclub } = await import('@mint.club/v2-sdk')
+          const h = mintclub.network('polygon' as any).token('POLYCAT')
+          // try metadata logo first
+          let logo: string | null = null
+          try {
+            const md: any = await (h as any).getMetadata?.() ?? await (h as any).getTokenMetadata?.()
+            logo = md?.logo ?? md?.image ?? md?.properties?.image ?? null
+          } catch {}
+          const http = ipfsToHttp(logo ?? undefined)
+          if (http && !cancelled) { setSrc(http); return }
+          // fallback: real address -> trustwallet cdn
+          try { const addr = await h.getTokenAddress(); if (addr && !cancelled) { setSrc(trustwalletLogo(addr, 'polygon')); return } } catch {}
+        } catch {}
+      }
+      if (!cancelled) setSrc(trustwalletLogo(item.gateToken, (item.gateChain || 'base').toLowerCase()))
+    }
+    resolve()
+    return () => { cancelled = true }
+  }, [item.gateToken, item.gateChain, item.id])
+  if (!src) return <div className="w-full h-full bg-line animate-pulse" />
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt=""
+      className="w-full h-full object-cover"
+      onError={(e) => {
+        const img = e.currentTarget as HTMLImageElement
+        // fallback to initials blockie instead of hiding
+        img.style.display = 'none'
+        const fallback = img.nextElementSibling as HTMLElement | null
+        if (fallback) fallback.style.display = 'flex'
+      }}
+    />
+  )
 }
 
 export function UpcomingDrops() {
@@ -96,15 +146,10 @@ export function UpcomingDrops() {
             rel="noopener noreferrer"
             className="flex gap-3 p-3 border border-line bg-surface hover:bg-surface-raised transition-colors group"
           >
-            {/* token logo */}
-            <div className="w-12 h-12 rounded bg-line shrink-0 overflow-hidden flex items-center justify-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={tokenLogoUrl(item.gateToken, item.gateChain || 'base')}
-                alt=""
-                className="w-full h-full object-cover"
-                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-              />
+            {/* token logo — on-chain IPFS first, trustwallet fallback, initials fallback */}
+            <div className="w-12 h-12 rounded bg-line shrink-0 overflow-hidden flex items-center justify-center text-[10px] font-bold text-fg-4">
+              <TokenLogo item={item} />
+              <span style={{ display: 'none' }} className="w-full h-full items-center justify-center bg-seal-wash">{item.title.slice(0, 2).toUpperCase()}</span>
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-fg truncate group-hover:underline">{item.title}</p>
