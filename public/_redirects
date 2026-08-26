@@ -1,0 +1,10 @@
+# Haven static export — clean-route rewrites.
+# Evaluated only by gateways that support _redirects (Kubo SPA mode);
+# other gateways ignore this file. The service worker + early-click
+# guard cover the rest.
+/publish /publish.html 200
+/library /library.html 200
+/watch /watch.html 200
+/settings /settings.html 200
+/community /community.html 200
+/auth/callback /auth/callback.html 200

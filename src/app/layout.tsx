@@ -10,6 +10,7 @@ import { ErrorProvider } from "@/components/providers/ErrorProvider";
 import { ServiceWorkerProvider } from "@/components/providers/ServiceWorkerProvider";
 import { SecurityCleanupProvider } from "@/components/providers/SecurityCleanupProvider";
 import { CacheProvider } from "@/components/providers/CacheProvider";
+import { HydrationNavBridge } from "@/components/providers/HydrationNavBridge";
 import { WebVitals } from "@/components/analytics/WebVitals";
 
 const geistSans = localFont({
@@ -138,6 +139,21 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/*
+          Early-click guard (static-export / IPFS gateways).
+          Extensionless internal links clicked before React hydrates would
+          navigate to a gateway directory listing ("Index of …"). This
+          capture-phase listener queues such clicks; HydrationNavBridge
+          replays them through the router once hydration lands, with a
+          hard fallback to the flat `.html` file if hydration never does.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){if(window.__havenEarlyClickGuard)return;window.__havenEarlyClickGuard=true;window.addEventListener("click",function(e){if(window.__havenHydrated)return;if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;var t=e.target;var a=t&&t.closest?t.closest("a[href]"):null;if(!a||a.target==="_blank"||a.hasAttribute("download"))return;var href=a.getAttribute("href")||"";if(!href||href.charAt(0)==="#")return;var url=new URL(a.href,location.href);if(url.origin!==location.origin)return;var path=url.pathname;if(path==="/")return;if(/\\/[^/]*\\.[^/]+$/.test(path))return;e.preventDefault();e.stopImmediatePropagation();if(!window.__havenPendingNav){window.__havenPendingNav={path:path+url.search,fallback:path.replace(/\\/+$/,"")+".html"+url.search};setTimeout(function(){if(!window.__havenHydrated&&window.__havenPendingNav){location.href=window.__havenPendingNav.fallback}},5000)}},true)})();`,
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${newsreader.variable} antialiased`}
       >
@@ -152,6 +168,7 @@ export default function RootLayout({
                       <ErrorProvider>
                         <div className="material-grain" aria-hidden="true" />
                         {children}
+                        <HydrationNavBridge />
                       </ErrorProvider>
                     </HavenAolProvider>
                   </AuthProvider>

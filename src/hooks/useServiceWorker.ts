@@ -67,9 +67,15 @@ export function useServiceWorker(): ServiceWorkerState {
 
     const registerServiceWorker = async () => {
       try {
-        // Register the service worker
-        const registration = await navigator.serviceWorker.register('/haven-sw.js', {
-          scope: '/',
+        // Scope the worker to the directory the app is served from. On
+        // IPFS gateways that is a subpath (/ipfs/<cid>/), where a hardcoded
+        // scope of '/' would exceed the worker's max scope and registration
+        // would fail outright.
+        const scriptUrl = new URL('haven-sw.js', window.location.href).href
+        const scope = new URL('./', window.location.href).pathname
+
+        const registration = await navigator.serviceWorker.register(scriptUrl, {
+          scope,
         })
 
         if (!isMounted) return

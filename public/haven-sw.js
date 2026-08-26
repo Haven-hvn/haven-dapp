@@ -51,10 +51,20 @@ self.addEventListener('activate', (event) => {
 
 /**
  * Service Worker fetch event
- * Intercept requests to /haven/v/* and serve from cache
+ *
+ * 1. Navigation requests: static exports emit flat `<route>.html` files,
+ *    but IPFS gateways serve directory paths as listings instead of
+ *    resolving index files. Rewrite extensionless navigations to their
+ *    real HTML file so direct hits and refreshes on `/publish/` work.
+ * 2. /haven/v/* requests: serve decrypted video from the Cache API.
  */
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
+
+  if (event.request.mode === 'navigate' || event.request.destination === 'document') {
+    event.respondWith(handleNavigationRequest(event.request))
+    return
+  }
 
   // Only intercept /haven/v/* requests
   if (!url.pathname.startsWith(VIDEO_URL_PREFIX)) {
@@ -63,6 +73,40 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(handleVideoRequest(event.request))
 })
+
+/**
+ * Resolve a navigation to the exported HTML file behind it.
+ * Tries, in order: `<path>/index.html` and `<path-without-slash>.html`
+ * for directory-style paths; `<path>.html` and `<path>/index.html` for
+ * clean-route paths. Falls back to the network untouched.
+ */
+async function handleNavigationRequest(request) {
+  const url = new URL(request.url)
+  const path = url.pathname
+
+  let candidates = []
+  if (path === '/' || path.endsWith('/')) {
+    candidates = [path + 'index.html', path.replace(/\/$/, '') + '.html']
+  } else if (!/\.[^/]+$/.test(path)) {
+    candidates = [path + '.html', path + '/index.html']
+  } else {
+    return fetch(request) // Real file — nothing to fix.
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const target = new URL(candidate, url.origin).href
+      const response = await fetch(new Request(target, { headers: request.headers }))
+      if (response.ok && (response.headers.get('Content-Type') || '').includes('text/html')) {
+        return response
+      }
+    } catch {
+      // Try the next candidate.
+    }
+  }
+
+  return fetch(request)
+}
 
 /**
  * Handle video requests from cache
