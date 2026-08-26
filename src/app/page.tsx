@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { ConnectButton } from '@/components/auth/ConnectButton'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { ArrowRight } from 'lucide-react'
-import { TokenGatedEventsEmbed } from '@/components/events/TokenGatedEventsEmbed'
+import { UpcomingDrops } from '@/components/drops/UpcomingDrops'
 import { Mark } from '@/components/mark/Mark'
 
 /**
@@ -113,20 +113,15 @@ export default function LandingPage() {
                         Upcoming Video Drops
                       </h2>
                       <p className="label mt-2 text-fg-4 normal-case tracking-[0.04em] whitespace-normal">
-                        Token-gated events for PEPE holders
+                        Mint.club tokens launched via Haven drip (Arkiv L3)
                       </p>
                     </div>
                     <span className="pip net-haven self-center" aria-hidden="true" />
                   </div>
 
-                  {/* Embedded Events Widget */}
-                  <div className="bg-surface-raised/60">
-                    <TokenGatedEventsEmbed
-                      filterContract="0x6982508145454ce325ddbe47a25d4ec3d2311933"
-                      filterChain="ethereum"
-                      theme="dark"
-                      compact={true}
-                    />
+                  {/* Drip drops via Arkiv L3 */}
+                  <div className="bg-surface-raised/60 p-3">
+                    <UpcomingDrops />
                   </div>
                 </div>
               </div>
