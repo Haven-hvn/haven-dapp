@@ -45,7 +45,7 @@ export function HandoffPanel({ session, firstEntityKey, onImported }: HandoffPan
     anchor.download = `${safeName}-stage-${completedStageCount(session)}of${session.stages.length}.manifest.json`
     anchor.click()
     URL.revokeObjectURL(url)
-    toast.showSuccess('Hand-off kit downloaded — pair it with the original film.')
+    toast.showSuccess('Hand-off kit downloaded — pair it with the matching stage files.')
   }
 
   const copyWatchLink = async () => {
@@ -78,8 +78,8 @@ export function HandoffPanel({ session, firstEntityKey, onImported }: HandoffPan
       </div>
       <p className="text-xs leading-relaxed text-fg-3">
         Any teammate can upload the next stage from their own wallet. Send them this manifest
-        plus the original film — it carries the plan, hashes and progress but never key material,
-        and their uploads are hash-verified against this commitment.
+        plus that stage&apos;s file — it carries the plan, per-file hashes and progress but never
+        key material, and their upload is hash-verified against the slot&apos;s commitment.
       </p>
 
       <div className="flex flex-wrap gap-2">

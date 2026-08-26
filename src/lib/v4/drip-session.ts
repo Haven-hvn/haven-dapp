@@ -6,10 +6,15 @@
  * and freezes everything that must stay consistent across uploads:
  *
  *   - `dripId`        the on-chain grouping key every stage entity shares
- *   - byte ranges     contiguous slices of ONE committed source file
+ *   - byte ranges     contiguous slices of ONE committed source (a single
+ *                     film, or the virtual concatenation of per-stage files)
  *   - `sourceSha256`  a commitment to those exact bytes
  *   - gate config     chain / token / threshold / oracle
  *   - per-stage state planned targets + (once published) on-chain results
+ *
+ * Slate mode (`createDripSessionFromSlates`) gives every stage its own file
+ * with its own commitment — uploaders resume a stage by attaching just that
+ * stage's file; no merged master is ever needed.
  *
  * Stages are then published ONE AT A TIME ("first market cap unlock, then
  * the second, …"), possibly by DIFFERENT wallets or even different people:
@@ -63,9 +68,24 @@ export interface DripStageResult {
   epoch: number
 }
 
+/**
+ * Per-stage source commitment. With slate-style publishing each stage is
+ * its OWN file: this pins the exact bytes (name, size, SHA-256) that belong
+ * in the slot, so any wallet can resume a stage by attaching just that
+ * stage's file — the full concatenation is never needed again.
+ */
+export interface DripStageSourceMeta {
+  fileName: string
+  fileSize: number
+  /** SHA-256 (hex) of this stage's plaintext file (= its slice hash). */
+  sha256: string
+}
+
 export interface DripStageState {
   plan: DripChunkPlan
   result?: DripStageResult
+  /** Present on sessions created from per-stage slates. */
+  source?: DripStageSourceMeta
 }
 
 export interface DripGateConfigSnapshot {
@@ -105,6 +125,8 @@ export const DRIP_SESSION_VERSION = 1
 const STORAGE_PREFIX = 'haven.drip.session.'
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/
 const SHA256_HEX_RE = /^[0-9a-f]{64}$/
+/** Domain tag binding the slate commitment to this format. */
+const SLATE_COMMITMENT_PREFIX = 'haven.drip.slates.v1:'
 
 // ============================================================================
 // Creation + verification
@@ -142,6 +164,96 @@ export async function createDripSession(args: {
     gate: normalizeGate(args.gate),
     stages: planned.chunks.map((plan) => ({ plan })),
   }
+}
+
+/**
+ * Slate-style creation: ONE FILE PER STAGE.
+ *
+ * Each stage carries its own `DripStageSourceMeta`, and plans tile the
+ * virtual concatenation (stage i occupies exactly its file's bytes), so
+ * every downstream invariant — contiguous ranges, ascending targets,
+ * slice-hash equality — is preserved without ever materializing a merged
+ * source. The whole-source commitment becomes a commitment over the ORDERED
+ * per-stage digests.
+ */
+export async function createDripSessionFromSlates(args: {
+  title: string
+  mimeType: string
+  config: { chunkCount: number; targetsUsd: number[] }
+  gate: DripGateConfigSnapshot
+  slates: Array<{ fileName: string; fileSize: number; sha256: string }>
+}): Promise<DripSession | null> {
+  const { config, slates } = args
+  if (validateDripConfig(config).length > 0) return null
+  if (slates.length !== config.chunkCount) return null
+  if (!slates.every((s) => Number.isSafeInteger(s.fileSize) && s.fileSize >= 0)) return null
+  if (!slates.every((s) => SHA256_HEX_RE.test(s.sha256))) return null
+  if (!slates.some((s) => s.fileSize > 0)) return null
+  if (!isGateShapeValid(args.gate)) return null
+
+  const fileSize = slates.reduce((total, s) => total + s.fileSize, 0)
+
+  // Ranges follow the ACTUAL slate boundaries exactly — stage i occupies
+  // precisely its own file's bytes in the virtual concatenation.
+  const now = Date.now()
+  const stages: DripStageState[] = []
+  let cursor = 0
+  slates.forEach((s, i) => {
+    const endByte = cursor + s.fileSize
+    stages.push({
+      plan: {
+        dripIndex: i,
+        dripTotal: slates.length,
+        startByte: cursor,
+        endByte,
+        marketCapTargetUsd: config.targetsUsd[i],
+      },
+      source: {
+        fileName: s.fileName,
+        fileSize: s.fileSize,
+        sha256: s.sha256.toLowerCase(),
+      },
+    })
+    cursor = endByte
+  })
+
+  const commitmentInput =
+    SLATE_COMMITMENT_PREFIX + slates.map((s) => s.sha256.toLowerCase()).join(':')
+  const sourceSha256 = await sha256Hex(commitmentInput)
+
+  return {
+    version: DRIP_SESSION_VERSION,
+    dripId: crypto.randomUUID(),
+    title: args.title,
+    mimeType: args.mimeType,
+    fileName:
+      slates.length > 1 ? `${slates[0].fileName} +${slates.length - 1} more` : slates[0].fileName,
+    fileSize,
+    sourceSha256,
+    createdAtMs: now,
+    updatedAtMs: now,
+    gate: normalizeGate(args.gate),
+    stages,
+  }
+}
+
+/**
+ * Verify candidate bytes for ONE stage slot against its own commitment.
+ * Size first (cheap), then SHA-256 — a stage publish must never encrypt
+ * bytes that do not belong in this exact slot.
+ */
+export async function verifyStageSource(
+  source: Uint8Array,
+  expected: DripStageSourceMeta
+): Promise<SourceVerification> {
+  if (source.byteLength !== expected.fileSize) {
+    return { ok: false, reason: 'SIZE_MISMATCH' }
+  }
+  const hash = await sha256Hex(source)
+  if (hash !== expected.sha256) {
+    return { ok: false, reason: 'HASH_MISMATCH' }
+  }
+  return { ok: true }
 }
 
 /**
@@ -388,6 +500,29 @@ export function parseDripManifest(raw: unknown): DripSession | null {
     }
     cursor = p.endByte as number
 
+    let sourceMeta: DripStageSourceMeta | undefined
+    if (e.source != null) {
+      const sm = e.source as Record<string, unknown>
+      if (
+        typeof sm.fileName !== 'string' ||
+        !sm.fileName ||
+        typeof sm.fileSize !== 'number' ||
+        !Number.isSafeInteger(sm.fileSize) ||
+        sm.fileSize < 0 ||
+        typeof sm.sha256 !== 'string' ||
+        !SHA256_HEX_RE.test(sm.sha256)
+      ) {
+        return null
+      }
+      // A slot's committed size must equal its planned byte range.
+      if (sm.fileSize !== (p.endByte as number) - (p.startByte as number)) return null
+      sourceMeta = {
+        fileName: sm.fileName,
+        fileSize: sm.fileSize,
+        sha256: sm.sha256.toLowerCase(),
+      }
+    }
+
     let result: DripStageResult | undefined
     if (e.result != null) {
       if (seenHole) return null // result after a gap — invalid ordering
@@ -432,6 +567,7 @@ export function parseDripManifest(raw: unknown): DripSession | null {
         marketCapTargetUsd: p.marketCapTargetUsd as number,
       },
       result,
+      ...(sourceMeta ? { source: sourceMeta } : {}),
     })
   }
 

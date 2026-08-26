@@ -65,7 +65,7 @@ export function DripSessionList({
           <Plus className="h-6 w-6 text-seal-text mb-3" />
           <p className="font-medium text-fg">New drip release</p>
           <p className="text-xs text-fg-3 mt-1">
-            Split a film into market-cap unlock stages and publish them one by one.
+            Pick the unlock ladder, give every rung its own file, publish them one by one.
           </p>
         </button>
 

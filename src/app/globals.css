@@ -1066,6 +1066,84 @@
     padding: 0.14rem 0.3rem;
     line-height: 1;
   }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     FIELDS — one input treatment across the filing flows.
+     ══════════════════════════════════════════════════════════════════════════ */
+  .field-input {
+    width: 100%;
+    min-height: 44px;
+    background-color: transparent;
+    border: 1px solid var(--line-strong);
+    outline: none;
+    padding: 0.55rem 0.75rem;
+    font-family: var(--font-ledger);
+    font-size: var(--text-small);
+    letter-spacing: -0.01em;
+    color: var(--fg);
+    transition: border-color 200ms ease, background-color 200ms ease;
+  }
+
+  .field-input:focus {
+    border-color: var(--seal);
+  }
+
+  .field-input::placeholder {
+    color: var(--fg-5);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     FILING MOTION — pacing for the staged onboarding flow.
+     ══════════════════════════════════════════════════════════════════════════ */
+
+  /* A new section slides up into the document as it becomes current. */
+  @keyframes wizard-step-in {
+    from {
+      opacity: 0;
+      translate: 0 14px;
+    }
+    to {
+      opacity: 1;
+      translate: 0 0;
+    }
+  }
+
+  .wizard-step-enter {
+    animation: wizard-step-in 480ms var(--ease-out-expo) both;
+  }
+
+  /* The wax stamp: lands heavy, settles slightly rotated. */
+  @keyframes stamp-in {
+    0% {
+      opacity: 0;
+      scale: 1.8;
+      rotate: -10deg;
+    }
+    55% {
+      opacity: 1;
+      scale: 0.92;
+      rotate: -3deg;
+    }
+    100% {
+      opacity: 1;
+      scale: 1;
+      rotate: -3deg;
+    }
+  }
+
+  .stamp-in {
+    display: inline-flex;
+    animation: stamp-in 420ms var(--ease-snap) 120ms both;
+  }
+
+  /* Hatched fill for empty slate slots — unexposed film stock. */
+  .hatch {
+    background-image: repeating-linear-gradient(
+      45deg,
+      var(--line-soft) 0 1px,
+      transparent 1px 7px
+    );
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

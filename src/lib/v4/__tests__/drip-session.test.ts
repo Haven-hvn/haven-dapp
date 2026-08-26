@@ -19,6 +19,7 @@ import { stageLabel } from '../drip-plan'
 import {
   completedStageCount,
   createDripSession,
+  createDripSessionFromSlates,
   commitStageResult,
   deleteDripSession,
   isDripComplete,
@@ -29,6 +30,7 @@ import {
   toDripManifest,
   verifySourceAgainstCommitment,
   verifySourceForSession,
+  verifyStageSource,
   type DripSession,
   type DripStageResult,
 } from '../drip-session'
@@ -363,6 +365,136 @@ describe('localStorage persistence', () => {
     storage.setItem('haven.drip.session.corrupt', '{not json')
     expect(() => listDripSessions()).not.toThrow()
     expect(listDripSessions()).toHaveLength(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Slate mode — one file per stage
+// ---------------------------------------------------------------------------
+
+const SLATE_SIZES = [1000, 1200, 800]
+
+async function makeSlates(): Promise<Array<{ fileName: string; fileSize: number; sha256: string }>> {
+  return Promise.all(
+    SLATE_SIZES.map(async (size, i) => ({
+      fileName: `part-${i}.mp4`,
+      fileSize: size,
+      sha256: await sha256Hex(makeSource(size)),
+    }))
+  )
+}
+
+describe('createDripSessionFromSlates', () => {
+  it('tiles ranges from per-stage sizes and commits each slot', async () => {
+    const slates = await makeSlates()
+    const session = await createDripSessionFromSlates({
+      title: 'Atlas Skies',
+      mimeType: 'video/mp4',
+      config: { chunkCount: 3, targetsUsd: [1_000_000, 5_000_000, 10_000_000] },
+      gate: GATE,
+      slates,
+    })
+    if (!session) throw new Error('slate session creation failed')
+
+    expect(session.fileSize).toBe(SLATE_SIZES.reduce((a, b) => a + b, 0))
+    let cursor = 0
+    session.stages.forEach((stage, i) => {
+      expect(stage.plan.startByte).toBe(cursor)
+      expect(stage.plan.endByte).toBe(cursor + SLATE_SIZES[i])
+      expect(stage.source?.fileName).toBe(slates[i].fileName)
+      expect(stage.source?.fileSize).toBe(slates[i].fileSize)
+      expect(stage.source?.sha256).toBe(slates[i].sha256.toLowerCase())
+      cursor = stage.plan.endByte
+    })
+    expect(cursor).toBe(session.fileSize)
+
+    const expectedCommitment = await sha256Hex(
+      'haven.drip.slates.v1:' + slates.map((s) => s.sha256.toLowerCase()).join(':')
+    )
+    expect(session.sourceSha256).toBe(expectedCommitment)
+  })
+
+  it('rejects slate count mismatch, all-empty slates, bad hashes', async () => {
+    const base = {
+      title: 't',
+      mimeType: 'video/mp4',
+      config: { chunkCount: 2, targetsUsd: [1, 2] },
+      gate: GATE,
+    }
+    const good = await makeSlates()
+
+    await expect(
+      createDripSessionFromSlates({ ...base, slates: good.slice(0, 1) })
+    ).resolves.toBeNull()
+    await expect(
+      createDripSessionFromSlates({
+        ...base,
+        slates: [
+          { fileName: 'a', fileSize: 0, sha256: await sha256Hex('x') },
+          { fileName: 'b', fileSize: 0, sha256: await sha256Hex('y') },
+        ],
+      })
+    ).resolves.toBeNull()
+    await expect(
+      createDripSessionFromSlates({
+        ...base,
+        slates: [
+          { fileName: 'a', fileSize: 5, sha256: 'nope' },
+          { fileName: 'b', fileSize: 5, sha256: 'a'.repeat(64) },
+        ],
+      })
+    ).resolves.toBeNull()
+  })
+
+  it('round-trips through the manifest parser with per-stage sources', async () => {
+    const slates = await makeSlates()
+    const session = (await createDripSessionFromSlates({
+      title: 't',
+      mimeType: 'video/mp4',
+      config: { chunkCount: 3, targetsUsd: [10, 20, 30] },
+      gate: GATE,
+      slates,
+    }))!
+    const text = JSON.stringify(toDripManifest(session))
+    expect(parseDripManifest(JSON.parse(text))).toEqual(session)
+  })
+
+  it('rejects a tampered per-stage source (size off-range, bad sha)', async () => {
+    const slates = await makeSlates()
+    const session = (await createDripSessionFromSlates({
+      title: 't',
+      mimeType: 'video/mp4',
+      config: { chunkCount: 3, targetsUsd: [10, 20, 30] },
+      gate: GATE,
+      slates,
+    }))!
+    const m = cloneManifest(session)
+    const stages = m.stages as Array<Record<string, unknown>>
+    ;(stages[1].source as Record<string, unknown>).fileSize += 1
+    expect(parseDripManifest(m)).toBeNull()
+
+    const m2 = cloneManifest(session)
+    const stages2 = m2.stages as Array<Record<string, unknown>>
+    ;(stages2[0].source as Record<string, unknown>).sha256 = 'zz'
+    expect(parseDripManifest(m2)).toBeNull()
+  })
+
+  it('verifies a stage slot fail-closed via verifyStageSource', async () => {
+    const slates = await makeSlates()
+    const bytes = makeSource(SLATE_SIZES[1])
+    const meta = { fileName: slates[1].fileName, fileSize: SLATE_SIZES[1], sha256: slates[1].sha256 }
+
+    await expect(verifyStageSource(bytes, meta)).resolves.toEqual({ ok: true })
+    await expect(verifyStageSource(bytes.slice(0, 9), meta)).resolves.toEqual({
+      ok: false,
+      reason: 'SIZE_MISMATCH',
+    })
+    const flipped = bytes
+    flipped[0] ^= 0xff
+    await expect(verifyStageSource(flipped, meta)).resolves.toEqual({
+      ok: false,
+      reason: 'HASH_MISMATCH',
+    })
   })
 })
 

@@ -3,13 +3,17 @@
 /**
  * StageRunner — per-stage upload console for the next unlock rung.
  *
- * Owns the "prove you have the real source" gate: the operator attaches (or
- * re-attaches) the source file and it is SHA-256-verified against the
- * session commitment before the Upload button enables. A green fingerprint
- * badge then walks through encrypt → pin → index, ending in a check mark.
+ * Slate-mode sessions carry a per-stage commitment (`stageSource`): the
+ * operator attaches ONLY that stage's own file, it is SHA-256-verified
+ * against the slot's commitment, and publishing wraps the bytes in a
+ * windowed adapter so the frozen plan ranges still apply — no master file
+ * required. Legacy sessions without stage commitments fall back to
+ * whole-source verification.
  *
- * Any connected wallet can run this stage — IBE wrapping needs only public
- * inputs, so stage 2 can be published by a different teammate than stage 1.
+ * A green fingerprint badge then walks through encrypt → pin → index,
+ * ending in a check mark. Any connected wallet can run this stage — IBE
+ * wrapping needs only public inputs, so stage 2 can be published by a
+ * different teammate than stage 1.
  *
  * @module components/publish/StageRunner
  */
@@ -31,7 +35,9 @@ import { useAccount, useWalletClient } from 'wagmi'
 import { formatUsdCompact, stageLabel, type DripChunkPlan } from '@/lib/v4/drip-plan'
 import {
   verifySourceAgainstCommitment,
+  verifyStageSource,
   type DripGateConfigSnapshot,
+  type DripStageSourceMeta,
 } from '@/lib/v4/drip-session'
 import {
   publishDripStage,
@@ -45,10 +51,16 @@ export interface StageRunnerProps {
   /** Gate snapshot from the session (title is appended internally). */
   gate: DripGateConfigSnapshot & { title: string }
   mimeType: string
-  sourceSha256: string
-  fileSize: number
+  /** Whole-source commitment (legacy sessions). */
+  sourceSha256?: string
+  /** Whole-source size (legacy sessions). */
+  fileSize?: number
+  /** This slot's own commitment — slate-mode sessions. */
+  stageSource?: DripStageSourceMeta
   /** Bytes already in memory (same browser session as plan creation). */
   initialSource?: Uint8Array | null
+  /** This stage's own file already picked in the wizard (slate mode). */
+  initialStageFile?: File | null
   onComplete: (result: PublishStageResult) => void
 }
 
@@ -61,48 +73,86 @@ const PIPELINE_ORDER: Array<DripChunkProgress['stage']> = [
   'done',
 ]
 
+/**
+ * Presents one stage's bytes as if they were the full logical source, so
+ * `publishDripStage` can keep slicing by the frozen global plan ranges.
+ * Only `.slice(start, end)` is consumed downstream.
+ */
+class WindowedStageSource {
+  constructor(
+    private readonly bytes: Uint8Array,
+    private readonly offset: number
+  ) {}
+  slice(start: number, end: number): Uint8Array {
+    return this.bytes.slice(start - this.offset, end - this.offset)
+  }
+}
+
 export function StageRunner({
   plan,
   gate,
   mimeType,
   sourceSha256,
   fileSize,
+  stageSource,
   initialSource,
+  initialStageFile,
   onComplete,
 }: StageRunnerProps) {
   const { address } = useAccount()
   const { data: walletClient } = useWalletClient()
 
-  const [verify, setVerify] = useState<VerifyState>(initialSource ? 'hashing' : 'idle')
+  const [verify, setVerify] = useState<VerifyState>('idle')
   const [publishing, setPublishing] = useState(false)
   const [progress, setProgress] = useState<DripChunkProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [stageDone, setStageDone] = useState(false)
 
-  const bytesRef = useRef<Uint8Array | null>(initialSource ?? null)
+  const fileRef = useRef<File | null>(null)
+  const bytesRef = useRef<Uint8Array | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   const verifyBytes = useCallback(
-    async (bytes: Uint8Array | null) => {
-      if (!bytes) {
-        setVerify('idle')
-        return
-      }
+    async (bytes: Uint8Array) => {
       setVerify('hashing')
-      const result = await verifySourceAgainstCommitment(bytes, sourceSha256, fileSize)
-      setVerify(result.ok ? 'ok' : result.reason === 'SIZE_MISMATCH' ? 'size-mismatch' : 'hash-mismatch')
+      const result =
+        stageSource != null
+          ? await verifyStageSource(bytes, stageSource)
+          : await verifySourceAgainstCommitment(bytes, sourceSha256 ?? '', fileSize ?? -1)
+      setVerify(
+        result.ok ? 'ok' : result.reason === 'SIZE_MISMATCH' ? 'size-mismatch' : 'hash-mismatch'
+      )
     },
-    [sourceSha256, fileSize]
+    [stageSource, sourceSha256, fileSize]
   )
 
-  // Attach in-memory bytes handed over from plan creation (same browser).
+  // Attach bytes handed over from the wizard / previous session state.
   useEffect(() => {
-    if (initialSource) {
-      bytesRef.current = initialSource
-      void verifyBytes(initialSource)
+    let cancelled = false
+    async function attach() {
+      try {
+        if (initialStageFile) {
+          fileRef.current = initialStageFile
+          const bytes = new Uint8Array(await initialStageFile.arrayBuffer())
+          if (!cancelled) {
+            bytesRef.current = bytes
+            await verifyBytes(bytes)
+          }
+        } else if (initialSource) {
+          bytesRef.current = initialSource
+          await verifyBytes(initialSource)
+        }
+      } catch {
+        if (!cancelled) setVerify('idle')
+      }
     }
-  }, [initialSource, verifyBytes])
+    void attach()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const acceptFile = useCallback(
     async (file: File | null) => {
@@ -110,6 +160,7 @@ export function StageRunner({
       setError(null)
       setStageDone(false)
       try {
+        fileRef.current = file
         const bytes = new Uint8Array(await file.arrayBuffer())
         bytesRef.current = bytes
         await verifyBytes(bytes)
@@ -122,6 +173,7 @@ export function StageRunner({
   )
 
   const clearSource = useCallback(() => {
+    fileRef.current = null
     bytesRef.current = null
     setVerify('idle')
     setProgress(null)
@@ -139,8 +191,14 @@ export function StageRunner({
     abortRef.current = controller
 
     try {
+      // Slate mode: publish from just this stage's bytes through a windowed
+      // view; legacy mode publishes straight from the full attached source.
+      const sourceArg =
+        stageSource != null && fileRef.current
+          ? (new WindowedStageSource(bytes, plan.startByte) as unknown as Uint8Array)
+          : bytes
       const result = await publishDripStage({
-        source: bytes,
+        source: sourceArg,
         plan,
         gate: gate as DripGateConfig,
         mimeType,
@@ -161,23 +219,33 @@ export function StageRunner({
       abortRef.current = null
       setPublishing(false)
     }
-  }, [walletClient, publishing, verify, plan, gate, mimeType, address, onComplete])
+  }, [walletClient, publishing, verify, plan, gate, mimeType, address, onComplete, stageSource])
 
   const verified = verify === 'ok'
   const ready = verified && !publishing && !stageDone && walletClient != null
+  const hasSourceAttached = fileRef.current != null || bytesRef.current != null
+  const expectedName = stageSource?.fileName
 
   return (
     <div className="border border-line bg-card p-5 space-y-4" data-testid="stage-runner">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-seal-text/80 font-medium">
-            Up next · Stage {plan.dripIndex + 1} of {plan.dripTotal}
-          </p>
+        <div className="min-w-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <p className="text-xs uppercase tracking-wide text-seal-text/80 font-medium">
+              Up next · Stage {plan.dripIndex + 1} of {plan.dripTotal}
+            </p>
+            <StagePosition index={plan.dripIndex} total={plan.dripTotal} />
+          </div>
           <p className="text-sm text-fg-2 mt-0.5">
             {stageLabel(plan.dripIndex, plan.dripTotal)} unlocks at{' '}
             <span className="font-mono">{formatUsdCompact(plan.marketCapTargetUsd)}</span> market cap ·{' '}
             {(Math.max(0, plan.endByte - plan.startByte) / 1024 / 1024).toFixed(1)} MB slice
           </p>
+          {expectedName && (
+            <p className="text-[11px] text-fg-5 mt-1 truncate font-[family-name:var(--font-ledger)]">
+              expects “{expectedName}” ({((stageSource?.fileSize ?? 0) / 1024 / 1024).toFixed(1)} MB)
+            </p>
+          )}
         </div>
         {stageDone && <CheckCircle2 className="h-6 w-6 text-[var(--color-arkiv)] shrink-0" />}
       </div>
@@ -185,7 +253,7 @@ export function StageRunner({
       {!stageDone && (
         <>
           {/* Source attachment + verification */}
-          {bytesRef.current == null && (
+          {!hasSourceAttached && (
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
@@ -194,19 +262,32 @@ export function StageRunner({
                 e.preventDefault()
                 void acceptFile(e.dataTransfer.files?.[0] ?? null)
               }}
-              className="w-full border border-dashed border-line-strong hover:border-seal p-4 flex items-center justify-center gap-2 text-sm text-fg-3 hover:text-fg-2 transition-colors"
+              className="w-full border border-dashed border-line-strong hover:border-seal p-4 flex flex-col items-center justify-center gap-1.5 text-sm text-fg-3 hover:text-fg-2 transition-colors"
               data-testid="runner-source-dropzone"
             >
-              <FileVideo className="h-4 w-4" />
-              Attach the original film to encrypt this stage
+              <span className="flex items-center gap-2">
+                <FileVideo className="h-4 w-4" />
+                {expectedName ? (
+                  <>
+                    Attach <strong className="text-fg">{expectedName}</strong> for this stage
+                  </>
+                ) : (
+                  'Attach the original film to encrypt this stage'
+                )}
+              </span>
+              {expectedName && (
+                <span className="text-[11px] text-fg-5">
+                  Only this rung&apos;s file is needed — each stage carries its own commitment.
+                </span>
+              )}
             </button>
           )}
 
-          {bytesRef.current != null && (
+          {hasSourceAttached && (
             <div className="flex items-center gap-3 bg-black/30 px-3 py-2.5" data-testid="runner-source-status">
               <Fingerprint className="h-4 w-4 shrink-0 text-fg-4" />
               <span className="text-sm text-fg-3 flex-1 min-w-0 truncate">
-                Source · {fileSize.toLocaleString()} bytes
+                {stageSource ? `Stage file · ${fileRef.current?.name ?? 'attached'}` : `Source · ${(fileSize ?? 0).toLocaleString()} bytes`}
               </span>
               {verify === 'hashing' && (
                 <span className="flex items-center gap-1.5 text-xs text-fg-4">
@@ -293,7 +374,7 @@ export function StageRunner({
                 </>
               ) : (
                 <>
-                  <UploadCloud className="h-4 w-4" /> Encrypt & publish stage {plan.dripIndex + 1}
+                  <UploadCloud className="h-4 w-4" /> Encrypt &amp; publish stage {plan.dripIndex + 1}
                 </>
               )}
             </button>
@@ -321,6 +402,25 @@ export function StageRunner({
         </p>
       )}
     </div>
+  )
+}
+
+function StagePosition({ index, total }: { index: number; total: number }) {
+  return (
+    <span className="inline-flex gap-[3px]" aria-hidden>
+      {Array.from({ length: total }, (_, i) => (
+        <span
+          key={i}
+          className={`h-[5px] w-4 ${
+            i < index
+              ? 'bg-[var(--color-arkiv)]'
+              : i === index
+                ? 'bg-seal'
+                : 'bg-line-strong opacity-60'
+          }`}
+        />
+      ))}
+    </span>
   )
 }
 
