@@ -1,11 +1,11 @@
 'use client'
 
 /**
- * Header Component
- * 
- * Main application header with mobile navigation and wallet connection.
- * Adapts layout for mobile screens with touch-friendly elements.
- * 
+ * Header — the app masthead.
+ *
+ * Lockup on the left; edition and wallet chips on the right. The chrome and
+ * the document speak the same language as every other surface.
+ *
  * @module components/layout/Header
  */
 
@@ -13,23 +13,25 @@ import { ConnectButton } from '@/components/auth/ConnectButton'
 import { MobileNav } from './MobileNav'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import Link from 'next/link'
+import { Mark } from '@/components/mark/Mark'
 
 export function Header() {
   return (
-    <header className="h-16 border-b border-white/[0.06] flex items-center justify-between px-4 md:px-6 bg-[#0A0A0F] safe-area-x">
+    <header className="masthead h-[4.25rem] flex items-center justify-between px-4 md:px-6 safe-area-x">
       <div className="flex items-center gap-2">
         <MobileNav />
-        {/* Logo for mobile - hidden on desktop */}
-        <Link 
-          href="/library" 
+        {/* Lockup for mobile - hidden on desktop where the spine carries it */}
+        <Link
+          href="/library"
           className="md:hidden flex items-center gap-2 touch-manipulation"
+          aria-label="Haven — Library"
         >
-          <img src="/favicon.ico" alt="Haven" className="w-7 h-7 rounded-lg" />
-          <span className="font-bold text-lg">Haven</span>
+          <Mark size={20} />
+          <span className="wordmark">Haven</span>
         </Link>
       </div>
       <div className="flex-1" />
-      <div className="flex items-center gap-1 sm:gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2">
         <ThemeToggle />
         <ConnectButton />
       </div>

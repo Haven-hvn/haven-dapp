@@ -48,28 +48,28 @@ const STAGE_CONFIG: Record<LoadingStage, {
     message: 'Downloading encrypted video...',
     showProgress: true,
     isIndeterminate: false,
-    iconClass: 'text-purple-400',
+    iconClass: 'text-fg-4 400',
   },
   'authenticating': {
     icon: Shield,
     message: 'Please approve in your wallet...',
     showProgress: true,
     isIndeterminate: true,
-    iconClass: 'text-purple-400',
+    iconClass: 'text-fg-4 400',
   },
   'decrypting-key': {
     icon: Key,
     message: 'Recovering decryption key...',
     showProgress: true,
     isIndeterminate: true,
-    iconClass: 'text-purple-400',
+    iconClass: 'text-fg-4 400',
   },
   'streaming': {
     icon: Unlock,
     message: 'Decrypting and playing...',
     showProgress: true,
     isIndeterminate: false,
-    iconClass: 'text-green-400',
+    iconClass: 'text-[var(--color-arkiv)]',
   },
   'caching': {
     icon: HardDrive,
@@ -83,14 +83,14 @@ const STAGE_CONFIG: Record<LoadingStage, {
     message: '',
     showProgress: false,
     isIndeterminate: false,
-    iconClass: 'text-green-400',
+    iconClass: 'text-[var(--color-arkiv)]',
   },
   'error': {
     icon: Loader2,
     message: '',
     showProgress: false,
     isIndeterminate: false,
-    iconClass: 'text-red-400',
+    iconClass: 'text-destructive',
   },
 }
 
@@ -132,7 +132,7 @@ export function CacheAwareProgress({
 
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm z-10">
-      <div className="flex flex-col items-center text-center text-white max-w-md px-6">
+      <div className="flex flex-col items-center text-center text-fg max-w-md px-6">
         {/* Icon with animated background */}
         <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full ${iconBgClass} mb-4`}>
           <div className={isSpinner ? 'animate-pulse' : ''}>
@@ -141,7 +141,7 @@ export function CacheAwareProgress({
         </div>
         
         {/* Stage message */}
-        <p className="text-base text-white/90 mb-4 font-medium">{config.message}</p>
+        <p className="text-base text-fg mb-4 font-medium">{config.message}</p>
         
         {/* Progress bar */}
         <div className="w-64 h-1.5 bg-white/10 rounded-full overflow-hidden">
@@ -161,19 +161,19 @@ export function CacheAwareProgress({
         
         {/* Progress percentage for determinate stages */}
         {!config.isIndeterminate && progress > 0 && (
-          <p className="text-xs text-white/40 mt-2">{Math.round(progress)}%</p>
+          <p className="text-xs text-fg-4 mt-2">{Math.round(progress)}%</p>
         )}
         
         {/* Special message for stages that require wallet signature */}
         {stage === 'authenticating' && (
           <div className="mt-4 text-center">
-            <p className="text-sm text-white/70 font-medium animate-pulse">
+            <p className="text-sm text-fg-2 font-medium animate-pulse">
               Check your wallet for a signature request
             </p>
-            <p className="text-xs text-white/30 mt-2">
+            <p className="text-xs text-fg-5 mt-2">
               <a 
                 href="#" 
-                className="underline hover:text-white/50 transition-colors"
+                className="underline hover:text-fg-4 transition-colors"
                 onClick={(e) => {
                   e.preventDefault()
                   // Could open a modal explaining SIWE
@@ -188,7 +188,7 @@ export function CacheAwareProgress({
         
         {/* Privacy note for key decryption stage */}
         {stage === 'decrypting-key' && (
-          <p className="text-xs text-white/30 mt-4">
+          <p className="text-xs text-fg-5 mt-4">
             Your private key never leaves your browser
           </p>
         )}

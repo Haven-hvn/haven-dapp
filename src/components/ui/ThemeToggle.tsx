@@ -1,65 +1,48 @@
 'use client'
 
 /**
- * Theme Toggle Component
- * 
- * Button component that toggles between dark and light themes.
- * Shows sun icon in dark mode (click to switch to light) and
- * moon icon in light mode (click to switch to dark).
- * 
- * Features:
- * - System preference detection
- * - Theme persistence in localStorage
- * - Prevents hydration mismatch with mounted state check
- * - Accessible with proper aria-label
- * 
+ * ThemeToggle — the edition control.
+ *
+ * The Record is light by design; readers who need dark get the Observatory's
+ * lightness ramp via this chip, labelled like the docs surface ("Ink").
+ *
  * @module components/ui/ThemeToggle
  */
 
 import { useTheme } from 'next-themes'
-import { Sun, Moon } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { useEffect, useState } from 'react'
 
 export function ThemeToggle() {
   const { setTheme, resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
-  
+
   // Prevent hydration mismatch by only rendering after mount
   useEffect(() => {
     setMounted(true)
   }, [])
-  
+
   // Show placeholder during SSR to prevent layout shift
   if (!mounted) {
     return (
-      <Button 
-        variant="ghost" 
-        size="icon" 
-        className="w-9 h-9"
+      <button
+        className="chip min-h-[44px] min-w-[3.6rem]"
         aria-label="Toggle theme"
       >
-        <span className="h-4 w-4" />
-      </Button>
+        <span className="label">·</span>
+      </button>
     )
   }
-  
+
   const isDark = resolvedTheme === 'dark'
-  
+
   return (
-    <Button
-      variant="ghost"
-      size="icon"
+    <button
+      className="chip min-h-[44px] touch-manipulation"
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      className="w-9 h-9 touch-manipulation"
-      aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
-      title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+      aria-label={isDark ? 'Switch to stock theme' : 'Switch to ink theme'}
+      title={isDark ? 'Switch to stock theme' : 'Switch to ink theme'}
     >
-      {isDark ? (
-        <Sun className="h-4 w-4 transition-all" />
-      ) : (
-        <Moon className="h-4 w-4 transition-all" />
-      )}
-    </Button>
+      <span className="label">{isDark ? 'Stock' : 'Ink'}</span>
+    </button>
   )
 }

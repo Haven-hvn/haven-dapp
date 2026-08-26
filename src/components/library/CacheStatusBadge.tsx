@@ -81,9 +81,9 @@ const ARKIV_STATUS_CONFIG: Record<CacheStatusBadgeProps['arkivStatus'], StatusCo
   },
   'cache-only': {
     label: 'Local only',
-    dotClass: 'bg-gray-500',
-    textClass: 'text-gray-700 dark:text-gray-400',
-    bgClass: 'bg-gray-50 dark:bg-gray-950/30',
+    dotClass: 'bg-fg-4',
+    textClass: 'text-fg-3',
+    bgClass: 'bg-surface-deep/30',
     pulse: false,
     ariaLabel: 'Video is stored locally only',
   },

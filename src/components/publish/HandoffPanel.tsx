@@ -71,12 +71,12 @@ export function HandoffPanel({ session, firstEntityKey, onImported }: HandoffPan
   }
 
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5 space-y-3" data-testid="handoff-panel">
+    <div className="border border-line bg-card p-5 space-y-3" data-testid="handoff-panel">
       <div className="flex items-center gap-2">
-        <Users className="h-4 w-4 text-[#FF00E5]" />
-        <p className="text-sm font-medium text-white/85">Stage handoff</p>
+        <Users className="h-4 w-4 text-seal-text" />
+        <p className="text-sm font-medium text-fg/85">Stage handoff</p>
       </div>
-      <p className="text-xs leading-relaxed text-white/45">
+      <p className="text-xs leading-relaxed text-fg-3">
         Any teammate can upload the next stage from their own wallet. Send them this manifest
         plus the original film — it carries the plan, hashes and progress but never key material,
         and their uploads are hash-verified against this commitment.
@@ -86,20 +86,20 @@ export function HandoffPanel({ session, firstEntityKey, onImported }: HandoffPan
         <button
           onClick={downloadManifest}
           data-testid="handoff-export"
-          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 text-xs text-white/70 hover:border-[#00F5FF]/40 hover:text-white transition-colors"
+          className="inline-flex items-center gap-2 px-3 py-1.5 border border-line-strong text-xs text-fg-2 hover:border-seal hover:text-fg transition-colors"
         >
           <FileDown className="h-3.5 w-3.5" /> Download hand-off kit
         </button>
         <button
           onClick={() => inputRef.current?.click()}
-          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 text-xs text-white/70 hover:border-[#00F5FF]/40 hover:text-white transition-colors"
+          className="inline-flex items-center gap-2 px-3 py-1.5 border border-line-strong text-xs text-fg-2 hover:border-seal hover:text-fg transition-colors"
         >
           <FileUp className="h-3.5 w-3.5" /> Import kit
         </button>
         {firstEntityKey && (
           <button
             onClick={() => void copyWatchLink()}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 text-xs text-white/70 hover:border-[#00F5FF]/40 hover:text-white transition-colors"
+            className="inline-flex items-center gap-2 px-3 py-1.5 border border-line-strong text-xs text-fg-2 hover:border-seal hover:text-fg transition-colors"
             title="Copy watch link"
           >
             <Link2 className="h-3.5 w-3.5" /> Copy watch link

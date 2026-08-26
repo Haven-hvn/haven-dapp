@@ -277,14 +277,14 @@ export function VideoPlayerControls({ src, title, poster }: VideoPlayerControlsP
       {/* Double tap feedback indicators */}
       {showTapFeedback === 'left' && (
         <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
-          <div className="bg-black/60 text-white px-4 py-2 rounded-full text-lg font-medium animate-pulse">
+          <div className="bg-black/70 text-[oklch(0.968_0.005_90)] px-4 py-2 text-lg font-medium animate-pulse">
             « -10s
           </div>
         </div>
       )}
       {showTapFeedback === 'right' && (
         <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-          <div className="bg-black/60 text-white px-4 py-2 rounded-full text-lg font-medium animate-pulse">
+          <div className="bg-black/70 text-[oklch(0.968_0.005_90)] px-4 py-2 text-lg font-medium animate-pulse">
             +10s »
           </div>
         </div>
@@ -302,25 +302,25 @@ export function VideoPlayerControls({ src, title, poster }: VideoPlayerControlsP
         {/* Progress bar */}
         <div className="px-4 py-2 progress-container">
           <div 
-            className="relative h-2 sm:h-1 bg-white/30 rounded-full cursor-pointer group/progress touch-manipulation"
+            className="relative h-1.5 cursor-pointer group/progress touch-manipulation border border-[oklch(0.98_0.01_90/0.25)]"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
             {/* Buffered */}
             <div 
-              className="absolute h-full bg-white/30 rounded-full"
+              className="absolute h-full bg-[oklch(0.98_0.01_90/0.22)]"
               style={{ width: duration > 0 ? `${(buffered / duration) * 100}%` : '0%' }}
             />
             {/* Played */}
             <div 
-              className="absolute h-full bg-primary rounded-full"
+              className="absolute h-full bg-seal"
               style={{ width: duration > 0 ? `${(currentTime / duration) * 100}%` : '0%' }}
             />
             {/* Thumb - larger on mobile for easier touch */}
             <div 
               className={`
-                absolute bg-primary rounded-full transition-opacity
+                absolute bg-seal transition-opacity
                 w-4 h-4 sm:w-3 sm:h-3 -mt-1.5 sm:-mt-1
                 ${isDragging ? 'opacity-100 scale-125' : 'opacity-80 sm:opacity-0 group-hover/progress:sm:opacity-100'}
               `}
@@ -345,7 +345,7 @@ export function VideoPlayerControls({ src, title, poster }: VideoPlayerControlsP
           <div className="flex items-center gap-2">
             <button 
               onClick={togglePlay}
-              className="p-3 sm:p-2 rounded-full hover:bg-white/20 text-white transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
+              className="p-3 sm:p-2 hover:bg-[oklch(0.98_0.01_90/0.12)] text-[oklch(0.968_0.005_90)] transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
               aria-label={isPlaying ? 'Pause' : 'Play'}
             >
               {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
@@ -353,7 +353,7 @@ export function VideoPlayerControls({ src, title, poster }: VideoPlayerControlsP
             
             <button 
               onClick={() => seek(-10)}
-              className="p-3 sm:p-2 rounded-full hover:bg-white/20 text-white transition-colors touch-manipulation min-h-[44px] min-w-[44px] hidden sm:flex items-center justify-center"
+              className="p-3 sm:p-2 hover:bg-[oklch(0.98_0.01_90/0.12)] text-[oklch(0.968_0.005_90)] transition-colors touch-manipulation min-h-[44px] min-w-[44px] hidden sm:flex items-center justify-center"
               aria-label="Skip back 10 seconds"
             >
               <SkipBack className="w-5 h-5" />
@@ -361,7 +361,7 @@ export function VideoPlayerControls({ src, title, poster }: VideoPlayerControlsP
             
             <button 
               onClick={() => seek(10)}
-              className="p-3 sm:p-2 rounded-full hover:bg-white/20 text-white transition-colors touch-manipulation min-h-[44px] min-w-[44px] hidden sm:flex items-center justify-center"
+              className="p-3 sm:p-2 hover:bg-[oklch(0.98_0.01_90/0.12)] text-[oklch(0.968_0.005_90)] transition-colors touch-manipulation min-h-[44px] min-w-[44px] hidden sm:flex items-center justify-center"
               aria-label="Skip forward 10 seconds"
             >
               <SkipForward className="w-5 h-5" />
@@ -371,7 +371,7 @@ export function VideoPlayerControls({ src, title, poster }: VideoPlayerControlsP
             <div className="flex items-center gap-2 group/volume">
               <button 
                 onClick={toggleMute}
-                className="p-3 sm:p-2 rounded-full hover:bg-white/20 text-white transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
+                className="p-3 sm:p-2 hover:bg-[oklch(0.98_0.01_90/0.12)] text-[oklch(0.968_0.005_90)] transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
                 aria-label={isMuted ? 'Unmute' : 'Mute'}
               >
                 {isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
@@ -385,19 +385,19 @@ export function VideoPlayerControls({ src, title, poster }: VideoPlayerControlsP
                   step={0.1}
                   value={isMuted ? 0 : volume}
                   onChange={handleVolumeChange}
-                  className="w-16 h-1 bg-white/30 rounded-full appearance-none cursor-pointer"
+                  className="w-16 h-1 bg-[oklch(0.98_0.01_90/0.25)] appearance-none cursor-pointer accent-[var(--seal)]"
                 />
               </div>
             </div>
             
-            <span className="text-white text-sm ml-2">
+            <span className="text-[oklch(0.968_0.005_90)] text-nano font-[family-name:var(--font-ledger)] tracking-[0.06em] tabular-nums ml-3">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
           </div>
           
           <button 
             onClick={toggleFullscreen}
-            className="p-3 sm:p-2 rounded-full hover:bg-white/20 text-white transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
+            className="p-3 sm:p-2 hover:bg-[oklch(0.98_0.01_90/0.12)] text-[oklch(0.968_0.005_90)] transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
             aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
           >
             {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
@@ -408,7 +408,7 @@ export function VideoPlayerControls({ src, title, poster }: VideoPlayerControlsP
       {/* Title overlay (shown briefly on play) */}
       {showControls && title && (
         <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/60 to-transparent">
-          <h2 className="text-white text-sm font-medium truncate">{title}</h2>
+          <h2 className="text-[oklch(0.968_0.005_90)] text-small font-medium truncate tracking-[-0.014em]">{title}</h2>
         </div>
       )}
     </div>

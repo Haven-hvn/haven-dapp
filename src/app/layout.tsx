@@ -22,6 +22,21 @@ const geistMono = localFont({
   variable: "--font-geist-mono",
   weight: "100 900",
 });
+const newsreader = localFont({
+  src: [
+    {
+      path: "./fonts/NewsreaderVF-latin.woff2",
+      weight: "200 800",
+      style: "normal",
+    },
+    {
+      path: "./fonts/NewsreaderVF-Italic-latin.woff2",
+      weight: "200 800",
+      style: "italic",
+    },
+  ],
+  variable: "--font-newsreader",
+});
 
 export const metadata: Metadata = {
   title: {
@@ -106,8 +121,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0A0A0F" },
+    { media: "(prefers-color-scheme: light)", color: "#f8f6f1" },
+    { media: "(prefers-color-scheme: dark)", color: "#16161d" },
   ],
   width: "device-width",
   initialScale: 1,
@@ -123,14 +138,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-      </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${newsreader.variable} antialiased`}
       >
-        <ThemeProvider defaultTheme="dark" enableSystem>
+        <ThemeProvider defaultTheme="light" enableSystem>
           <ThemeScript />
           <ServiceWorkerProvider>
             <ContextProvider>
@@ -139,6 +150,7 @@ export default function RootLayout({
                   <AuthProvider>
                     <HavenAolProvider>
                       <ErrorProvider>
+                        <div className="material-grain" aria-hidden="true" />
                         {children}
                       </ErrorProvider>
                     </HavenAolProvider>

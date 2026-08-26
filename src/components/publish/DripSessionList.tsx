@@ -60,11 +60,11 @@ export function DripSessionList({
         <button
           onClick={onCreate}
           data-testid="new-drip-button"
-          className="group rounded-xl border border-[#00F5FF]/30 bg-[#00F5FF]/[0.04] hover:bg-[#00F5FF]/[0.08] p-5 text-left transition-colors"
+          className="group border border-seal-edge bg-accent hover:bg-accent p-5 text-left transition-colors"
         >
-          <Plus className="h-6 w-6 text-[#00F5FF] mb-3" />
-          <p className="font-medium text-white/90">New drip release</p>
-          <p className="text-xs text-white/45 mt-1">
+          <Plus className="h-6 w-6 text-seal-text mb-3" />
+          <p className="font-medium text-fg">New drip release</p>
+          <p className="text-xs text-fg-3 mt-1">
             Split a film into market-cap unlock stages and publish them one by one.
           </p>
         </button>
@@ -72,11 +72,11 @@ export function DripSessionList({
         <button
           onClick={() => importRef.current?.click()}
           data-testid="import-manifest-button"
-          className="group rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.05] p-5 text-left transition-colors"
+          className="group border border-line-strong bg-card hover:bg-accent p-5 text-left transition-colors"
         >
-          <FileUp className="h-6 w-6 text-[#FF00E5] mb-3" />
-          <p className="font-medium text-white/90">Continue someone else&apos;s stage</p>
-          <p className="text-xs text-white/45 mt-1">
+          <FileUp className="h-6 w-6 text-seal-text mb-3" />
+          <p className="font-medium text-fg">Continue someone else&apos;s stage</p>
+          <p className="text-xs text-fg-3 mt-1">
             Import a hand-off kit manifest — your wallet publishes the next unlock rung.
           </p>
         </button>
@@ -84,19 +84,19 @@ export function DripSessionList({
 
       {sessions.length > 0 && (
         <div className="space-y-3">
-          <p className="text-xs uppercase tracking-wide text-white/40">Your drips on this device</p>
+          <p className="text-xs uppercase tracking-wide text-fg-4">Your drips on this device</p>
           {sessions.map((s) => {
             const done = s.stages.filter((st) => st.result).length
             return (
               <div
                 key={s.dripId}
-                className="flex items-center gap-4 rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3"
+                className="flex items-center gap-4 border border-line bg-card px-4 py-3"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-white/85 truncate">
+                  <p className="text-sm font-medium text-fg/85 truncate">
                     {s.title || 'Untitled drip'}
                   </p>
-                  <p className="text-xs text-white/35 truncate mt-0.5">
+                  <p className="text-xs text-fg-4 truncate mt-0.5">
                     {s.fileName} · {(s.fileSize / 1024 / 1024).toFixed(1)} MB ·{' '}
                     <Clock className="inline h-3 w-3 -mt-0.5" /> {timeAgo(s.updatedAtMs)}
                   </p>
@@ -107,28 +107,28 @@ export function DripSessionList({
                   {s.stages.map((st, i) => (
                     <span key={i} title={`Stage ${i + 1} · ${stageLabel(i, s.stages.length)}`}>
                       {st.result ? (
-                        <CheckCircle2 className="h-4 w-4 text-green-400" />
+                        <CheckCircle2 className="h-4 w-4 text-[var(--color-arkiv)]" />
                       ) : (
-                        <span className="block h-4 w-4 rounded-full border border-white/15" />
+                        <span className="block h-4 w-4 rounded-full border border-line-strong" />
                       )}
                     </span>
                   ))}
                 </div>
-                <span className="text-xs font-mono text-white/50 shrink-0 w-8 text-right">
+                <span className="text-xs font-mono text-fg-4 shrink-0 w-8 text-right">
                   {done}/{s.stages.length}
                 </span>
 
                 <button
                   onClick={() => onResume(s)}
                   data-testid={`resume-${s.dripId}`}
-                  className="px-3 py-1.5 rounded-lg bg-[#00F5FF]/10 border border-[#00F5FF]/30 text-xs text-[#00F5FF] hover:bg-[#00F5FF]/20 transition-colors shrink-0"
+                  className="px-3 py-1.5 bg-accent border border-seal-edge text-xs text-seal-text hover:bg-accent transition-colors shrink-0"
                 >
                   Resume
                 </button>
                 <button
                   onClick={() => onDelete(s.dripId)}
                   aria-label={`Delete ${s.title || 'draft'}`}
-                  className="p-1.5 rounded-lg text-white/25 hover:text-red-400 hover:bg-red-400/10 transition-colors shrink-0"
+                  className="p-1.5 text-fg-5 hover:text-destructive hover:bg-red-400/10 transition-colors shrink-0"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -139,7 +139,7 @@ export function DripSessionList({
       )}
 
       {sessions.length === 0 && (
-        <p className="text-center text-sm text-white/30 py-4">
+        <p className="text-center text-sm text-fg-5 py-4">
           No drips in progress on this device yet.
         </p>
       )}

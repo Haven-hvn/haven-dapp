@@ -40,7 +40,7 @@ export function StageChecklist({ stages }: StageChecklistProps) {
           total={stages.length}
           size={20}
         />
-        <span className="text-xs text-white/40">
+        <span className="text-xs text-fg-4">
           {stages.filter((s) => s.result).length}/{stages.length} stages live on-chain
         </span>
       </div>
@@ -62,32 +62,32 @@ function StageRow({
   return (
     <div
       data-testid={state === 'done' ? 'stage-row-done' : undefined}
-      className={`flex items-center gap-3 rounded-xl px-3 py-2.5 border transition-colors ${
+      className={`flex items-center gap-3 px-3 py-2.5 border transition-colors ${
         state === 'done'
           ? 'border-green-500/25 bg-green-500/[0.04]'
           : state === 'active'
-            ? 'border-[#00F5FF]/40 bg-[#00F5FF]/[0.05]'
-            : 'border-white/[0.06] bg-white/[0.02]'
+            ? 'border-seal bg-accent'
+            : 'border-line bg-card'
       }`}
     >
       {state === 'done' ? (
-        <CheckCircle2 className="h-5 w-5 shrink-0 text-green-400" />
+        <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--color-arkiv)]" />
       ) : state === 'active' ? (
         <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
-          <CircleDashed className="h-5 w-5 animate-spin text-[#00F5FF]" />
+          <CircleDashed className="h-5 w-5 animate-spin text-seal-text" />
         </span>
       ) : (
-        <Lock className="h-4 w-4 shrink-0 text-white/20" />
+        <Lock className="h-4 w-4 shrink-0 text-fg/20" />
       )}
 
       <div className="min-w-0 flex-1">
-        <p className={`text-sm font-medium ${state === 'locked' ? 'text-white/35' : 'text-white/85'}`}>
+        <p className={`text-sm font-medium ${state === 'locked' ? 'text-fg-4' : 'text-fg/85'}`}>
           Stage {plan.dripIndex + 1} · {stageLabel(plan.dripIndex, plan.dripTotal)}
-          <span className="ml-2 font-normal text-xs text-white/30">
+          <span className="ml-2 font-normal text-xs text-fg-5">
             unlocks @ {formatUsdCompact(plan.marketCapTargetUsd)}
           </span>
         </p>
-        <p className="text-[11px] text-white/30 truncate">
+        <p className="text-[11px] text-fg-5 truncate">
           {state === 'done' && result ? (
             <>
               by {shortAddr(result.publishedBy)} · entity {shortAddr(result.entityKey)} ·{' '}
@@ -100,11 +100,11 @@ function StageRow({
       </div>
 
       {state === 'done' ? (
-        <span className="text-xs font-medium text-green-400">Published</span>
+        <span className="text-xs font-medium text-[var(--color-arkiv)]">Published</span>
       ) : state === 'active' ? (
-        <span className="text-xs font-medium text-[#00F5FF]">Up next</span>
+        <span className="text-xs font-medium text-seal-text">Up next</span>
       ) : (
-        <span className="text-xs text-white/25">Locked</span>
+        <span className="text-xs text-fg-5">Locked</span>
       )}
     </div>
   )

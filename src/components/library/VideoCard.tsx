@@ -1,16 +1,15 @@
 /**
  * VideoCard Component
  *
- * Displays a video thumbnail with cache status indicators.
- * Shows badges for expired/expiring videos and includes
- * reassuring messaging about local cache preservation.
+ * A plate in the collection register: hairline frame, thumbnail as the figure,
+ * ledger-set metadata beneath. Shows badges for expired/expiring videos and
+ * includes reassuring messaging about local cache preservation.
  *
  * Features:
  * - Cache status badge overlay (top-right corner)
- * - Green cloud badge for cached encrypted videos
+ * - Sealed cloud badge for cached encrypted videos
  * - Expiration indicator in footer
  * - Click handling for navigation
- * - Dark mode support
  */
 
 'use client'
@@ -145,11 +144,10 @@ function formatDate(date: Date | undefined): string {
 // =============================================================================
 
 /**
- * VideoCard - Displays a video with cache status indicators
+ * VideoCard - a figure plate with cache status indicators.
  *
- * Shows thumbnail with play overlay, video metadata, and cache status badges.
- * Non-active videos display a badge in the top-right corner and an
- * expiration message in the footer.
+ * Shows thumbnail with play overlay, video metadata set in the ledger
+ * register, and cache status badges.
  *
  * @example
  * ```tsx
@@ -194,12 +192,11 @@ export function VideoCard({
   return (
     <article
       className={`
-        group relative rounded-lg overflow-hidden
-        bg-white dark:bg-gray-900
-        border border-gray-200 dark:border-gray-800
-        shadow-sm hover:shadow-md
-        transition-shadow duration-200
-        cursor-pointer
+        group relative overflow-hidden cursor-pointer
+        border border-line bg-surface-raised
+        transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
+        hover:border-line-strong hover:shadow-[var(--lift-2)]
+        focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
         ${className}
       `}
       onClick={handleClick}
@@ -208,15 +205,15 @@ export function VideoCard({
       role="button"
       aria-label={`Video: ${video.title}${showExpiredFooter ? ' (cached locally)' : ''}${showExpiringFooter ? ' (expiring soon)' : ''}`}
     >
-      {/* Thumbnail container */}
-      <div className="relative aspect-video bg-gray-100 dark:bg-gray-800 overflow-hidden">
-        {/* Placeholder gradient background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-800 dark:to-gray-700" />
+      {/* Thumbnail — the figure */}
+      <div className="relative aspect-video bg-surface-deep overflow-hidden">
+        {/* Placeholder tone */}
+        <div className="absolute inset-0 bg-gradient-to-br from-surface-sunk to-surface-deep" />
 
         {/* Encrypted indicator */}
         {video.isEncrypted && (
           <div className="absolute top-2 left-2 flex items-center gap-1">
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-black/60 text-white">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 font-[family-name:var(--font-ledger)] text-[0.625rem] tracking-[0.06em] uppercase bg-fg/70 text-surface">
               <LockIcon className="h-3 w-3" />
               <span className="sr-only">Encrypted</span>
             </span>
@@ -224,10 +221,10 @@ export function VideoCard({
           </div>
         )}
 
-        {/* Green cloud badge - cached encrypted videos */}
+        {/* Cached badge - cached encrypted videos */}
         {video.isEncrypted && isCached && (
           <div
-            className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 bg-green-500/80 text-white rounded text-xs"
+            className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 bg-seal text-seal-solid-text text-[0.625rem] font-[family-name:var(--font-ledger)] tracking-[0.06em] uppercase"
             title="Cached — instant playback"
           >
             <Cloud className="w-3 h-3" />
@@ -248,18 +245,18 @@ export function VideoCard({
         )}
 
         {/* Play button overlay (shown on hover) */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/20">
-          <div className="w-12 h-12 rounded-full bg-white/90 dark:bg-black/80 flex items-center justify-center shadow-lg">
-            <PlayIcon className="w-6 h-6 text-gray-900 dark:text-white ml-0.5" />
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-fg/10">
+          <div className="border border-line-strong bg-surface p-3 shadow-[var(--lift-2)]">
+            <PlayIcon className="w-6 h-6 text-fg ml-0.5" />
           </div>
         </div>
 
         {/* Download button (bottom-left, shown on hover) */}
-        <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
           <button
             onClick={(e) => { e.stopPropagation(); download(video) }}
             disabled={isDownloading}
-            className="inline-flex items-center gap-1 px-1.5 py-1 rounded text-xs font-medium bg-black/70 hover:bg-black/90 text-white transition-colors disabled:opacity-70"
+            className="inline-flex items-center gap-1 px-1.5 py-1 font-[family-name:var(--font-ledger)] text-[0.625rem] tracking-[0.08em] uppercase bg-fg/80 hover:bg-fg text-surface transition-colors disabled:opacity-70"
             title={isDownloading ? progressMessage : 'Download video'}
             aria-label={`Download ${video.title}`}
           >
@@ -281,43 +278,45 @@ export function VideoCard({
 
         {/* Download progress bar (visible during download) */}
         {isDownloading && (
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/30">
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-fg/20">
             <div
-              className="h-full bg-purple-500 transition-all duration-300"
+              className="h-full bg-seal transition-all duration-300"
               style={{ width: `${progress}%` }}
             />
           </div>
         )}
 
-        {/* Duration badge (bottom-right) */}
+        {/* Duration badge (bottom-right) — evidence, so it's mono */}
         <div className="absolute bottom-2 right-2">
-          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-black/70 text-white">
+          <span className="inline-flex items-center px-1.5 py-0.5 font-[family-name:var(--font-ledger)] text-[0.625rem] tracking-[0.04em] tabular-nums bg-fg/80 text-surface">
             <ClockIcon className="h-3 w-3 mr-1" />
             {formatDuration(video.duration)}
           </span>
         </div>
       </div>
 
-      {/* Card content */}
-      <div className="p-3">
+      {/* Caption — ledger metadata beneath the figure */}
+      <div className="p-3 border-t border-line">
         {/* Title */}
-        <h3 className="font-medium text-gray-900 dark:text-gray-100 line-clamp-2 text-sm leading-tight">
+        <h3 className="text-small font-medium leading-snug text-fg line-clamp-2 tracking-[-0.01em]">
           {video.title}
         </h3>
 
         {/* Description (optional, truncated) */}
         {video.description && (
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-1">
+          <p className="text-xs text-fg-4 mt-1 line-clamp-1">
             {video.description}
           </p>
         )}
 
         {/* Metadata row — holder identity (NFT avatar when gated) */}
-        <div className="flex items-center gap-2 mt-2 text-xs text-gray-500 dark:text-gray-400">
-          <span>{formatDate(video.createdAt)}</span>
-          <span>·</span>
+        <div className="flex items-center gap-2 mt-2 text-nano font-[family-name:var(--font-ledger)] tracking-[0.04em] uppercase text-fg-5">
+          <time dateTime={video.createdAt?.toISOString()}>
+            {formatDate(video.createdAt)}
+          </time>
+          <span aria-hidden="true">·</span>
           {video.creatorHandle ? (
-            <span>@{video.creatorHandle}</span>
+            <span className="normal-case">@{video.creatorHandle}</span>
           ) : (
             <HolderIdentity
               address={video.owner}
@@ -325,23 +324,23 @@ export function VideoCard({
               gateChain={(video.encryptionMetadata as unknown as { chain?: string })?.chain ?? null}
               size="sm"
               compact
-              className="[&>span]:text-gray-500"
+              className="[&>span]:text-fg-5"
             />
           )}
         </div>
 
         {/* Expired video message */}
         {showExpiredFooter && (
-          <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 flex items-center gap-1">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500" aria-hidden="true" />
+          <p className="text-xs text-ember-deep dark:text-[var(--seal-text)] mt-2 flex items-center gap-1.5 font-[family-name:var(--font-ledger)] tracking-[0.04em] uppercase">
+            <span className="net-dot net-haven" aria-hidden="true" />
             Preserved in local cache
           </p>
         )}
 
         {/* Expiring soon message */}
         {showExpiringFooter && (
-          <p className="text-xs text-orange-600 dark:text-orange-400 mt-2 flex items-center gap-1">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" aria-hidden="true" />
+          <p className="text-xs text-ember-deep dark:text-[var(--seal-text)] mt-2 flex items-center gap-1.5 font-[family-name:var(--font-ledger)] tracking-[0.04em] uppercase">
+            <span className="net-dot net-haven animate-pulse" aria-hidden="true" />
             Expiring soon — will be cached locally
           </p>
         )}
@@ -360,19 +359,18 @@ export function VideoCard({
 export function VideoCardSkeleton({ className = '' }: { className?: string }) {
   return (
     <div className={`
-      rounded-lg overflow-hidden
-      bg-white dark:bg-gray-900
-      border border-gray-200 dark:border-gray-800
+      overflow-hidden
+      border border-line bg-surface-raised
       ${className}
     `}>
       {/* Thumbnail skeleton */}
-      <div className="aspect-video bg-gray-200 dark:bg-gray-800 animate-pulse" />
+      <div className="aspect-video bg-line animate-pulse" />
 
       {/* Content skeleton */}
-      <div className="p-3 space-y-2">
-        <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded animate-pulse w-3/4" />
-        <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded animate-pulse w-1/2" />
-        <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded animate-pulse w-1/4" />
+      <div className="p-3 space-y-2 border-t border-line">
+        <div className="h-4 bg-line animate-pulse w-3/4" />
+        <div className="h-3 bg-line animate-pulse w-1/2" />
+        <div className="h-3 bg-line animate-pulse w-1/4" />
       </div>
     </div>
   )

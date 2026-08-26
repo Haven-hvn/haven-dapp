@@ -80,13 +80,13 @@ export function DecryptionProgress({
   
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
-      <div className="text-center text-white max-w-md px-6">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/20 text-purple-400 mb-4">
+      <div className="text-center text-fg max-w-md px-6">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/20 text-fg-4 400 mb-4">
           {getStatusIcon()}
         </div>
         
         <h3 className="text-lg font-semibold mb-2">Encrypted Video</h3>
-        <p className="text-white/60 mb-4">{progress || 'Processing...'}</p>
+        <p className="text-fg-3 mb-4">{progress || 'Processing...'}</p>
         
         {/* Progress bar */}
         <div className="w-64 h-2 bg-white/20 rounded-full overflow-hidden mx-auto">
@@ -97,12 +97,12 @@ export function DecryptionProgress({
         </div>
         
         {status === 'fetching' && downloadProgress.total > 0 && (
-          <p className="text-sm text-white/40 mt-2">
+          <p className="text-sm text-fg-4 mt-2">
             Downloading: {downloadPercent}%
           </p>
         )}
         
-        <p className="text-xs text-white/30 mt-4">
+        <p className="text-xs text-fg-5 mt-4">
           Your private key never leaves your browser
         </p>
       </div>

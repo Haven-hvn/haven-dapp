@@ -101,7 +101,7 @@ function Checkbox({ checked, onChange, id, children }: CheckboxProps) {
       htmlFor={id}
       className="
         inline-flex items-center gap-2 cursor-pointer
-        text-sm text-gray-700 dark:text-gray-300
+        text-small text-fg-2
         select-none
       "
     >
@@ -117,11 +117,10 @@ function Checkbox({ checked, onChange, id, children }: CheckboxProps) {
         />
         <span
           className="
-            w-4 h-4 rounded
-            border-2 border-gray-300 dark:border-gray-600
-            bg-white dark:bg-gray-800
-            peer-checked:bg-amber-500 peer-checked:border-amber-500
-            peer-focus:ring-2 peer-focus:ring-amber-500/50
+            w-4 h-4
+            border border-line-strong
+            bg-surface-raised
+            peer-checked:bg-seal peer-checked:border-seal
             transition-colors
           "
           aria-hidden="true"
@@ -129,7 +128,7 @@ function Checkbox({ checked, onChange, id, children }: CheckboxProps) {
         <CheckIcon
           className="
             absolute inset-0 m-auto w-3 h-3
-            text-white
+            text-seal-solid-text
             opacity-0 peer-checked:opacity-100
             transition-opacity
           "
@@ -181,19 +180,19 @@ export function LibraryFilter({
       className={`
         flex flex-wrap items-center gap-4
         p-3 rounded-lg
-        bg-gray-50 dark:bg-gray-900
-        border border-gray-200 dark:border-gray-800
+        bg-surface-raised
+        border border-line
         ${className}
       `}
     >
       {/* Filter icon and label */}
-      <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+      <div className="flex items-center gap-2 text-fg-2">
         <FilterIcon className="h-4 w-4" />
         <span className="text-sm font-medium">Filters</span>
       </div>
 
       {/* Divider */}
-      <div className="h-4 w-px bg-gray-300 dark:bg-gray-700" />
+      <div className="h-4 w-px bg-line-strong" />
 
       {/* Show expired checkbox */}
       <div className="flex items-center gap-2">
@@ -206,17 +205,17 @@ export function LibraryFilter({
         </Checkbox>
 
         {expiredCount > 0 && (
-          <span className="text-xs text-gray-500 dark:text-gray-400">
+          <span className="text-nano text-fg-4">
             ({expiredCount} cached locally)
           </span>
         )}
       </div>
 
       {/* Results count */}
-      <div className="ml-auto text-sm text-gray-500 dark:text-gray-400">
+      <div className="ml-auto text-small text-fg-4">
         Showing {showingCount} video{showingCount !== 1 ? 's' : ''}
         {!showExpiredVideos && expiredCount > 0 && (
-          <span className="text-gray-400 dark:text-gray-500">
+          <span className="text-fg-5">
             {' '}(+{expiredCount} hidden)
           </span>
         )}
@@ -234,15 +233,15 @@ export function LibraryFilterSkeleton({ className = '' }: { className?: string }
       className={`
         flex items-center gap-4
         p-3 rounded-lg
-        bg-gray-50 dark:bg-gray-900
-        border border-gray-200 dark:border-gray-800
+        bg-surface-raised
+        border border-line
         ${className}
       `}
     >
-      <div className="h-4 w-16 bg-gray-200 dark:bg-gray-800 rounded animate-pulse" />
-      <div className="h-4 w-px bg-gray-300 dark:bg-gray-700" />
-      <div className="h-4 w-32 bg-gray-200 dark:bg-gray-800 rounded animate-pulse" />
-      <div className="ml-auto h-4 w-24 bg-gray-200 dark:bg-gray-800 rounded animate-pulse" />
+      <div className="h-4 w-16 bg-line animate-pulse" />
+      <div className="h-4 w-px bg-line-strong" />
+      <div className="h-4 w-32 bg-line animate-pulse" />
+      <div className="ml-auto h-4 w-24 bg-line animate-pulse" />
     </div>
   )
 }

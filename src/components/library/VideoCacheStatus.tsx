@@ -206,7 +206,7 @@ export function ExpiredVideoBanner({
       className={`
         bg-amber-50 dark:bg-amber-950/30
         border border-amber-200 dark:border-amber-800
-        rounded-lg p-4
+        p-4
         ${className}
       `}
     >
@@ -269,7 +269,7 @@ export function ExpiringSoonBanner({
       className={`
         bg-orange-50 dark:bg-orange-950/30
         border border-orange-200 dark:border-orange-800
-        rounded-lg p-4
+        p-4
         ${className}
       `}
     >
@@ -322,7 +322,7 @@ export function ActiveVideoStatus({
       className={`
         bg-green-50 dark:bg-green-950/30
         border border-green-200 dark:border-green-800
-        rounded-lg p-3
+        p-3
         ${className}
       `}
     >

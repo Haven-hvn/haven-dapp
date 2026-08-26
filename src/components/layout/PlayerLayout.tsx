@@ -2,12 +2,12 @@
 
 /**
  * Player Layout Component
- * 
- * A minimal layout for the video player page that:
+ *
+ * THE OBSERVATORY. A minimal layout for the video player page that:
  * - Removes the sidebar for immersive viewing
- * - Provides a clean full-screen experience
- * - Maintains header for navigation
- * 
+ * - Forces the void tone so every token inside resolves to the dark world,
+ *   whatever edition the document is in
+ *
  * @module components/layout/PlayerLayout
  */
 
@@ -19,7 +19,7 @@ interface PlayerLayoutProps {
 
 export function PlayerLayout({ children }: PlayerLayoutProps) {
   return (
-    <div className="min-h-dvh h-dvh overflow-hidden bg-black">
+    <div data-tone="void" className="min-h-dvh h-dvh overflow-hidden bg-black text-[oklch(0.968_0.005_90)]">
       {children}
     </div>
   )

@@ -77,7 +77,7 @@ export function CacheIndicator({
       <button
         onClick={() => setShowMenu(!showMenu)}
         disabled={isEvicting}
-        className="flex items-center gap-1.5 px-2.5 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-medium hover:bg-green-500/30 transition-colors disabled:opacity-50"
+        className="flex items-center gap-1.5 px-2.5 py-1 bg-green-500/20 text-[var(--color-arkiv)] rounded-full text-xs font-medium hover:bg-green-500/30 transition-colors disabled:opacity-50"
         title="Video is cached for instant playback"
         aria-label="Video is cached. Click to see options"
         aria-expanded={showMenu}
@@ -92,16 +92,16 @@ export function CacheIndicator({
       
       {showMenu && (
         <div 
-          className="absolute right-0 top-full mt-1.5 bg-gray-900 border border-white/10 rounded-lg shadow-lg p-1.5 min-w-[160px] z-50"
+          className="absolute right-0 top-full mt-1.5 bg-surface-raised border border-line-strong shadow-lg p-1.5 min-w-[160px] z-50"
           role="menu"
         >
-          <div className="px-3 py-1.5 text-xs text-white/50 border-b border-white/5 mb-1">
+          <div className="px-3 py-1.5 text-xs text-fg-4 border-b border-white/5 mb-1">
             Instant playback available
           </div>
           <button
             onClick={handleEvict}
             disabled={isEvicting}
-            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-md transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-destructive hover:bg-red-500/10 transition-colors disabled:opacity-50"
             role="menuitem"
           >
             <Trash2 className="w-4 h-4" />

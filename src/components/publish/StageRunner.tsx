@@ -167,19 +167,19 @@ export function StageRunner({
   const ready = verified && !publishing && !stageDone && walletClient != null
 
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5 space-y-4" data-testid="stage-runner">
+    <div className="border border-line bg-card p-5 space-y-4" data-testid="stage-runner">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-wide text-[#00F5FF]/80 font-medium">
+          <p className="text-xs uppercase tracking-wide text-seal-text/80 font-medium">
             Up next · Stage {plan.dripIndex + 1} of {plan.dripTotal}
           </p>
-          <p className="text-sm text-white/70 mt-0.5">
+          <p className="text-sm text-fg-2 mt-0.5">
             {stageLabel(plan.dripIndex, plan.dripTotal)} unlocks at{' '}
             <span className="font-mono">{formatUsdCompact(plan.marketCapTargetUsd)}</span> market cap ·{' '}
             {(Math.max(0, plan.endByte - plan.startByte) / 1024 / 1024).toFixed(1)} MB slice
           </p>
         </div>
-        {stageDone && <CheckCircle2 className="h-6 w-6 text-green-400 shrink-0" />}
+        {stageDone && <CheckCircle2 className="h-6 w-6 text-[var(--color-arkiv)] shrink-0" />}
       </div>
 
       {!stageDone && (
@@ -194,7 +194,7 @@ export function StageRunner({
                 e.preventDefault()
                 void acceptFile(e.dataTransfer.files?.[0] ?? null)
               }}
-              className="w-full rounded-lg border border-dashed border-white/15 hover:border-[#00F5FF]/40 p-4 flex items-center justify-center gap-2 text-sm text-white/60 hover:text-white/80 transition-colors"
+              className="w-full border border-dashed border-line-strong hover:border-seal p-4 flex items-center justify-center gap-2 text-sm text-fg-3 hover:text-fg-2 transition-colors"
               data-testid="runner-source-dropzone"
             >
               <FileVideo className="h-4 w-4" />
@@ -203,23 +203,23 @@ export function StageRunner({
           )}
 
           {bytesRef.current != null && (
-            <div className="flex items-center gap-3 rounded-lg bg-black/30 px-3 py-2.5" data-testid="runner-source-status">
-              <Fingerprint className="h-4 w-4 shrink-0 text-white/40" />
-              <span className="text-sm text-white/60 flex-1 min-w-0 truncate">
+            <div className="flex items-center gap-3 bg-black/30 px-3 py-2.5" data-testid="runner-source-status">
+              <Fingerprint className="h-4 w-4 shrink-0 text-fg-4" />
+              <span className="text-sm text-fg-3 flex-1 min-w-0 truncate">
                 Source · {fileSize.toLocaleString()} bytes
               </span>
               {verify === 'hashing' && (
-                <span className="flex items-center gap-1.5 text-xs text-white/50">
+                <span className="flex items-center gap-1.5 text-xs text-fg-4">
                   <Loader2 className="h-3 w-3 animate-spin" /> hashing…
                 </span>
               )}
               {verified && (
-                <span className="flex items-center gap-1.5 text-xs text-green-400" data-testid="source-verified-badge">
+                <span className="flex items-center gap-1.5 text-xs text-[var(--color-arkiv)]" data-testid="source-verified-badge">
                   <ShieldCheck className="h-3.5 w-3.5" /> SHA-256 match
                 </span>
               )}
               {(verify === 'size-mismatch' || verify === 'hash-mismatch') && (
-                <span className="flex items-center gap-1.5 text-xs text-red-400" data-testid="source-mismatch-badge">
+                <span className="flex items-center gap-1.5 text-xs text-destructive" data-testid="source-mismatch-badge">
                   <AlertCircle className="h-3.5 w-3.5" />
                   {verify === 'size-mismatch' ? 'Wrong file size' : 'Different content'}
                 </span>
@@ -228,14 +228,14 @@ export function StageRunner({
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => inputRef.current?.click()}
-                    className="text-xs text-white/40 hover:text-white transition-colors"
+                    className="text-xs text-fg-4 hover:text-fg transition-colors"
                   >
                     Swap
                   </button>
                   <button
                     onClick={clearSource}
                     aria-label="Detach source file"
-                    className="text-white/30 hover:text-white/70 transition-colors"
+                    className="text-fg-5 hover:text-fg-2 transition-colors"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -253,7 +253,7 @@ export function StageRunner({
 
           {/* Live pipeline progress */}
           {progress && (
-            <div className="space-y-2 rounded-lg bg-black/20 px-3 py-2.5" data-testid="drip-progress">
+            <div className="space-y-2 bg-black/20 px-3 py-2.5" data-testid="drip-progress">
               <ProgressLine label="Encrypting locally (AES-256-GCM)" state={progress.stage} target="encrypting" />
               <ProgressLine
                 label={
@@ -269,13 +269,13 @@ export function StageRunner({
           )}
 
           {!walletClient && (
-            <p className="text-xs text-amber-400/80 flex items-center gap-1.5">
+            <p className="text-xs text-seal-text flex items-center gap-1.5">
               <AlertCircle className="h-3.5 w-3.5" /> Connect a wallet — this stage&apos;s storage fees are paid by whoever uploads it.
             </p>
           )}
 
           {error && (
-            <p className="text-xs text-red-400 flex items-start gap-1.5" data-testid="publish-error">
+            <p className="text-xs text-destructive flex items-start gap-1.5" data-testid="publish-error">
               <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" /> {error}
             </p>
           )}
@@ -285,7 +285,7 @@ export function StageRunner({
               onClick={() => void handleUpload()}
               disabled={!ready}
               data-testid="publish-button"
-              className="flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-[#00F5FF] to-[#FF00E5] text-[#0A0A0F] text-sm font-semibold disabled:opacity-30 disabled:cursor-not-allowed transition-all hover:shadow-lg hover:shadow-[#00F5FF]/20"
+              className="action action-sealed flex-1 min-h-[44px] disabled:opacity-30 disabled:pointer-events-none"
             >
               {publishing ? (
                 <>
@@ -300,14 +300,14 @@ export function StageRunner({
             {publishing && (
               <button
                 onClick={() => abortRef.current?.abort()}
-                className="px-4 py-3 rounded-xl border border-white/10 text-sm text-white/60 hover:text-white transition-colors"
+                className="px-4 py-3 border border-line-strong text-sm text-fg-3 hover:text-fg transition-colors"
               >
                 Cancel
               </button>
             )}
           </div>
 
-          <p className="text-[11px] leading-relaxed text-white/30">
+          <p className="text-[11px] leading-relaxed text-fg-5">
             This stage gets its own AES key wrapped to its own VetKD identity — nothing is shared
             with other stages or uploaders. Publishing out of order is blocked so no chunk ever
             lands behind a missing middle piece.
@@ -316,7 +316,7 @@ export function StageRunner({
       )}
 
       {stageDone && (
-        <p className="text-sm text-green-400 flex items-center gap-2" data-testid="stage-done-copy">
+        <p className="text-sm text-[var(--color-arkiv)] flex items-center gap-2" data-testid="stage-done-copy">
           <CheckCircle2 className="h-4 w-4" /> Stage {plan.dripIndex + 1} is live — tick moved on the checklist.
         </p>
       )}
@@ -341,13 +341,13 @@ function ProgressLine({
   return (
     <div className="flex items-center gap-2 text-xs">
       {done ? (
-        <CheckCircle2 className="h-3.5 w-3.5 text-green-400 shrink-0" />
+        <CheckCircle2 className="h-3.5 w-3.5 text-[var(--color-arkiv)] shrink-0" />
       ) : active ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin text-[#00F5FF] shrink-0" />
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-seal-text shrink-0" />
       ) : (
-        <CircleDashed className="h-3.5 w-3.5 text-white/20 shrink-0" />
+        <CircleDashed className="h-3.5 w-3.5 text-fg/20 shrink-0" />
       )}
-      <span className={done ? 'text-white/60' : active ? 'text-white/90' : 'text-white/35'}>{label}</span>
+      <span className={done ? 'text-fg-3' : active ? 'text-fg' : 'text-fg-4'}>{label}</span>
     </div>
   )
 }

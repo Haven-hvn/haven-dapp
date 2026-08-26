@@ -46,7 +46,7 @@ export function DownloadQueuePanel({
   )
 
   return (
-    <div className="border rounded-lg bg-background shadow-sm mt-4">
+    <div className="border bg-background shadow-sm mt-4">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 border-b">
         <div className="flex items-center gap-2">

@@ -30,14 +30,14 @@ export function ErrorOverlay({
       <div className="text-center max-w-md px-6">
         <AlertTriangle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
 
-        <h3 className="text-xl font-semibold text-white mb-2">
+        <h3 className="text-xl font-semibold text-fg mb-2">
           {presentation.title}
         </h3>
 
-        <p className="text-white/80 mb-3 leading-relaxed">{presentation.message}</p>
+        <p className="text-fg-2 mb-3 leading-relaxed">{presentation.message}</p>
 
         {presentation.hint != null && presentation.hint.length > 0 ? (
-          <p className="text-sm text-white/50 mb-6 leading-relaxed">
+          <p className="text-sm text-fg-4 mb-6 leading-relaxed">
             {presentation.hint}
           </p>
         ) : (
@@ -47,20 +47,20 @@ export function ErrorOverlay({
         <button
           type="button"
           onClick={onRetry}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors touch-manipulation min-h-[44px]"
+          className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-fg hover:bg-primary/90 transition-colors touch-manipulation min-h-[44px]"
         >
           <RefreshCw className="w-4 h-4" />
           {presentation.retryLabel ?? 'Try again'}
         </button>
 
         {presentation.retryHint != null && presentation.retryHint.length > 0 ? (
-          <p className="text-xs text-white/45 mt-2 leading-relaxed">
+          <p className="text-xs text-fg-3 mt-2 leading-relaxed">
             {presentation.retryHint}
           </p>
         ) : null}
 
         {showEncryptedFooter && (
-          <p className="text-xs text-white/40 mt-4 leading-relaxed">
+          <p className="text-xs text-fg-4 mt-4 leading-relaxed">
             Encrypted videos are decrypted in your browser after you sign with
             the owning wallet.
           </p>

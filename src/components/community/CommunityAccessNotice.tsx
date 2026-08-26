@@ -55,7 +55,7 @@ export function CommunityAccessNotice({
   const explorerHref = chain ? buildExplorerUrl(chain, tokenAddress) : null
 
   return (
-    <div className="mb-6 rounded-xl border border-amber-400/20 bg-amber-400/[0.04] p-4 sm:p-5">
+    <div className="mb-6 border border-seal-edge bg-accent p-4 sm:p-5">
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-amber-400/10 flex items-center justify-center mt-0.5">
           <Info className="w-4 h-4 text-amber-300/90" />

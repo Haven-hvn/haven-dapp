@@ -59,11 +59,11 @@ export function DownloadProgressBadge({ queueItem }: DownloadProgressBadgeProps)
         style={{ opacity: completeOpacity }}
       >
         {/* Green ring border */}
-        <div className="absolute inset-0 rounded-lg ring-2 ring-green-400" />
+        <div className="absolute inset-0 ring-2 ring-green-400" />
         {/* Checkmark centered */}
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="w-10 h-10 rounded-full bg-green-500/90 flex items-center justify-center shadow-lg">
-            <Check className="w-5 h-5 text-white" strokeWidth={3} />
+            <Check className="w-5 h-5 text-fg" strokeWidth={3} />
           </div>
         </div>
       </div>
@@ -75,7 +75,7 @@ export function DownloadProgressBadge({ queueItem }: DownloadProgressBadgeProps)
     return (
       <div className="absolute top-2 left-2 z-20 pointer-events-none">
         <div className="w-5 h-5 rounded-full bg-red-500/90 flex items-center justify-center shadow-md">
-          <AlertCircle className="w-3 h-3 text-white" />
+          <AlertCircle className="w-3 h-3 text-fg" />
         </div>
       </div>
     )
@@ -86,8 +86,8 @@ export function DownloadProgressBadge({ queueItem }: DownloadProgressBadgeProps)
     return (
       <div className="absolute top-2 left-2 z-20 pointer-events-none">
         <span className="relative flex h-2.5 w-2.5">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-purple-500" />
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-fg-4 opacity-75" />
+          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-fg-3" />
         </span>
       </div>
     )
@@ -103,7 +103,7 @@ export function DownloadProgressBadge({ queueItem }: DownloadProgressBadgeProps)
         {/* Thin progress bar at the very bottom of the thumbnail */}
         <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none h-1 bg-black/30 rounded-b-lg overflow-hidden">
           <div
-            className="h-full rounded-full transition-all duration-500 ease-out bg-gradient-to-r from-purple-500 via-blue-500 to-purple-500"
+            className="h-full rounded-full transition-all duration-500 ease-out bg-gradient-to-r from-seal to-seal-deep"
             style={{
               width: `${Math.max(2, progress)}%`,
               backgroundSize: '200% 100%',
@@ -115,7 +115,7 @@ export function DownloadProgressBadge({ queueItem }: DownloadProgressBadgeProps)
         {/* Small percentage label at bottom-right, only when progress > 15% */}
         {progress > 15 && (
           <div className="absolute bottom-1.5 right-1.5 z-20 pointer-events-none">
-            <span className="text-[10px] font-medium text-white bg-black/50 px-1.5 py-0.5 rounded-sm backdrop-blur-sm">
+            <span className="text-[10px] font-medium text-fg bg-black/50 px-1.5 py-0.5 rounded-sm backdrop-blur-sm">
               {progress}%
             </span>
           </div>

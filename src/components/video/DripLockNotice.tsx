@@ -44,26 +44,26 @@ export function DripLockNotice({ drip, gateTokenOverride }: DripLockNoticeProps)
           size={96}
         />
         <div className="absolute inset-0 flex items-center justify-center">
-          <Lock className="h-6 w-6 text-white/60" />
+          <Lock className="h-6 w-6 text-fg-3" />
         </div>
       </div>
 
       <div className="space-y-2">
-        <h2 className="text-xl font-semibold text-white/90">
+        <h2 className="text-xl font-semibold text-fg">
           Chunk {drip.dripIndex + 1} of {drip.dripTotal} is locked
         </h2>
-        <p className="text-lg text-white/70" data-testid="drip-lock-copy">
+        <p className="text-lg text-fg-2" data-testid="drip-lock-copy">
           Unlocks at{' '}
-          <span className="font-semibold text-[#00F5FF]">
+          <span className="font-semibold text-seal-text">
             {formatUsdCompact(drip.marketCapTargetUsd)}
           </span>{' '}
           (now{' '}
-          <span className="font-medium text-white/90">
+          <span className="font-medium text-fg">
             {marketCapUsd != null ? formatUsdCompact(marketCapUsd) : '—'}
           </span>
           )
         </p>
-        <p className="max-w-md text-sm text-white/40">
+        <p className="max-w-md text-sm text-fg-4">
           The community pumps the gate token to progressively unlock this
           release. Hold the required token balance to decrypt once unlocked.
         </p>
@@ -71,19 +71,19 @@ export function DripLockNotice({ drip, gateTokenOverride }: DripLockNoticeProps)
 
       {/* Progress toward next unlock */}
       <div className="w-full max-w-sm space-y-2">
-        <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
+        <div className="h-2 overflow-hidden rounded-full bg-accent">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-[#00F5FF] to-[#FF00E5] transition-all duration-700"
+            className="h-full rounded-full bg-gradient-to-r bg-primary transition-all duration-700"
             style={{ width: `${Math.round((progress ?? 0) * 100)}%` }}
           />
         </div>
-        <div className="flex items-center justify-between text-xs text-white/40">
+        <div className="flex items-center justify-between text-xs text-fg-4">
           <span>
             {progress != null ? `${Math.round(progress * 100)}% to unlock` : 'Live price unavailable'}
           </span>
           <button
             onClick={() => refetch()}
-            className="inline-flex items-center gap-1 hover:text-white/70 transition-colors"
+            className="inline-flex items-center gap-1 hover:text-fg-2 transition-colors"
             aria-label="Refresh market cap"
           >
             <RefreshCw className={`h-3 w-3 ${isLoading ? 'animate-spin' : ''}`} />
@@ -110,7 +110,7 @@ export function DripLockedChip({
   // Chip intentionally shows static info only — polling per grid card would
   // multiply oracle calls; the watch screen owns the live check.
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-[#FF00E5]/10 px-2 py-0.5 text-[11px] font-medium text-[#FF00E5]">
+    <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-seal-text">
       <DripRings unlocked={drip.dripIndex} total={drip.dripTotal} size={14} />
       Drip {drip.dripIndex + 1}/{drip.dripTotal}
     </span>

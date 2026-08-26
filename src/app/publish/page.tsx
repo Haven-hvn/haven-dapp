@@ -57,6 +57,7 @@ import {
   type DripSession,
 } from '@/lib/v4/drip-session'
 import { resolveMintToken } from '@/lib/v4/market-cap'
+import { createMintClubToken } from '@/lib/v4/mint-create'
 import { useMarketCap, evaluateDripUnlock } from '@/hooks/useMarketCap'
 import { useToast } from '@/hooks/useToast'
 import { ConnectButton } from '@/components/auth/ConnectButton'
@@ -75,6 +76,7 @@ const ORACLE_ADDR_RE = /^0x[0-9a-fA-F]{40}$/
 
 export default function PublishPage() {
   const { address } = useAccount()
+  const { data: walletClient } = useWalletClient()
   const toast = useToast()
 
   const [view, setView] = useState<View>('browse')
@@ -90,6 +92,11 @@ export default function PublishPage() {
   const [title, setTitle] = useState('')
   const [chunkCount, setChunkCount] = useState(3)
   const [targetsUsd, setTargetsUsd] = useState<number[]>([1_000_000, 5_000_000, 10_000_000])
+  const [gateMode, setGateMode] = useState<'existing'|'create'>('existing')
+  const [newTokenName, setNewTokenName] = useState('')
+  const [newTokenSymbol, setNewTokenSymbol] = useState('')
+  const [creatingToken, setCreatingToken] = useState(false)
+  const [createError, setCreateError] = useState<string|null>(null)
   const [gateTokenInput, setGateTokenInput] = useState('')
   const [resolvedToken, setResolvedToken] = useState<{ address: string; symbol: string | null } | null>(
     null
@@ -109,8 +116,17 @@ export default function PublishPage() {
   // Gate resolution + live cap ------------------------------------------------
   const activeGateToken =
     session?.gate.gateToken ?? resolvedToken?.address ?? ''
-  const networkHint = (session ? session.gate.chain : chain) === 'EthMainnet' ? 'ethereum' : 'base'
+  const havenChainToMintNetwork: Record<string,string> = { EthMainnet: 'ethereum', EthSepolia: 'sepolia', BaseMainnet: 'base', ArbitrumOne: 'arbitrum', OptimismMainnet: 'optimism' }
+  const networkHint = havenChainToMintNetwork[(session ? session.gate.chain : chain) as string] ?? 'base'
   const { marketCapUsd } = useMarketCap(activeGateToken || null, networkHint)
+
+  const handleCreateToken = useCallback(async () => {
+    if (!walletClient) { setCreateError('Connect wallet first'); return }
+    setCreatingToken(true); setCreateError(null)
+    const r = await createMintClubToken({ walletClient: walletClient as any, network: networkHint, name: newTokenName, symbol: newTokenSymbol })
+    setCreatingToken(false)
+    if (r.address) { setResolvedToken({ address: r.address, symbol: newTokenSymbol }); const bond = await (await import('@/lib/v4/market-cap')).getBondContractAddress(networkHint); if (bond) setOracleAddress(bond); toast.showSuccess('Token created: '+r.address) } else setCreateError(r.error ?? 'Create failed')
+  }, [walletClient, networkHint, newTokenName, newTokenSymbol, toast])
 
   const handleResolveToken = useCallback(async () => {
     setResolving(true)
@@ -303,30 +319,30 @@ export default function PublishPage() {
   // ============================================================================
 
   return (
-    <div className="min-h-screen bg-[#0A0A0F] text-white relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0F] via-[#0d1117] to-[#0A0A0F]" />
+    <div className="min-h-dvh bg-surface text-fg relative overflow-x-clip">
 
       {/* Nav */}
-      <nav className="relative z-10 border-b border-white/[0.06] bg-[#0A0A0F]/50 backdrop-blur-xl sticky top-0">
-        <div className="max-w-3xl mx-auto px-6 h-16 flex items-center justify-between">
+      <nav className="masthead">
+        <div className="max-w-3xl mx-auto px-6 h-16 flex items-center justify-between safe-area-x">
           <div className="flex items-center gap-3">
             {view === 'browse' ? (
-              <Link href="/" aria-label="Back to home" className="text-white/70 hover:text-white transition-colors">
+              <Link href="/" aria-label="Back to home" className="text-fg-3 hover:text-seal-text transition-colors p-2 -ml-2 min-h-[44px] min-w-[44px] flex items-center justify-center touch-manipulation">
                 <ArrowLeft className="w-4 h-4" />
               </Link>
             ) : (
               <button
                 onClick={() => setView('browse')}
                 aria-label="Back to drips"
-                className="text-white/70 hover:text-white transition-colors"
+                className="text-fg-3 hover:text-seal-text transition-colors p-2 -ml-2 min-h-[44px] min-w-[44px] flex items-center justify-center touch-manipulation"
               >
                 <ArrowLeft className="w-4 h-4" />
               </button>
             )}
-            <img src="/favicon.ico" alt="Haven" className="w-8 h-8 rounded-lg" />
-            <span className="text-lg font-semibold tracking-tight">Publish · Drip</span>
+            <span className="wordmark">Publish</span>
+            <span className="lockup-rule" aria-hidden="true" />
+            <span className="label hidden sm:block">Drip</span>
             {session && (
-              <span className="hidden sm:inline-flex items-center gap-1.5 ml-2 text-xs text-white/40">
+              <span className="hidden sm:inline-flex items-center gap-2 ml-2 datum text-fg-3 tabular-nums">
                 <DripRings unlocked={completedStageCount(session)} total={session.stages.length} size={14} />
                 {completedStageCount(session)}/{session.stages.length}
               </span>
@@ -339,7 +355,7 @@ export default function PublishPage() {
         </div>
       </nav>
 
-      <main className="relative z-10 max-w-3xl mx-auto px-6 py-10 space-y-8">
+      <main className="relative max-w-3xl mx-auto px-6 py-10 space-y-10 safe-area-x">
         {view === 'browse' && (
           <>
             <IntroCopy />
@@ -367,25 +383,25 @@ export default function PublishPage() {
                     acceptFile(e.dataTransfer.files?.[0] ?? null)
                   }}
                   data-testid="publish-dropzone"
-                  className="w-full rounded-2xl border-2 border-dashed border-white/15 hover:border-[#00F5FF]/50 bg-white/[0.02] hover:bg-white/[0.04] transition-all p-12 flex flex-col items-center gap-4"
+                  className="w-full border border-dashed border-line-strong hover:border-seal bg-card hover:bg-accent transition-colors duration-300 p-12 flex flex-col items-center gap-4 crop-marks"
                 >
-                  <FileVideo className="w-10 h-10 text-[#00F5FF]" />
-                  <span className="text-white/70">Drag & drop your video, or click to browse</span>
-                  <span className="text-xs text-white/40">
+                  <FileVideo className="w-9 h-9 text-seal" aria-hidden />
+                  <span className="statement-subtitle text-fg">Drag & drop your video, or click to browse</span>
+                  <span className="label text-fg-4 normal-case tracking-[0.06em] whitespace-normal text-center">
                     Encrypted locally · pinned to Filecoin · indexed on Arkiv
                   </span>
                 </button>
               ) : (
-                <div className="flex items-center gap-4 rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
-                  <FileVideo className="w-8 h-8 text-[#00F5FF] shrink-0" />
+                <div className="flex items-center gap-4 border border-line bg-card p-4 panel">
+                  <FileVideo className="w-7 h-7 text-seal shrink-0" aria-hidden />
                   <div className="min-w-0 flex-1">
                     <input
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
                       placeholder="Title"
-                      className="w-full bg-transparent text-sm font-medium outline-none placeholder:text-white/30"
+                      className="w-full bg-transparent statement-subtitle outline-none placeholder:text-fg-5 focus-visible:outline-none"
                     />
-                    <p className="text-xs text-white/40 mt-0.5">
+                    <p className="datum text-fg-4 mt-0.5 truncate">
                       {file.name} · {(file.size / 1024 / 1024).toFixed(1)} MB
                     </p>
                   </div>
@@ -394,7 +410,7 @@ export default function PublishPage() {
                       setFile(null)
                       inputRef.current?.click()
                     }}
-                    className="text-xs text-white/50 hover:text-white transition-colors"
+                    className="label link-rule shrink-0"
                   >
                     Replace
                   </button>
@@ -411,16 +427,16 @@ export default function PublishPage() {
 
             {/* Step 2 — Configure drip */}
             <Section step={2} title="Configure the unlock ladder">
-              <div className="space-y-5 rounded-xl bg-white/[0.03] border border-white/[0.06] p-5">
-                <p className="text-xs leading-relaxed text-white/45">
+              <div className="space-y-5 panel p-5">
+                <p className="prose-body text-fine leading-relaxed text-fg-3">
                   Each rung is a separate upload with its own key — release the teaser today at{' '}
                   {'$'}1M cap, let a teammate ship Act I next week, and so on.
                 </p>
 
                 <div>
-                  <label className="flex items-center justify-between text-sm text-white/60 mb-2">
-                    <span>Stages</span>
-                    <span className="font-mono text-[#00F5FF]">{chunkCount}</span>
+                  <label className="flex items-center justify-between label mb-3">
+                    <span className="normal-case tracking-[0.04em] text-[0.8125rem] font-[family-name:var(--font-institution)]">Stages</span>
+                    <span className="datum !text-base text-seal-text">{chunkCount}</span>
                   </label>
                   <input
                     type="range"
@@ -428,7 +444,7 @@ export default function PublishPage() {
                     max={MAX_DRIP_CHUNKS}
                     value={chunkCount}
                     onChange={(e) => setChunkCountSafe(Number(e.target.value))}
-                    className="w-full accent-[#00F5FF]"
+                    className="w-full accent-[var(--seal)]"
                     data-testid="drip-chunk-slider"
                   />
                 </div>
@@ -436,23 +452,23 @@ export default function PublishPage() {
                 <div className="space-y-2" data-testid="drip-target-list">
                   {targetsUsd.map((t, i) => (
                     <div key={i} className="flex items-center gap-3">
-                      <span className="w-24 shrink-0 text-xs uppercase tracking-wide text-white/40 truncate">
+                      <span className="w-24 shrink-0 label text-fg-4 truncate">
                         {stageLabel(i, targetsUsd.length)}
                       </span>
                       <div className="relative flex-1">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30">$</span>
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-5">$</span>
                         <input
                           inputMode="numeric"
                           value={String(t)}
                           onChange={(e) => setTarget(i, e.target.value)}
-                          className="w-full rounded-lg bg-black/30 border border-white/10 focus:border-[#00F5FF]/50 outline-none pl-7 pr-3 py-1.5 text-sm font-mono"
+                          className="w-full bg-transparent border border-line-strong focus:border-seal outline-none pl-7 pr-3 py-1.5 text-small font-[family-name:var(--font-ledger)] tabular-nums"
                         />
                       </div>
-                      <span className="w-12 text-right text-xs text-white/40">{formatUsdCompact(t)}</span>
+                      <span className="w-14 text-right datum text-fg-4">{formatUsdCompact(t)}</span>
                     </div>
                   ))}
                   {configErrors.some((e) => e.code === 'TARGETS_NOT_ASCENDING') && (
-                    <p className="text-xs text-red-400 flex items-center gap-1">
+                    <p className="text-nano text-destructive flex items-center gap-1.5 font-[family-name:var(--font-ledger)] uppercase tracking-[0.08em]">
                       <AlertCircle className="h-3 w-3" /> Targets must be strictly ascending.
                     </p>
                   )}
@@ -461,7 +477,7 @@ export default function PublishPage() {
                       <button
                         key={preset.label}
                         onClick={() => applyPreset(preset.targetsUsd)}
-                        className="px-2.5 py-1 rounded-full border border-white/10 text-xs text-white/50 hover:border-[#00F5FF]/40 hover:text-white transition-colors"
+                        className="px-2.5 py-1.5 border border-line text-nano font-[family-name:var(--font-ledger)] uppercase tracking-[0.1em] text-fg-3 hover:border-seal hover:text-seal-text hover:bg-accent transition-colors"
                       >
                         {preset.label}
                       </button>
@@ -471,10 +487,25 @@ export default function PublishPage() {
 
                 {/* Gate token */}
                 <div className="space-y-2">
-                  <label className="block text-sm text-white/60">
+                  <label className="block label mb-2">
                     Gate token (mint.club bonding curve)
                   </label>
-                  <div className="flex gap-2">
+                  <div className="flex gap-px border border-line w-fit mb-2">
+                    <button onClick={()=>setGateMode('existing')} className={`px-3 py-1.5 text-nano font-[family-name:var(--font-ledger)] uppercase tracking-[0.12em] transition-colors ${gateMode==='existing'?'bg-seal-wash text-seal-text':'text-fg-4 hover:text-fg-2'}`}  data-testid="gate-mode-existing">Use existing</button>
+                    <button onClick={()=>setGateMode('create')} className={`px-3 py-1.5 text-nano font-[family-name:var(--font-ledger)] uppercase tracking-[0.12em] transition-colors ${gateMode==='create'?'bg-seal-wash text-seal-text':'text-fg-4 hover:text-fg-2'}`}  data-testid="gate-mode-create">Mint new</button>
+                  </div>
+                  {gateMode==='create' && (
+                    <div className="space-y-3 panel-sunk p-4">
+                      <div className="grid grid-cols-2 gap-2">
+                        <input value={newTokenName} onChange={e=>setNewTokenName(e.target.value)} placeholder="Name e.g. Haven Drop" className="border border-line-strong bg-transparent px-3 py-1.5 text-small outline-none focus:border-seal" data-testid="new-token-name"/>
+                        <input value={newTokenSymbol} onChange={e=>setNewTokenSymbol(e.target.value.toUpperCase())} placeholder="Symbol e.g. HAVEN" className="border border-line-strong bg-transparent px-3 py-1.5 text-small font-[family-name:var(--font-ledger)] uppercase outline-none focus:border-seal" data-testid="new-token-symbol"/>
+                      </div>
+                      <button onClick={()=>void handleCreateToken()} disabled={creatingToken || !newTokenName.trim() || !newTokenSymbol.trim()} className="action action-sealed w-full py-3 disabled:opacity-40 disabled:pointer-events-none" data-testid="create-token-btn">{creatingToken ? 'Minting…' : 'Mint token on '+networkHint}</button>
+                      {createError && <p className="text-nano text-destructive font-[family-name:var(--font-ledger)] uppercase tracking-[0.08em]">{createError}</p>}
+                      <p className="label !whitespace-normal normal-case tracking-[0.02em] leading-relaxed">Creates ERC20 via mint.club bonding curve; oracle auto-filled to Bond contract. No copy-paste needed.</p>
+                    </div>
+                  )}
+                  {gateMode==='existing' && (<div className="flex gap-2">
                     <input
                       value={gateTokenInput}
                       onChange={(e) => {
@@ -484,37 +515,37 @@ export default function PublishPage() {
                         setResolveError(null)
                       }}
                       placeholder="Symbol or 0x… address"
-                      className="flex-1 rounded-lg bg-black/30 border border-white/10 focus:border-[#00F5FF]/50 outline-none px-3 py-1.5 text-sm font-mono"
+                      className="flex-1 bg-transparent border border-line-strong focus:border-seal outline-none px-3 py-1.5 text-small font-[family-name:var(--font-ledger)] min-h-[44px]"
                       data-testid="gate-token-input"
                     />
                     <button
                       onClick={() => void handleResolveToken()}
                       disabled={!gateTokenInput.trim() || resolving}
-                      className="px-3 py-1.5 rounded-lg border border-white/10 text-sm text-white/70 hover:border-[#00F5FF]/40 hover:text-white disabled:opacity-40 transition-colors"
+                      className="action action-keyline px-4 min-h-[44px] disabled:opacity-40 disabled:pointer-events-none transition-colors"
                     >
                       {resolving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Resolve'}
                     </button>
-                  </div>
+                  </div>)}
                   {resolvedToken && (
-                    <p className="text-xs text-green-400 flex items-center gap-1" data-testid="gate-token-resolved">
+                    <p className="inline-flex items-center gap-1.5 text-nano font-[family-name:var(--font-ledger)] uppercase tracking-[0.1em] text-[var(--color-arkiv)] border border-line px-2 py-1" data-testid="gate-token-resolved">
                       <CheckCircle2 className="h-3 w-3" />
                       {resolvedToken.symbol ?? 'token'} · {shortAddr(resolvedToken.address)}
                     </p>
                   )}
                   {resolvedToken && (
                     <div className="space-y-2 pt-1">
-                      <label className="block text-xs text-white/50">
+                      <label className="block label mb-2">
                         Chainlink USD price feed (oracle) for this token
                       </label>
                       <input
                         value={oracleAddress}
                         onChange={(e) => setOracleAddress(e.target.value)}
                         placeholder="0x… AggregatorV3 proxy address"
-                        className="w-full rounded-lg bg-black/30 border border-white/10 focus:border-[#00F5FF]/50 outline-none px-3 py-1.5 text-sm font-mono"
+                        className="w-full bg-transparent border border-line-strong focus:border-seal outline-none px-3 py-1.5 text-small font-[family-name:var(--font-ledger)] min-h-[44px]"
                         data-testid="oracle-address-input"
                       />
                       {oracleAddress.trim().length > 0 && !oracleValid && (
-                        <p className="text-xs text-amber-400/80">
+                        <p className="text-nano font-[family-name:var(--font-ledger)] tracking-[0.04em] text-seal-text leading-relaxed">
                           Must be a 42-char 0x address — the canister calls latestRoundData() on it
                           and fails closed on bad feeds.
                         </p>
@@ -522,7 +553,7 @@ export default function PublishPage() {
                     </div>
                   )}
                   {resolveError && (
-                    <p className="text-xs text-red-400 flex items-center gap-1">
+                    <p className="text-nano text-destructive flex items-center gap-1.5 font-[family-name:var(--font-ledger)] uppercase tracking-[0.08em]">
                       <AlertCircle className="h-3 w-3" /> {resolveError}
                     </p>
                   )}
@@ -531,28 +562,28 @@ export default function PublishPage() {
                 {/* Chain + threshold */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm text-white/60 mb-2">Gate chain</label>
+                    <label className="block label mb-2">Gate chain</label>
                     <select
                       value={chain}
                       onChange={(e) => setChain(e.target.value as Chain)}
-                      className="w-full rounded-lg bg-black/30 border border-white/10 outline-none px-3 py-1.5 text-sm"
+                      className="w-full bg-transparent border border-line-strong outline-none focus:border-seal px-3 py-1.5 text-small font-[family-name:var(--font-ledger)] min-h-[44px]"
                     >
                       {VALID_CHAINS.map((c) => (
-                        <option key={c} value={c} className="bg-[#0A0A0F]">
+                        <option key={c} value={c}>
                           {c}
                         </option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm text-white/60 mb-2">Holder threshold</label>
+                    <label className="block label mb-2">Holder threshold</label>
                     <input
                       inputMode="numeric"
                       value={String(threshold)}
                       onChange={(e) =>
                         setThreshold(Math.max(1, Number(e.target.value.replace(/[^0-9]/g, '')) || 1))
                       }
-                      className="w-full rounded-lg bg-black/30 border border-white/10 outline-none px-3 py-1.5 text-sm font-mono"
+                      className="w-full bg-transparent border border-line-strong focus:border-seal outline-none px-3 py-1.5 text-small font-[family-name:var(--font-ledger)] tabular-nums min-h-[44px]"
                     />
                   </div>
                 </div>
@@ -576,11 +607,11 @@ export default function PublishPage() {
                 onClick={() => void handleCreatePlan()}
                 disabled={!canCreate}
                 data-testid="create-plan-button"
-                className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-gradient-to-r from-[#00F5FF] to-[#FF00E5] text-[#0A0A0F] font-semibold disabled:opacity-30 disabled:cursor-not-allowed transition-all hover:shadow-lg hover:shadow-[#00F5FF]/20"
+                className="action action-sealed w-full py-4 min-h-[52px] disabled:opacity-30 disabled:pointer-events-none"
               >
                 Lock in {chunkCount}-stage plan → open stage uploader
               </button>
-              <p className="mt-3 text-xs text-white/30 leading-relaxed">
+              <p className="mt-4 label !whitespace-normal normal-case tracking-[0.02em] leading-relaxed">
                 Locking freezes the byte ranges, a SHA-256 commitment of your file and the shared
                 drip id. Nothing is uploaded yet — each stage publishes separately afterwards.
               </p>
@@ -591,11 +622,11 @@ export default function PublishPage() {
         {view === 'session' && session && (
           <>
             {/* Header */}
-            <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5">
+            <div className="panel-double p-5 crop-marks">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <h2 className="text-lg font-semibold truncate">{session.title}</h2>
-                  <p className="text-xs text-white/35 mt-0.5">
+                  <h2 className="statement-title truncate">{session.title}</h2>
+                  <p className="addr mt-1.5">
                     {session.fileName} · drip {shortAddr(session.dripId)} · gate{' '}
                     {shortAddr(session.gate.gateToken)} on {session.gate.chain}
                   </p>
@@ -609,30 +640,32 @@ export default function PublishPage() {
               {complete && firstEntityKey && (
                 <Link
                   href={`/watch?v=${firstEntityKey}`}
-                  className="inline-flex items-center gap-1 mt-3 text-sm text-[#00F5FF] hover:underline"
+                  className="link-rule inline-flex items-center gap-1.5 mt-4 label label-seal"
                 >
-                  Open the release <ArrowRight className="h-3.5 w-3.5" />
+                  Open the release <ArrowRight className="h-3 w-3" />
                 </Link>
               )}
             </div>
 
             {/* Checklist */}
-            <section>
-              <h2 className="flex items-baseline gap-3 mb-3">
-                <span className="font-mono text-xs text-[#00F5FF]">01</span>
-                <span className="text-lg font-semibold">Unlock checklist</span>
-              </h2>
+            <section className="section-head flex-col !items-stretch gap-3">
+              <div className="section-head-meta">
+                <span className="folio">01</span>
+                <span className="section-head-rule" aria-hidden="true" />
+                <h2 className="statement-subtitle">Unlock checklist</h2>
+              </div>
               <StageChecklist stages={session.stages} />
             </section>
 
             {/* Runner or completion */}
             <section>
-              <h2 className="flex items-baseline gap-3 mb-3">
-                <span className="font-mono text-xs text-[#00F5FF]">02</span>
-                <span className="text-lg font-semibold">
+              <div className="flex items-baseline gap-4 mb-4 pb-2 border-b border-line-strong">
+                <span className="folio">02</span>
+                <span className="section-head-rule" aria-hidden="true" />
+                <h2 className="statement-subtitle">
                   {complete ? 'All stages live' : `Upload ${stageLabel(nextIndex ?? 0, session.stages.length)}`}
-                </span>
-              </h2>
+                </h2>
+              </div>
               {complete || nextIndex == null ? (
                 <CompletionCard session={session} />
               ) : (
@@ -651,10 +684,11 @@ export default function PublishPage() {
 
             {/* Live preview */}
             <section>
-              <h2 className="flex items-baseline gap-3 mb-3">
-                <span className="font-mono text-xs text-[#00F5FF]">03</span>
-                <span className="text-lg font-semibold">Live market</span>
-              </h2>
+              <div className="flex items-baseline gap-4 mb-4 pb-2 border-b border-line-strong">
+                <span className="folio">03</span>
+                <span className="section-head-rule" aria-hidden="true" />
+                <h2 className="statement-subtitle">Live market</h2>
+              </div>
               <MarketPreview
                 plans={session.stages.map((s) => s.plan)}
                 marketCapUsd={marketCapUsd}
@@ -677,24 +711,28 @@ export default function PublishPage() {
 
 function IntroCopy() {
   return (
-    <div className="space-y-2">
-      <h1 className="text-xl font-semibold">Release by market-cap rungs</h1>
-      <p className="text-sm text-white/45 leading-relaxed">
+    <header className="space-y-3">
+      <p className="seal-mark w-fit">V4 · Drip Protocol</p>
+      <h1 className="statement-headline [font-size:clamp(1.75rem,1.1rem+2.2vw,2.75rem)] pt-2">
+        Release by <em className="voice-editorial overprint">market-cap rungs</em>
+      </h1>
+      <p className="lede max-w-prose">
         Split one film into per-unlock stages — teaser at $1M cap, act at $5M, finale at $10M —
         then upload them one at a time, from any wallet, with tick-mark tracking and hash-verified
         hand-offs.
       </p>
-    </div>
+    </header>
   )
 }
 
 function Section({ step, title, children }: { step: number; title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h2 className="flex items-baseline gap-3 mb-3">
-        <span className="font-mono text-xs text-[#00F5FF]">0{step}</span>
-        <span className="text-lg font-semibold">{title}</span>
-      </h2>
+      <div className="flex items-baseline gap-4 mb-4 pb-2 border-b border-line-strong">
+        <span className="folio">{'0'}{step}</span>
+        <span className="section-head-rule" aria-hidden="true" />
+        <h2 className="statement-subtitle">{title}</h2>
+      </div>
       {children}
     </section>
   )
@@ -717,28 +755,28 @@ function MarketPreview({
     nextUnlock && !evaluateDripUnlock(nextUnlock.marketCapTargetUsd, marketCapUsd).unlocked
 
   return (
-    <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-5 space-y-4" data-testid="market-preview">
-      <div className="flex items-center justify-between">
+    <div className="panel p-5 space-y-5" data-testid="market-preview">
+      <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <p className="text-xs text-white/40 uppercase tracking-wide">Market cap</p>
-          <p className="text-2xl font-semibold">
+          <p className="label mb-2">Market cap</p>
+          <p className="statement-title tabular-nums">
             {hasToken ? (
               marketCapUsd != null ? (
                 formatUsdCompact(marketCapUsd)
               ) : (
-                <span className="text-white/40">—</span>
+                <span className="text-fg-4">—</span>
               )
             ) : (
-              <span className="text-white/40">Resolve a token first</span>
+              <span className="text-fg-4">Resolve a token first</span>
             )}
           </p>
         </div>
         {showNextUnlock && (
           <div className="text-right">
-            <p className="text-xs text-white/40 uppercase tracking-wide">Next unlock</p>
-            <p className="text-lg font-medium text-[#FF00E5]">
+            <p className="label mb-2">Next unlock</p>
+            <p className="statement-subtitle text-seal-text tabular-nums">
               {formatUsdCompact(nextUnlock.marketCapTargetUsd)}{' '}
-              <span className="text-sm text-white/50">
+              <span className="text-small text-fg-3 font-normal">
                 {progressPct(marketCapUsd, nextUnlock.marketCapTargetUsd)}% to go
               </span>
             </p>
@@ -746,40 +784,56 @@ function MarketPreview({
         )}
       </div>
 
-      <div className="space-y-2">
-        {plans.map((plan) => {
-          const { unlocked } = evaluateDripUnlock(plan.marketCapTargetUsd, marketCapUsd)
-          return (
-            <div key={plan.dripIndex} className="flex items-center gap-3 text-sm">
-              <DripRings unlocked={unlocked ? 1 : 0} total={1} size={16} />
-              <span className="flex-1 text-white/60">
-                Stage {plan.dripIndex + 1} · {stageLabel(plan.dripIndex, plan.dripTotal)}
-              </span>
-              <span className={unlocked ? 'text-green-400' : 'text-white/70'}>
-                {formatUsdCompact(plan.marketCapTargetUsd)}
-                {unlocked && ' ✓'}
-              </span>
-            </div>
-          )
-        })}
-      </div>
+      {/* Unlock register — specimen rows */}
+      <table className="specimen">
+        <thead>
+          <tr>
+            <th>Stage</th>
+            <th>Rung</th>
+            <th className="!text-right">Target</th>
+          </tr>
+        </thead>
+        <tbody>
+          {plans.map((plan) => {
+            const { unlocked } = evaluateDripUnlock(plan.marketCapTargetUsd, marketCapUsd)
+            return (
+              <tr key={plan.dripIndex}>
+                <td className="whitespace-nowrap">
+                  <DripRings unlocked={unlocked ? 1 : 0} total={1} size={14} />
+                  <span className="ml-2 align-middle">{stageLabel(plan.dripIndex, plan.dripTotal)}</span>
+                </td>
+                <td className="font-[family-name:var(--font-ledger)] text-nano uppercase tracking-[0.1em] text-fg-4">
+                  Stage {plan.dripIndex + 1}
+                </td>
+                <td
+                  className={`text-right tabular-nums ${unlocked ? 'text-[var(--color-arkiv)]' : 'text-fg-2'}`}
+                >
+                  {formatUsdCompact(plan.marketCapTargetUsd)}
+                  {unlocked ? ' ✓' : ''}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }
 
 function CompletionCard({ session }: { session: DripSession }) {
   return (
-    <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-5 space-y-3" data-testid="publish-success">
-      <p className="text-sm text-green-400 font-medium flex items-center gap-2">
-        <PartyPopper className="h-4 w-4" /> All {session.stages.length} stages published — the drip is fully indexed.
+    <div className="panel p-5 space-y-4 crop-marks" data-testid="publish-success">
+      <p className="seal-mark w-fit !border-[var(--color-arkiv)] !text-[var(--color-arkiv)] gap-2">
+        <PartyPopper className="h-3.5 w-3.5" /> All {session.stages.length} stages published — the drip is fully indexed.
       </p>
-      <ul className="space-y-1">
+      <ul className="divide-y divide-line-soft border-t border-line-soft">
         {session.stages.map((s) =>
           s.result ? (
-            <li key={s.plan.dripIndex} className="text-xs text-white/50 flex items-center gap-2">
-              <CheckCircle2 className="h-3 w-3 text-green-400 shrink-0" />
-              {stageLabel(s.plan.dripIndex, session.stages.length)} · entity {shortAddr(s.result.entityKey)} · by{' '}
-              {shortAddr(s.result.publishedBy)}
+            <li key={s.plan.dripIndex} className="py-2 text-nano font-[family-name:var(--font-ledger)] uppercase tracking-[0.06em] text-fg-3 flex items-center gap-2 first:pt-0 last:pb-0">
+              <CheckCircle2 className="h-3 w-3 text-[var(--color-arkiv)] shrink-0" />
+              {stageLabel(s.plan.dripIndex, session.stages.length)} · entity{' '}
+              <span className="normal-case">{shortAddr(s.result.entityKey)}</span> · by{' '}
+              <span className="normal-case">{shortAddr(s.result.publishedBy)}</span>
             </li>
           ) : null
         )}

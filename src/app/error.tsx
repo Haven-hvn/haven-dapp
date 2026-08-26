@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect } from 'react'
-import { AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 export default function Error({
@@ -16,25 +15,25 @@ export default function Error({
   }, [error])
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="text-center max-w-md">
-        <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-destructive/10 flex items-center justify-center">
-          <AlertTriangle className="w-10 h-10 text-destructive" />
-        </div>
-        
-        <h2 className="text-2xl font-bold mb-2">Something went wrong!</h2>
-        <p className="text-muted-foreground mb-2">
-          {error.message || 'An unexpected error occurred'}
+    <div className="min-h-screen flex items-center justify-center p-4 bg-surface text-fg">
+      <div className="text-center max-w-md crop-marks p-10">
+        <p className="seal-mark !border-destructive !text-destructive mb-6 inline-flex">
+          Record Error
         </p>
+
+        <h1 className="statement-headline [font-size:clamp(1.75rem,1.2rem+2.5vw,3rem)] mb-4">
+          Something went <em className="voice-editorial overprint">wrong</em>
+        </h1>
+        <p className="lede mb-4">{error.message || 'An unexpected error occurred'}</p>
         {error.digest && (
-          <p className="text-xs text-muted-foreground mb-6">
-            Error ID: {error.digest}
-          </p>
+          <p className="addr mb-8">Error ID: {error.digest}</p>
         )}
-        
-        <div className="flex gap-2 justify-center">
-          <Button onClick={reset}>Try again</Button>
-          <Button variant="outline" onClick={() => window.location.href = '/'}>
+
+        <div className="flex gap-3 justify-center flex-wrap">
+          <Button onClick={reset} size="lg">
+            Try again
+          </Button>
+          <Button variant="outline" size="lg" onClick={() => (window.location.href = '/')}>
             Go Home
           </Button>
         </div>

@@ -49,7 +49,7 @@ export function DripRings({ unlocked, total, size = 28, className }: DripRingsPr
             fill="none"
             strokeWidth={stroke}
             className={
-              isUnlocked ? 'stroke-[#00F5FF]' : 'stroke-white/15'
+              isUnlocked ? 'stroke-[var(--seal)]' : 'stroke-[oklch(0.98_0.01_90/0.15)]'
             }
             opacity={isUnlocked ? 0.9 : 0.6}
           />

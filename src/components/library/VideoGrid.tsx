@@ -57,7 +57,7 @@ function formatBytes(bytes: number): string {
 function VideoCardSkeleton() {
   return (
     <div className="space-y-2">
-      <Skeleton className="aspect-video rounded-lg" />
+      <Skeleton className="aspect-video border border-line" />
       <Skeleton className="h-4 w-3/4" />
       <Skeleton className="h-3 w-1/2" />
     </div>
@@ -183,11 +183,11 @@ export function VideoGrid() {
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
           <div className="flex-1 w-full sm:w-auto">
-            <div className="h-9 bg-muted rounded-md animate-pulse" />
+            <div className="h-10 bg-line animate-pulse" />
           </div>
           <div className="flex items-center gap-2">
-            <div className="h-9 w-9 bg-muted rounded-md animate-pulse" />
-            <div className="h-9 w-20 bg-muted rounded-md animate-pulse" />
+            <div className="h-10 w-10 bg-line animate-pulse" />
+            <div className="h-10 w-24 bg-line animate-pulse" />
           </div>
         </div>
         <VideoGridSkeleton viewMode={viewMode} />
@@ -199,7 +199,7 @@ export function VideoGrid() {
   if (isError) {
     return (
       <div className="text-center py-20">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-destructive/10 flex items-center justify-center">
+        <div className="w-16 h-16 mx-auto mb-4 bg-destructive/10 flex items-center justify-center">
           <ErrorIcon className="w-8 h-8 text-destructive" />
         </div>
         <h3 className="text-lg font-semibold mb-2">Failed to load videos</h3>
@@ -327,7 +327,7 @@ export function VideoGrid() {
       {/* Empty search results */}
       {filteredCount === 0 && totalCount > 0 && (
         <div className="text-center py-12">
-          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-muted flex items-center justify-center">
+          <div className="mx-auto mb-3 w-12 h-12 flex items-center justify-center border border-line-strong text-fg-4">
             <SearchIcon className="w-6 h-6 text-muted-foreground" />
           </div>
           <h3 className="text-base font-medium mb-1">
@@ -352,7 +352,7 @@ function VideoGridSkeleton({ viewMode }: { viewMode: ViewMode }) {
       <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
         {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="space-y-2">
-            <Skeleton className="aspect-video rounded-lg" />
+            <Skeleton className="aspect-video border border-line" />
             <Skeleton className="h-4 w-3/4" />
             <Skeleton className="h-3 w-1/2" />
           </div>
@@ -364,8 +364,8 @@ function VideoGridSkeleton({ viewMode }: { viewMode: ViewMode }) {
   return (
     <div className="space-y-2">
       {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="flex gap-4 p-4 border rounded-lg">
-          <Skeleton className="w-40 h-24 rounded flex-shrink-0" />
+        <div key={i} className="flex gap-4 p-4 border ">
+          <Skeleton className="w-40 h-24 flex-shrink-0 border border-line" />
           <div className="flex-1 space-y-2 py-2">
             <Skeleton className="h-5 w-1/3" />
             <Skeleton className="h-4 w-1/4" />
@@ -382,7 +382,7 @@ function VideoGridSkeleton({ viewMode }: { viewMode: ViewMode }) {
 function EmptyState() {
   return (
     <div className="text-center py-20">
-      <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+      <div className="mx-auto mb-4 w-16 h-16 flex items-center justify-center border border-line-strong text-fg-4">
         <VideoIcon className="w-8 h-8 text-muted-foreground" />
       </div>
       <h3 className="text-lg font-semibold mb-2">No videos yet</h3>

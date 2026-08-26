@@ -10,7 +10,7 @@ function blockieDataUrl(address: string): string {
   const hue = h % 360
   // tiny svg circle with hue + 2-char label
   const label = address.slice(2, 4).toUpperCase()
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="12" fill="hsl(${hue} 55% 42%)"/><text x="32" y="38" text-anchor="middle" font-family="monospace" font-size="18" font-weight="700" fill="white">${label}</text></svg>`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="hsl(${hue} 55% 42%)"/><text x="32" y="38" text-anchor="middle" font-family="monospace" font-size="18" font-weight="700" fill="white">${label}</text></svg>`
   return `data:image/svg+xml,${encodeURIComponent(svg)}`
 }
 
@@ -73,7 +73,7 @@ export function HolderIdentity({
 
   return (
     <span className={`inline-flex items-center ${s.gap} min-w-0 ${className}`}>
-      <span className={`relative flex-shrink-0 rounded-md overflow-hidden bg-white/[0.06] border border-white/[0.08] ${s.avatar} inline-flex items-center justify-center`}>
+      <span className={`relative flex-shrink-0 overflow-hidden bg-surface-deep border border-line-strong ${s.avatar} inline-flex items-center justify-center`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={avatarSrc}
@@ -84,7 +84,7 @@ export function HolderIdentity({
           style={{ opacity: isLoading && (nft as unknown as { image?: string | null })?.image ? 0.6 : 1 }}
         />
         {verified && (
-          <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border border-black flex items-center justify-center">
+          <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[var(--color-arkiv)] border border-surface flex items-center justify-center">
             <svg viewBox="0 0 10 10" className="w-2 h-2 text-white" fill="currentColor" aria-hidden>
               <path d="M2.5 5L4 6.5 7.5 2.5" stroke="white" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
             </svg>
@@ -93,16 +93,16 @@ export function HolderIdentity({
       </span>
 
       <span className={`min-w-0 flex flex-col leading-none ${compact ? '' : ''}`}>
-        <span className={`font-mono text-white/70 truncate ${s.text}`} title={address}>
+        <span className={`font-[family-name:var(--font-ledger)] text-fg-2 truncate ${s.text}`} title={address}>
           {label}
         </span>
         {!compact && showTokenId && nft?.tokenId && (
-          <span className="text-[10px] text-white/35 truncate">
+          <span className="text-[0.625rem] text-fg-5 font-[family-name:var(--font-ledger)] tracking-[0.04em] truncate">
             #{nft.tokenId} {nft.collectionName ? `· ${nft.collectionName}` : ''}
           </span>
         )}
         {!compact && !showTokenId && verified && (
-          <span className="text-[10px] text-emerald-400/70">holder • verified</span>
+          <span className="text-[0.5625rem] text-seal-text font-[family-name:var(--font-ledger)] uppercase tracking-[0.14em]">Holder · Verified</span>
         )}
       </span>
     </span>
@@ -127,11 +127,11 @@ export function CollectionAvatar({
   void meta
   return (
     <span
-      className="rounded-md overflow-hidden bg-white/[0.06] border border-white/[0.08] flex items-center justify-center flex-shrink-0"
+      className="overflow-hidden bg-surface-deep border border-line-strong flex items-center justify-center flex-shrink-0"
       style={{ width: size, height: size }}
       aria-hidden
     >
-      <span className="text-white/30 text-xs font-mono">
+      <span className="text-fg-4 text-nano font-[family-name:var(--font-ledger)]">
         {contractAddress.slice(2, 4).toUpperCase()}
       </span>
     </span>

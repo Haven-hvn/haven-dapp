@@ -88,10 +88,10 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
   if (!showPlayer && video?.drip) {
     return (
       <div className="flex flex-col h-dvh min-h-0 overflow-hidden bg-black">
-        <div className="flex shrink-0 items-center justify-between p-3 sm:p-4 border-b border-white/10 safe-area-x">
+        <div className="flex shrink-0 items-center justify-between p-3 sm:p-4 border-b border-[oklch(0.98_0.01_90/0.13)] safe-area-x">
           <Link
             href="/library"
-            className="flex items-center gap-2 text-white/80 hover:text-white transition-colors touch-manipulation min-h-[44px]"
+            className="flex items-center gap-2.5 text-[oklch(0.8_0.012_264)] hover:text-[oklch(0.715_0.19_44)] transition-colors touch-manipulation min-h-[44px] font-[family-name:var(--font-ledger)] text-micro uppercase tracking-[0.15em]"
           >
             <ArrowLeft className="w-5 h-5" />
             <span className="hidden sm:inline">Back to Library</span>
@@ -106,10 +106,10 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
   return (
     <div className="flex flex-col h-dvh min-h-0 overflow-hidden bg-black">
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between p-3 sm:p-4 border-b border-white/10 safe-area-x">
+      <div className="flex shrink-0 items-center justify-between p-3 sm:p-4 border-b border-[oklch(0.98_0.01_90/0.13)] safe-area-x">
         <Link 
           href="/library"
-          className="flex items-center gap-2 text-white/80 hover:text-white transition-colors touch-manipulation min-h-[44px]"
+          className="flex items-center gap-2.5 text-[oklch(0.8_0.012_264)] hover:text-[oklch(0.715_0.19_44)] transition-colors touch-manipulation min-h-[44px] font-[family-name:var(--font-ledger)] text-micro uppercase tracking-[0.15em]"
         >
           <ArrowLeft className="w-5 h-5" />
           <span className="hidden sm:inline">Back to Library</span>
@@ -122,7 +122,7 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
             <button
               onClick={(e) => { e.stopPropagation(); download(video) }}
               disabled={isDownloading}
-              className="flex items-center gap-1 px-3 py-1 bg-white/10 hover:bg-white/20 text-white/80 hover:text-white rounded-full text-sm transition-colors touch-manipulation min-h-[36px] disabled:opacity-50"
+              className="flex items-center gap-2 px-3 py-1 border border-[oklch(0.98_0.01_90/0.3)] hover:border-[var(--seal)] text-[oklch(0.8_0.012_264)] hover:text-[oklch(0.78_0.17_50)] text-nano font-[family-name:var(--font-ledger)] uppercase tracking-[0.12em] transition-colors touch-manipulation min-h-[36px] disabled:opacity-50"
               title={isDownloading ? downloadMessage : 'Download video'}
             >
               <Download className="w-4 h-4" />
@@ -138,7 +138,7 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
 
           {/* Streaming indicator */}
           {isStreaming && (
-            <div className="flex items-center gap-1 px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm animate-pulse">
+            <div className="flex items-center gap-2 px-3 py-1 bg-[color-mix(in_oklab,var(--seal)_14%,transparent)] text-[oklch(0.78_0.17_50)] text-nano font-[family-name:var(--font-ledger)] uppercase tracking-[0.12em] animate-pulse">
               <Radio className="w-4 h-4" />
               <span className="hidden sm:inline">
                 Streaming {chunksDecrypted}/{totalChunks}
@@ -157,9 +157,10 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
           
           {/* Encrypted badge */}
           {video.isEncrypted && (
-            <div className="flex items-center gap-1 px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full text-sm">
+            <div className="flex items-center gap-2 px-3 py-1 border border-[oklch(0.98_0.01_90/0.13)] text-[oklch(0.645_0.018_264)] text-nano font-[family-name:var(--font-ledger)] uppercase tracking-[0.12em]">
               <Lock className="w-4 h-4" />
-              <span>Encrypted</span>
+              <span className="hidden sm:inline">Encrypted</span>
+              <span className="sm:hidden">&#x1f512;</span>
             </div>
           )}
         </div>
@@ -199,24 +200,25 @@ export function VideoPlayer({ videoId }: VideoPlayerProps) {
         
         {/* Initial loading for non-encrypted videos */}
         {!videoUrl && !error && !isLoading && !video.isEncrypted && (
-          <div className="flex items-center gap-3 text-white/60">
+          <div className="flex items-center gap-3 text-[oklch(0.68_0.016_264)]">
             <Loader2 className="w-6 h-6 animate-spin" />
-            <span>Loading video...</span>
+            <span className="label">Loading video</span>
           </div>
         )}
       </div>
       
       {/* Video info — holder identity embedded */}
-      <div className="shrink-0 p-3 sm:p-4 border-t border-white/10 safe-area-x safe-area-bottom overflow-y-auto max-h-[30vh]">
-        <h1 className="text-base sm:text-lg font-semibold text-white">{video.title}</h1>
+      <div className="shrink-0 p-3 sm:p-4 border-t border-[oklch(0.98_0.01_90/0.13)] safe-area-x safe-area-bottom overflow-y-auto max-h-[30vh]">
+        <h1 className="statement-subtitle text-[oklch(0.968_0.005_90)]">{video.title}</h1>
         {video.description && (
-          <p className="text-white/60 mt-1 text-sm">{video.description}</p>
+          <p className="text-[oklch(0.8_0.012_264)] mt-1.5 text-small leading-relaxed max-w-prose">{video.description}</p>
         )}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-2 text-xs sm:text-sm text-white/40">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-2.5 text-nano sm:text-fine font-[family-name:var(--font-ledger)] tracking-[0.06em] uppercase text-[oklch(0.645_0.018_264)] tabular-nums">
           <span>{formatDuration(video.duration)}</span>
-          <span className="hidden sm:inline">•</span>
+            <span className="hidden sm:inline" aria-hidden>·</span>
+          <span className="hidden sm:inline" aria-hidden>·</span>
           <span>{new Date(video.createdAt).toLocaleDateString()}</span>
-          <span className="hidden sm:inline">•</span>
+          <span className="hidden sm:inline" aria-hidden>·</span>
           {video.creatorHandle ? (
             <span>@{video.creatorHandle}</span>
           ) : (
@@ -248,20 +250,21 @@ function formatDuration(seconds: number): string {
 
 function PlayerLoadingState() {
   return (
-    <div className="flex items-center justify-center h-screen bg-black text-white">
-      <Loader2 className="w-8 h-8 animate-spin mr-3" />
-      <span>Loading...</span>
+    <div className="flex items-center justify-center h-screen bg-black text-[oklch(0.968_0.005_90)]">
+      <Loader2 className="w-6 h-6 animate-spin mr-4" aria-hidden />
+      <span className="label">Consulting the archive</span>
     </div>
   )
 }
 
 function VideoNotFoundState() {
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-black text-white">
-      <p className="text-xl mb-4">Video not found</p>
+    <div className="flex flex-col items-center justify-center h-screen bg-black text-[oklch(0.968_0.005_90)] crop-marks p-10">
+      <p className="folio mb-4">404</p>
+      <h2 className="statement-title mb-6">Video not found</h2>
       <Link 
         href="/library"
-        className="px-4 py-2 bg-primary rounded-lg hover:bg-primary/90"
+        className="action action-sealed"
       >
         Back to Library
       </Link>

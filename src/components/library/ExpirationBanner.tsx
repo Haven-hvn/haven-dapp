@@ -234,7 +234,7 @@ export function ExpirationBanner({
       role="alert"
       aria-live="polite"
       className={`
-        relative rounded-lg border p-4 mb-4
+        relative border p-4 mb-4
         ${bannerStyles.container}
         ${className}
       `}

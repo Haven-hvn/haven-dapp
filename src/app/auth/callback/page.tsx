@@ -21,10 +21,10 @@ function AuthCallbackContent() {
   }, [router, searchParams])
 
   return (
-    <div className="flex h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
-        <p className="text-muted-foreground">Completing authentication...</p>
+    <div className="flex h-screen items-center justify-center bg-surface">
+      <div className="text-center flex items-center gap-4">
+        <span className="pip net-haven w-2.5 h-2.5" aria-hidden="true" />
+        <p className="label">Completing authentication</p>
       </div>
     </div>
   )
@@ -35,8 +35,8 @@ export default function AuthCallbackPage() {
     <Suspense fallback={
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading...</p>
+          <span className="pip net-haven w-2.5 h-2.5" aria-hidden="true" />
+          <p className="label">Loading</p>
         </div>
       </div>
     }>

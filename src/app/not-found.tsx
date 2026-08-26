@@ -1,25 +1,19 @@
 import Link from 'next/link'
-import { Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="text-center">
-        <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-muted flex items-center justify-center">
-          <Search className="w-10 h-10 text-muted-foreground" />
-        </div>
-        
-        <h1 className="text-4xl font-bold mb-2">404</h1>
-        <h2 className="text-xl font-medium mb-4">Page Not Found</h2>
-        <p className="text-muted-foreground mb-6 max-w-sm">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-surface text-fg">
+      <div className="text-center crop-marks p-10 max-w-md">
+        <p className="folio mb-6">404</p>
+        <h1 className="statement-headline [font-size:clamp(2rem,1.2rem+3vw,3.5rem)] mb-4">
+          Page <em className="voice-editorial overprint">not found</em>
+        </h1>
+        <p className="lede mb-8 max-w-sm mx-auto">
           The page you&apos;re looking for doesn&apos;t exist or has been moved.
         </p>
-        
-        <Button asChild>
-          <Link href="/library">
-            Go to Library
-          </Link>
+        <Button asChild size="lg">
+          <Link href="/library">Go to Library</Link>
         </Button>
       </div>
     </div>

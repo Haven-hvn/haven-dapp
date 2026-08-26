@@ -30,13 +30,13 @@ function QueueOverlay({ status, progress }: { status: QueueItemStatus; progress:
   const getIcon = () => {
     switch (status) {
       case 'pending':
-        return <Loader2 className="w-3 h-3 text-white/80" />
+        return <Loader2 className="w-3 h-3 text-fg-2" />
       case 'downloading':
-        return <Download className="w-3 h-3 text-white" />
+        return <Download className="w-3 h-3 text-fg" />
       case 'decrypting':
-        return <Unlock className="w-3 h-3 text-white" />
+        return <Unlock className="w-3 h-3 text-fg" />
       case 'complete':
-        return <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
+        return <CheckCircle2 className="w-3.5 h-3.5 text-[var(--color-arkiv)]" />
       case 'error':
         return null
       default:
@@ -77,7 +77,7 @@ function QueueOverlay({ status, progress }: { status: QueueItemStatus; progress:
     // Brief flash of success — the cached badge will take over
     return (
       <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center bg-black/30 rounded-t-lg transition-opacity duration-500">
-        <div className="flex items-center gap-1 px-2 py-1 rounded bg-green-600/90 text-white text-xs font-medium">
+        <div className="flex items-center gap-1 px-2 py-1 bg-green-600/90 text-fg text-xs font-medium">
           <CheckCircle2 className="w-3.5 h-3.5" />
           <span>Ready</span>
         </div>
@@ -88,7 +88,7 @@ function QueueOverlay({ status, progress }: { status: QueueItemStatus; progress:
   if (status === 'error') {
     return (
       <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center bg-black/30 rounded-t-lg">
-        <div className="px-2 py-1 rounded bg-red-600/90 text-white text-xs font-medium">
+        <div className="px-2 py-1 bg-red-600/90 text-fg text-xs font-medium">
           Failed
         </div>
       </div>
@@ -100,7 +100,7 @@ function QueueOverlay({ status, progress }: { status: QueueItemStatus; progress:
   return (
     <div className="absolute inset-0 z-20 pointer-events-none rounded-t-lg">
       {/* Step indicator badge (top-left area, below any existing badges) */}
-      <div className="absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/70 text-white text-xs">
+      <div className="absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 bg-black/70 text-fg text-xs">
         {getIcon()}
         <span>{getLabel()}</span>
       </div>
@@ -111,7 +111,7 @@ function QueueOverlay({ status, progress }: { status: QueueItemStatus; progress:
           <div
             className={cn(
               'h-full transition-all duration-300',
-              status === 'downloading' ? 'bg-blue-500' : 'bg-purple-500'
+              status === 'downloading' ? 'bg-seal' : 'bg-fg-3'
             )}
             style={{ width: `${progress}%` }}
           />
@@ -176,7 +176,7 @@ export function SelectableVideoCard({
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       className={cn(
-        'relative rounded-lg cursor-pointer transition-all',
+        'relative cursor-pointer transition-all',
         isSelected && 'ring-2 ring-primary',
         isMaxReached && !isSelected && 'opacity-50'
       )}
@@ -185,7 +185,7 @@ export function SelectableVideoCard({
       <div className="absolute top-2 left-2 z-10">
         <div
           className={cn(
-            'w-6 h-6 rounded border-2 flex items-center justify-center transition-colors',
+            'w-6 h-6 border-2 flex items-center justify-center transition-colors',
             isSelected
               ? 'bg-primary border-primary text-primary-foreground'
               : 'bg-background/80 border-muted-foreground/50 backdrop-blur-sm'

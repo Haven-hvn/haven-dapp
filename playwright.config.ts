@@ -30,8 +30,14 @@ export default defineConfig({
   
   /* Shared settings for all the projects below */
   use: {
-    /* Base URL to use in actions like `await page.goto('/')` */
+    /* Base URL to use for actions like `await page.goto('/')` */
     baseURL: process.env.PLAYWRIGHT_TEST_BASE_URL || 'http://localhost:3000',
+
+    /* Container-safe Chromium flags: small /dev/shm and no sandbox are the
+       norm in CI and sandboxes; harmless elsewhere. */
+    launchOptions: {
+      args: ['--disable-dev-shm-usage', '--no-sandbox'],
+    },
     
     /* Collect trace when retrying the failed test */
     trace: 'on-first-retry',
@@ -93,11 +99,15 @@ export default defineConfig({
     ] : []),
   ],
 
-  /* Run local dev server before starting the tests */
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
-  },
+  /* Run local server before starting tests. An externally started server
+     (e.g. `npx serve out` against the static export) is reused when
+     PLAYWRIGHT_TEST_BASE_URL points at it. */
+  webServer: process.env.PLAYWRIGHT_TEST_BASE_URL
+    ? undefined
+    : {
+        command: 'npm run dev',
+        url: 'http://localhost:3000',
+        reuseExistingServer: !process.env.CI,
+        timeout: 120 * 1000,
+      },
 });

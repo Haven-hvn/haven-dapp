@@ -174,14 +174,14 @@ export function AllExpiredEmptyState({
           inline-flex items-center justify-center
           w-7 h-7 rounded-full
           bg-green-100 dark:bg-green-900/50
-          border-2 border-white dark:border-gray-900
+          border border-line-strong
         ">
           <CheckCircleIcon className="h-4 w-4 text-green-600 dark:text-green-400" />
         </div>
       </div>
 
       {/* Title */}
-      <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+      <h3 className="statement-subtitle">
         {title ?? defaultTitle}
       </h3>
 
@@ -194,7 +194,7 @@ export function AllExpiredEmptyState({
       <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg mx-auto">
         {/* Metadata preserved card */}
         <div className="
-          p-4 rounded-lg text-left
+          p-4 text-left
           bg-amber-50/50 dark:bg-amber-950/20
           border border-amber-100 dark:border-amber-900/30
         ">
@@ -213,7 +213,7 @@ export function AllExpiredEmptyState({
 
         {/* Content accessible card */}
         <div className="
-          p-4 rounded-lg text-left
+          p-4 text-left
           bg-blue-50/50 dark:bg-blue-950/20
           border border-blue-100 dark:border-blue-900/30
         ">
@@ -239,13 +239,11 @@ export function AllExpiredEmptyState({
             onClick={action.onClick}
             className="
               inline-flex items-center justify-center
-              px-4 py-2 rounded-md
-              bg-amber-600 hover:bg-amber-700
-              dark:bg-amber-600 dark:hover:bg-amber-700
-              text-white text-sm font-medium
-              transition-colors
-              focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2
-              dark:focus:ring-offset-gray-900
+              px-4 py-2.5 min-h-[44px]
+              bg-primary border border-primary
+              text-[var(--seal-solid-text)] label
+              transition-colors hover:border-[var(--seal-solid-lift)]
+              focus:outline-none focus-visible:outline-2 focus-visible:outline-ring
             "
           >
             {action.label}
@@ -283,13 +281,13 @@ export function NoVideosEmptyState({
       <div className="
         inline-flex items-center justify-center
         w-16 h-16 rounded-full
-        bg-gray-100 dark:bg-gray-800
+        bg-surface-deep
         mb-4
       ">
-        <DatabaseIcon className="h-8 w-8 text-gray-400 dark:text-gray-500" />
+        <DatabaseIcon className="h-8 w-8 text-fg-3" />
       </div>
 
-      <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+      <h3 className="statement-subtitle">
         No videos yet
       </h3>
 
@@ -309,7 +307,7 @@ export function NoVideosEmptyState({
               text-primary-foreground text-sm font-medium
               transition-colors
               focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2
-              dark:focus:ring-offset-gray-900
+              
             "
           >
             {action.label}
@@ -343,13 +341,13 @@ export function FilteredEmptyState({
       <div className="
         inline-flex items-center justify-center
         w-12 h-12 rounded-full
-        bg-gray-100 dark:bg-gray-800
+        bg-surface-deep
         mb-3
       ">
-        <DatabaseIcon className="h-6 w-6 text-gray-400 dark:text-gray-500" />
+        <DatabaseIcon className="h-6 w-6 text-fg-3" />
       </div>
 
-      <h3 className="text-base font-medium text-gray-900 dark:text-gray-100">
+      <h3 className="text-base font-medium text-fg-3">
         No videos match your filters
       </h3>
 
