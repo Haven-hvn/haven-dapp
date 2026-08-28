@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { gatewayNormalize } from '@/lib/ipfs'
+import { normalizeCid } from '@/lib/ipfs'
 import { createArkivClient, parseEntityPayload } from '@/lib/arkiv'
 import { parseDripInfo } from '@/lib/parse-arkiv-video'
 import { formatUsdCompact } from '@/lib/v4/drip-plan'
@@ -36,7 +36,9 @@ function trustwalletLogo(gateToken: string, chain: string): string {
 }
 function ipfsToHttp(u?: string): string | null {
   if (!u) return null
-  try { return gatewayNormalize(u) } catch { return null }
+  if (u.startsWith('ipfs://')) return `https://ipfs.io/ipfs/${normalizeCid(u)}`
+  if (u.startsWith('ipfs/')) return `https://ipfs.io/${u.replace(/^ipfs\//,'')}`
+  return u
 }
 
 function TokenLogo({ item }: { item: DropItem }) {
