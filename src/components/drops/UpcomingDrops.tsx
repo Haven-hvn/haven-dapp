@@ -137,7 +137,7 @@ export function UpcomingDrops() {
       {isDemo && drops !== null && (
         <p className="label text-fg-5 px-1 pb-2">Demo preview — Arkiv L3 (braga.hoodi.arkiv.network) is indexing haven drips</p>
       )}
-      <div className="grid gap-3">
+      <div className="grid gap-3 max-h-[520px] overflow-y-auto pr-1">
         {items.map((item) => (
           <a
             key={item.id}
@@ -152,9 +152,9 @@ export function UpcomingDrops() {
               <span style={{ display: 'none' }} className="w-full h-full items-center justify-center bg-seal-wash">{item.title.slice(0, 2).toUpperCase()}</span>
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-fg truncate group-hover:underline">{item.title}</p>
+              <p className="text-sm font-medium text-fg break-words whitespace-normal line-clamp-2 group-hover:underline" title={item.title}>{item.title}</p>
               <p className="label text-fg-5 mt-0.5">Stage {item.dripIndex + 1}/{item.dripTotal} · unlocks at {formatUsdCompact(item.marketCapTargetUsd)}</p>
-              <p className="label text-fg-5 truncate">{item.gateToken.slice(0, 10)}… · {item.gateChain}</p>
+              <p className="label text-fg-5 break-all whitespace-normal text-[11px] leading-snug" title={item.gateToken}>{item.gateToken} · {item.gateChain}</p>
             </div>
             <span className="label text-fg-4 self-center shrink-0">Trade →</span>
           </a>
