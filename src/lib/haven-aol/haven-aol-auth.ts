@@ -90,11 +90,15 @@ export async function createSignedGateRequest(
   const { secretKey, publicKey } = createTransportKeyPair()
   const nonce = options?.nonce ?? createRandomGateNonce()
 
+  // Validate EIP-712 domain — zero address or hex-string chainId causes Trust Wallet to show raw {\n and "couldn't analyze"
+  if (config.eip712VerifyingContract === '0x0000000000000000000000000000000000000000') {
+    console.warn('[haven-aol] EIP712 verifyingContract is zero address — Trust Wallet will show raw JSON and fail security analysis. Set NEXT_PUBLIC_EIP712_VERIFYING_CONTRACT')
+  }
   const typedData = buildGateRequestTypedData({
     evmAddress: address,
     transportPublicKey: publicKey,
-    nonce,
-    eip712ChainId: config.eip712ChainId,
+    nonce: BigInt(nonce),
+    eip712ChainId: BigInt(config.eip712ChainId),
     eip712VerifyingContract: config.eip712VerifyingContract,
   })
 
