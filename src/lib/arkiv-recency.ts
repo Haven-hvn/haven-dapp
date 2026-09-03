@@ -67,12 +67,18 @@ export function compareVideosByRecency(a: Video, b: Video): number {
 }
 
 /**
- * Resolve a display `Date` from Arkiv attributes, avoiding `new Date(blockNumber)`.
+ * Resolve a display `Date` from Arkiv attributes.
+ *
+ * 2.0 entities carry no wall-clock timestamp attribute — recency comes
+ * from `$createdAtBlock` (see callers). A block height is NOT a date, so
+ * when no ISO timestamp is present this returns epoch ("unknown", sorts
+ * last) instead of misrendering the height as 1970 milliseconds.
  */
 export function parseVideoCreatedAt(
   data: Record<string, unknown>,
   createdAtBlock: number
 ): Date {
+  void createdAtBlock
   const raw = data.created_at ?? data.createdAt
   if (typeof raw === 'string' && raw.length > 0 && !/^\d+$/.test(raw)) {
     const parsed = new Date(raw)
@@ -83,8 +89,5 @@ export function parseVideoCreatedAt(
   if (typeof raw === 'number' && raw > 1_000_000_000_000) {
     return new Date(raw)
   }
-  if (createdAtBlock > 0) {
-    return new Date(createdAtBlock)
-  }
-  return new Date()
+  return new Date(0)
 }

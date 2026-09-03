@@ -2,17 +2,20 @@
  * V4 Arkiv entity builder tests — pure wire-shape pinning.
  *
  * Guarantees under test:
- *   1. Attributes carry the filterable v4 surface (`gate_type`,
- *      `market_cap_target_usd`, `drip_*`, `oracle_address`) alongside the
- *      standard haven video attrs the community feed already queries.
- *   2. Payload parses as v1 gate metadata via `parseAnyGateMetadata` (so
- *      today's reader path works unchanged) while preserving v4 extras.
+ *   1. The series header carries shared facts once (`grp`, `title`,
+ *      `gate_type=4`, gate corpus, `drip_id`, `drip_total`) with payload
+ *      `{ targets, creator?, mime? }`.
+ *   2. Each part carries per-stage facts only (`grp`, `gate_type=4`,
+ *      `drip_id`, `drip_idx`, `series_ref`, `mcap_usd`, `sha256_ct`) with
+ *      payload `{ piece, gate }` — no mirrors, no repeated series facts.
+ *   3. Part payload `gate` parses as NATIVE v4 gate metadata via
+ *      `parseAnyGateMetadata` (frozen SDK fields intact).
  *
  * @module lib/v4/__tests__/arkiv-publish
  */
 
 import { describe, it, expect } from 'vitest'
-import { buildDripEntityBody, type DripGateConfig } from '../arkiv-publish'
+import { buildDripSeriesBody, buildDripPartBody, type DripGateConfig } from '../arkiv-publish'
 import { parseAnyGateMetadata } from '../../haven-aol/haven-aol-metadata'
 
 const GATE: DripGateConfig = {
@@ -23,64 +26,145 @@ const GATE: DripGateConfig = {
   title: 'Atlas Skies — Director’s Cut',
 }
 
-const BASE_ARGS = {
-  plan: { dripIndex: 1, dripTotal: 3, marketCapTargetUsd: 5_000_000 },
+const DRIP_ID = '11111111-2222-3333-4444-555555555555'
+const SERIES_REF = '0x' + 'ab'.repeat(32)
+
+const PART_ARGS = {
+  plan: { dripIndex: 1, marketCapTargetUsd: 5_000_000 },
   gate: GATE,
   pieceCid: 'bafybeichunk1cid',
-  encryptedHash: '0xdeadbeef',
-  originalHash: '0xfeedface',
-  mimeType: 'video/mp4',
+  encryptedHash: 'DEADBEEF',
   encryptedAesKeyB64: 'AAECAwQFBgcICQ==',
-  dripId: '11111111-2222-3333-4444-555555555555',
+  dripId: DRIP_ID,
+  seriesRef: SERIES_REF,
 }
 
 function findAttr(attrs: Array<{ key: string; value: string | number }>, key: string) {
   return attrs.find((a) => a.key === key)?.value
 }
 
-describe('buildDripEntityBody attributes', () => {
-  const body = buildDripEntityBody(BASE_ARGS)
+function attrKeys(attrs: Array<{ key: string; value: string | number }>) {
+  return attrs.map((a) => a.key).sort()
+}
 
-  it('carries the standard haven video attributes', () => {
-    expect(findAttr(body.attributes, 'project')).toBe('haven')
-    expect(findAttr(body.attributes, 'type')).toBe('video')
-    expect(findAttr(body.attributes, 'title')).toBe(GATE.title)
-    expect(findAttr(body.attributes, 'is_encrypted')).toBe(1)
-    expect(findAttr(body.attributes, 'piece_cid')).toBe(BASE_ARGS.pieceCid)
-    expect(findAttr(body.attributes, 'content_mime_type')).toBe('video/mp4')
+describe('buildDripSeriesBody', () => {
+  const body = buildDripSeriesBody({
+    gate: GATE,
+    dripId: DRIP_ID,
+    dripTotal: 3,
+    targets: [1_000_000, 5_000_000, 10_000_000],
+    creator: 'atlas',
+    mimeType: 'video/mp4',
   })
 
-  it('carries the gate triple', () => {
-    expect(findAttr(body.attributes, 'gate_token')).toBe(
-      GATE.gateToken.toLowerCase()
-    )
-    expect(findAttr(body.attributes, 'gate_chain')).toBe('BaseMainnet')
+  it('carries shared facts once (8 attrs, no part coordinates)', () => {
+    expect(attrKeys(body.attributes)).toEqual([
+      'drip_id',
+      'drip_total',
+      'gate_chain',
+      'gate_threshold',
+      'gate_token',
+      'gate_type',
+      'grp',
+      'title',
+    ])
+    expect(findAttr(body.attributes, 'grp')).toBe('haven.video.drip.series')
+    expect(findAttr(body.attributes, 'title')).toBe(GATE.title)
+    expect(findAttr(body.attributes, 'gate_type')).toBe(4)
+    expect(findAttr(body.attributes, 'drip_id')).toBe(DRIP_ID)
+    expect(findAttr(body.attributes, 'drip_total')).toBe(3)
+  })
+
+  it('stores the gate corpus in compact form (EIP id, lowercase token)', () => {
+    expect(findAttr(body.attributes, 'gate_token')).toBe(GATE.gateToken.toLowerCase())
+    expect(findAttr(body.attributes, 'gate_chain')).toBe(8453)
     expect(findAttr(body.attributes, 'gate_threshold')).toBe(5)
   })
 
-  it('carries the filterable v4 surface', () => {
-    expect(findAttr(body.attributes, 'gate_type')).toBe(4)
-    expect(findAttr(body.attributes, 'market_cap_target_usd')).toBe(5_000_000)
-    expect(findAttr(body.attributes, 'drip_index')).toBe(1)
-    expect(findAttr(body.attributes, 'drip_total')).toBe(3)
-    expect(findAttr(body.attributes, 'drip_id')).toBe(BASE_ARGS.dripId)
-    expect(findAttr(body.attributes, 'oracle_address')).toBe(
-      GATE.oracleAddress.toLowerCase()
-    )
+  it('stores targets + creator + mime enum in payload', () => {
+    expect(body.payloadJson.targets).toEqual([1_000_000, 5_000_000, 10_000_000])
+    expect(body.payloadJson.creator).toBe('atlas')
+    expect(body.payloadJson.mime).toBe(1)
+  })
+
+  it('omits optional payload fields when absent', () => {
+    const bare = buildDripSeriesBody({ gate: GATE, dripId: DRIP_ID, dripTotal: 1, targets: [1] })
+    expect('creator' in bare.payloadJson).toBe(false)
+    expect('mime' in bare.payloadJson).toBe(false)
+  })
+
+  it('normalizes threshold to >= 1 (canister rejects zero)', () => {
+    const body = buildDripSeriesBody({
+      gate: { ...GATE, gateThreshold: 0 },
+      dripId: DRIP_ID,
+      dripTotal: 1,
+      targets: [1],
+    })
+    expect(findAttr(body.attributes, 'gate_threshold')).toBe(1)
   })
 })
 
-describe('buildDripEntityBody payload', () => {
-  it('parses as NATIVE v4 gate metadata (SDK-built, frozen fields intact)', () => {
-    const body = buildDripEntityBody(BASE_ARGS)
-    const parsed = parseAnyGateMetadata(JSON.stringify(body.payloadJson))
+describe('buildDripPartBody attributes', () => {
+  const body = buildDripPartBody(PART_ARGS)
+
+  it('carries per-stage facts only (7 attrs, no series repeats)', () => {
+    expect(attrKeys(body.attributes)).toEqual([
+      'drip_id',
+      'drip_idx',
+      'gate_type',
+      'grp',
+      'mcap_usd',
+      'series_ref',
+      'sha256_ct',
+    ])
+    expect(findAttr(body.attributes, 'grp')).toBe('haven.video.drip.part')
+    expect(findAttr(body.attributes, 'gate_type')).toBe(4)
+    expect(findAttr(body.attributes, 'drip_id')).toBe(DRIP_ID)
+    expect(findAttr(body.attributes, 'drip_idx')).toBe(1)
+    expect(findAttr(body.attributes, 'series_ref')).toBe(SERIES_REF)
+    expect(findAttr(body.attributes, 'mcap_usd')).toBe(5_000_000)
+  })
+
+  it('normalizes the ciphertext hash to bare lowercase hex', () => {
+    expect(findAttr(body.attributes, 'sha256_ct')).toBe('deadbeef')
+  })
+
+  it('carries no legacy mirrors or series facts', () => {
+    for (const key of [
+      'project', 'type', 'title', 'is_encrypted', 'piece_cid', 'cid_hash',
+      'original_hash', 'content_mime_type', 'gate_token', 'gate_chain',
+      'gate_threshold', 'market_cap_target_usd', 'drip_index', 'drip_total',
+      'oracle_address', 'published_by',
+    ]) {
+      expect(findAttr(body.attributes, key)).toBeUndefined()
+    }
+  })
+
+  it('rounds fractional market-cap targets to whole USD in attrs + gate', () => {
+    const body = buildDripPartBody({
+      ...PART_ARGS,
+      plan: { dripIndex: 0, marketCapTargetUsd: 1_500_000.7 },
+    })
+    expect(findAttr(body.attributes, 'mcap_usd')).toBe(1_500_001)
+    const gate = JSON.parse(body.payloadJson.gate as string)
+    expect(gate.marketCapTarget).toBe(1_500_001)
+  })
+})
+
+describe('buildDripPartBody payload', () => {
+  it('carries piece + NATIVE v4 gate (SDK-built, frozen fields intact)', () => {
+    const body = buildDripPartBody(PART_ARGS)
+    expect(body.payloadJson.piece).toBe(PART_ARGS.pieceCid)
+    expect(Object.keys(body.payloadJson).sort()).toEqual(['gate', 'piece'])
+
+    const parsed = parseAnyGateMetadata(body.payloadJson.gate as string)
     expect(parsed).not.toBeNull()
     expect(parsed?.version).toBe(4)
 
     // v4 shape per haven-aol SDK: threshold is a decimal string, epoch and
     // marketCapTarget are JSON integers, oracleAddress is address-shaped.
     const v4 = parsed as Record<string, unknown>
-    expect(v4.cid).toBe(BASE_ARGS.pieceCid)
+    expect(v4.cid).toBe(PART_ARGS.pieceCid)
     expect(v4.chain).toBe('BaseMainnet')
     expect(String(v4.tokenAddress).toLowerCase()).toBe(GATE.gateToken.toLowerCase())
     expect(v4.threshold).toBe('5')
@@ -88,48 +172,15 @@ describe('buildDripEntityBody payload', () => {
     expect(Number.isInteger(v4.epoch as number)).toBe(true)
     expect(v4.marketCapTarget).toBe(5_000_000)
     expect(v4.oracleAddress).toBe(GATE.oracleAddress)
-    expect(v4.encryptedAesKey).toBe(BASE_ARGS.encryptedAesKeyB64)
-  })
-
-  it('preserves additive drip-grouping extras', () => {
-    const body = buildDripEntityBody(BASE_ARGS)
-    expect(body.payloadJson.dripIndex).toBe(1)
-    expect(body.payloadJson.dripTotal).toBe(3)
-    expect(body.payloadJson.dripId).toBe(BASE_ARGS.dripId)
+    expect(v4.encryptedAesKey).toBe(PART_ARGS.encryptedAesKeyB64)
   })
 
   it('normalizes threshold to >= 1 (canister rejects zero)', () => {
-    const body = buildDripEntityBody({
-      ...BASE_ARGS,
+    const body = buildDripPartBody({
+      ...PART_ARGS,
       gate: { ...GATE, gateThreshold: 0 },
     })
-    expect(findAttr(body.attributes, 'gate_threshold')).toBe(1)
-    expect((body.payloadJson as { threshold?: string }).threshold).toBe('1')
-  })
-
-  it('rounds fractional market-cap targets to whole USD in attrs + payload', () => {
-    const body = buildDripEntityBody({
-      ...BASE_ARGS,
-      plan: { dripIndex: 0, dripTotal: 1, marketCapTargetUsd: 1_500_000.7 },
-    })
-    expect(findAttr(body.attributes, 'market_cap_target_usd')).toBe(1_500_001)
-    expect((body.payloadJson as { marketCapTarget?: number }).marketCapTarget).toBe(1_500_001)
-  })
-})
-
-describe('buildDripEntityBody published_by (staged uploads)', () => {
-  it('records the publishing wallet lowercased when provided', () => {
-    const body = buildDripEntityBody({
-      ...BASE_ARGS,
-      publisherAddress: '0xAbCdEf0123456789AbCdEf0123456789AbCdEf01',
-    })
-    expect(findAttr(body.attributes, 'published_by')).toBe(
-      '0xabcdef0123456789abcdef0123456789abcdef01'
-    )
-  })
-
-  it('omits the attribute for one-shot runs without an explicit publisher', () => {
-    const body = buildDripEntityBody(BASE_ARGS)
-    expect(findAttr(body.attributes, 'published_by')).toBeUndefined()
+    const gate = JSON.parse(body.payloadJson.gate as string)
+    expect(gate.threshold).toBe('1')
   })
 })

@@ -1,14 +1,20 @@
 /**
  * V4 Arkiv publishing — entity construction + drip upload orchestrator.
  *
- * Each drip chunk becomes ONE Arkiv entity:
- *   - attributes are the filterable surface (`project`, `type`, `gate_*`,
- *     `gate_type=4`, `market_cap_target_usd`, `drip_index`,
- *     `published_by`) so `arkiv_query` can filter drips by target or
- *     uploader;
- *   - payload is the v4 gate-metadata JSON every existing reader already
- *     parses, extended with drip-grouping extras (extra keys are ignored by
- *     the frozen SDK guard but survive parsing, giving forward compat).
+ * One drip run becomes a SERIES header plus one PART entity per chunk
+ * (ARKIV_FORMAT 2.0.0):
+ *   - `haven.video.drip.series` (7 attrs): title, gate corpus, `drip_id`,
+ *     `drip_total` + payload `{ targets, creator?, mime? }` — shared facts
+ *     stored once, 52-week BTL;
+ *   - `haven.video.drip.part` (7 attrs): `gate_type=4`, `drip_id`,
+ *     `drip_idx`, `series_ref`, `mcap_usd`, `sha256_ct` + payload
+ *     `{ piece, gate }` — 12-week BTL, refreshed with EXTEND while active.
+ *
+ * Attribute values are SDK 0.7.0 `{key, value: string|number}` (integers
+ * only): `gate_token` is a lowercase-hex str (spec `addr`), `sha256_ct` a
+ * hex str (spec `bytes32`), `series_ref` the series entity key hex
+ * (spec `key` — no key constructor exists yet, so string equality), and
+ * `gate_chain` the EIP-155 id (see `lib/gate-chains`).
  *
  * `publishDripStage` runs ONE unlock stage end-to-end: slice -> stream-
  * encrypt -> pin to Filecoin -> IBE-wrap content key -> index in Arkiv.
@@ -30,7 +36,8 @@ import { jsonToPayload } from '@arkiv-network/sdk/utils'
 import type { Chain as HavenChain } from 'haven-aol'
 import { VALID_CHAINS, buildGateMetadataV4 } from 'haven-aol'
 import { sha256Hex } from '../crypto'
-import { parseAnyGateMetadata } from '../haven-aol/haven-aol-metadata'
+import { toChainId } from '../gate-chains'
+import { mimeToEnum } from '../mime-enum'
 import { havenStreamEncrypt, zeroAesKey } from './streaming-encrypt'
 import { computeDripDerivationInput, wrapAesKey } from './ibe-wrap'
 import { getUploadSynapse, uploadEncryptedPiece } from './synapse-upload'
@@ -50,45 +57,97 @@ export interface DripGateConfig {
   gateThreshold: number
   /**
    * Bond/oracle contract address backing market-cap resolution.
-   * Stored for future on-chain enforcement; unused by the web-only flow.
+   * Lives inside the v4 gate JSON only (no `oracle_address` attribute —
+   * re-add one only when enforced on-chain).
    */
   oracleAddress: string
-  /** Display title applied to every chunk entity. */
+  /** Display title applied to the series header. */
   title: string
 }
 
-export interface DripEntityBody {
+export interface DripSeriesBody {
+  attributes: Array<{ key: string; value: string | number }>
+  payloadJson: Record<string, unknown>
+}
+
+export interface DripPartBody {
   attributes: Array<{ key: string; value: string | number }>
   payloadJson: Record<string, unknown>
 }
 
 /**
- * Build the attribute list + payload JSON for one drip chunk entity.
+ * Build the attribute list + payload JSON for a drip SERIES header.
+ *
+ * Shared facts stored once per run — never repeated per chunk. Pure and
+ * deterministic given its inputs, so tests can pin the exact wire shapes.
+ */
+export function buildDripSeriesBody(args: {
+  gate: DripGateConfig
+  /** Stable per-drip identifier grouping all chunks (uuid). */
+  dripId: string
+  /** Stage count. */
+  dripTotal: number
+  /** Per-stage whole-USD unlock targets (ascending). */
+  targets: number[]
+  /** Creator handle for display (optional). */
+  creator?: string
+  /** Source MIME type → stored as the shared enum int (optional). */
+  mimeType?: string
+}): DripSeriesBody {
+  const { gate, dripId, dripTotal, targets } = args
+  const chainId = toChainId(gate.chain)
+  if (chainId === undefined) {
+    throw new DripPublishError(`Unsupported chain ${gate.chain}`, -1, 'encrypting')
+  }
+  const threshold = Math.max(1, Math.floor(gate.gateThreshold))
+
+  const attributes = [
+    { key: 'grp', value: 'haven.video.drip.series' },
+    { key: 'title', value: gate.title },
+    { key: 'gate_type', value: 4 },
+    { key: 'gate_token', value: gate.gateToken.toLowerCase() },
+    { key: 'gate_chain', value: chainId },
+    { key: 'gate_threshold', value: threshold },
+    { key: 'drip_id', value: dripId },
+    { key: 'drip_total', value: dripTotal },
+  ]
+
+  const payloadJson: Record<string, unknown> = {
+    targets: targets.map((t) => Math.round(t)),
+  }
+  if (args.creator) payloadJson.creator = args.creator
+  const mime = mimeToEnum(args.mimeType)
+  if (mime !== undefined) payloadJson.mime = mime
+
+  return { attributes, payloadJson }
+}
+
+/**
+ * Build the attribute list + payload JSON for one drip PART (chunk) entity.
  *
  * The payload is a NATIVE v4 gate-metadata record (built by the haven-aol
- * SDK's `buildGateMetadataV4`, which pins field order + validation) with
- * additive drip-grouping extras (`dripId`, `dripTotal`) — extra keys are
- * ignored by the frozen SDK guard but survive parsing.
+ * SDK's `buildGateMetadataV4`, which pins field order + validation) under
+ * `gate`, plus the Filecoin `piece` locator. No attribute mirrors, no
+ * per-chunk series facts — those live on the series header.
  *
  * Pure and deterministic given its inputs (the caller injects CIDs/hashes),
  * so tests can pin the exact wire shapes without mocks.
  */
-export function buildDripEntityBody(args: {
-  plan: Pick<DripChunkPlan, 'dripIndex' | 'dripTotal' | 'marketCapTargetUsd'>
+export function buildDripPartBody(args: {
+  plan: Pick<DripChunkPlan, 'dripIndex' | 'marketCapTargetUsd'>
   gate: DripGateConfig
   pieceCid: string
+  /** sha256 hex of the ciphertext bytes (stored bare-lowercase). */
   encryptedHash: string
-  originalHash: string
-  mimeType: string
   encryptedAesKeyB64: string
   /** Stable per-drip identifier grouping all chunks (uuid). */
   dripId: string
+  /** Entity key of the series header — one indexed fan-out query. */
+  seriesRef: string
   /** Publish epoch — pass once per run so all chunks share it. */
   epoch?: number
-  /** Publishing wallet — recorded as a filterable `published_by` attr. */
-  publisherAddress?: string
-}): DripEntityBody {
-  const { plan, gate, pieceCid, encryptedHash, originalHash, mimeType, encryptedAesKeyB64, dripId } =
+}): DripPartBody {
+  const { plan, gate, pieceCid, encryptedHash, encryptedAesKeyB64, dripId, seriesRef } =
     args
   const epoch = args.epoch ?? currentDripEpoch()
 
@@ -96,28 +155,14 @@ export function buildDripEntityBody(args: {
   const targetUsd = Math.round(plan.marketCapTargetUsd)
 
   const attributes = [
-    { key: 'project', value: 'haven' },
-    { key: 'type', value: 'video' },
-    { key: 'title', value: gate.title },
-    { key: 'is_encrypted', value: 1 },
-    { key: 'piece_cid', value: pieceCid },
-    { key: 'cid_hash', value: encryptedHash },
-    { key: 'original_hash', value: originalHash },
-    { key: 'content_mime_type', value: mimeType },
-    { key: 'gate_token', value: gate.gateToken.toLowerCase() },
-    { key: 'gate_chain', value: gate.chain },
-    { key: 'gate_threshold', value: threshold },
-    // -- v4 surface ---------------------------------------------------------
-    // gate_type=4 (ATTR_UINT): 1=per-file, 3=per-epoch, 4=per-marketcap.
+    { key: 'grp', value: 'haven.video.drip.part' },
+    // gate_type=4: 1=per-file, 3=per-epoch, 4=per-marketcap.
     { key: 'gate_type', value: 4 },
-    { key: 'market_cap_target_usd', value: targetUsd },
-    { key: 'drip_index', value: plan.dripIndex },
-    { key: 'drip_total', value: plan.dripTotal },
     { key: 'drip_id', value: dripId },
-    { key: 'oracle_address', value: gate.oracleAddress.toLowerCase() },
-    ...(args.publisherAddress
-      ? [{ key: 'published_by', value: args.publisherAddress.toLowerCase() }]
-      : []),
+    { key: 'drip_idx', value: plan.dripIndex },
+    { key: 'series_ref', value: seriesRef },
+    { key: 'mcap_usd', value: targetUsd },
+    { key: 'sha256_ct', value: encryptedHash.replace(/^0x/i, '').toLowerCase() },
   ]
 
   const metadata = buildGateMetadataV4({
@@ -132,11 +177,8 @@ export function buildDripEntityBody(args: {
   })
 
   const payloadJson = {
-    ...metadata,
-    // Additive drip-grouping extras (ignored by the frozen v4 guard).
-    dripIndex: plan.dripIndex,
-    dripTotal: plan.dripTotal,
-    dripId,
+    piece: pieceCid,
+    gate: JSON.stringify(metadata),
   }
 
   return { attributes, payloadJson }
@@ -145,6 +187,71 @@ export function buildDripEntityBody(args: {
 /** Epoch at publish time — frozen into the chunk metadata (v3/v4 rule). */
 function currentDripEpoch(): number {
   return Math.floor(Date.now() / 1000 / 2_592_000)
+}
+
+/** Minimal write surface `ensureDripSeries` needs (wallet or public client). */
+export interface SeriesStore {
+  createEntity: (args: {
+    payload: Uint8Array
+    contentType: string
+    attributes: Array<{ key: string; value: string | number }>
+    expiresIn: number
+  }) => Promise<{ entityKey: string }>
+  query?: (
+    query: string,
+    opts?: unknown
+  ) => Promise<{ entities?: Array<{ key?: string; attributes?: Array<{ key: string; value: unknown }> }> }>
+}
+
+function findAttr(
+  attrs: Array<{ key: string; value: unknown }> | undefined,
+  key: string
+): unknown {
+  return attrs?.find((a) => a.key === key)?.value
+}
+
+/**
+ * Find-or-create the series header for a drip run, keyed by `drip_id`.
+ *
+ * Lookup is a single `drip_id` equality (near-unique) with a client-side
+ * `grp` check — no AND-syntax assumptions about the chain's query dialect.
+ * Any lookup failure falls through to create: readers group by `drip_id`,
+ * so a duplicate series degrades to one extra fetch, never stranded parts.
+ */
+export async function ensureDripSeries(
+  store: SeriesStore,
+  args: {
+    gate: DripGateConfig
+    dripId: string
+    dripTotal: number
+    targets: number[]
+    creator?: string
+    mimeType?: string
+  }
+): Promise<string> {
+  if (store.query) {
+    try {
+      const result = await store.query(`drip_id = "${args.dripId}"`, {
+        resultsPerPage: 5,
+      })
+      for (const entity of result?.entities ?? []) {
+        if (findAttr(entity.attributes, 'grp') === 'haven.video.drip.series') {
+          return String(entity.key)
+        }
+      }
+    } catch {
+      // Fall through to create.
+    }
+  }
+
+  const body = buildDripSeriesBody(args)
+  const { entityKey } = await store.createEntity({
+    payload: jsonToPayload(body.payloadJson),
+    contentType: 'application/json',
+    attributes: body.attributes,
+    expiresIn: DRIP_SERIES_EXPIRES_IN_SECONDS,
+  })
+  return entityKey
 }
 
 // ============================================================================
@@ -252,23 +359,27 @@ export interface PublishDripStageArgs {
   wallet: PublisherWalletLike
   signal?: AbortSignal
   onChunkStage?: (progress: DripChunkProgress) => void
-  /** Publishing wallet — written to the `published_by` attribute. */
-  publisherAddress?: string
   /**
    * Shared drip-grouping id. Pass the session's `dripId` when publishing
    * through a staged session; defaults to a fresh uuid (one-shot runs that
    * never mix with sessions).
    */
   dripId?: string
+  /**
+   * Entity key of the series header. When absent the stage ensures the
+   * series itself (find-or-create by `drip_id`) before indexing the part,
+   * so standalone publishes stay one call.
+   */
+  seriesRef?: string
 }
 
 /**
  * Publish exactly ONE unlock stage of a drip.
  *
- * Pipeline: slice (per plan) → stream-encrypt with a FRESH AES key → pin to
- * Filecoin → IBE-wrap the key to this chunk's v4 identity (chain, token,
- * threshold, epoch, target, cid — byte-identical to the canister's
- * `computeDerivationInputV4`) → index one Arkiv entity.
+ * Pipeline: ensure series → slice (per plan) → stream-encrypt with a FRESH
+ * AES key → pin to Filecoin → IBE-wrap the key to this chunk's v4 identity
+ * (chain, token, threshold, epoch, target, cid — byte-identical to the
+ * canister's `computeDerivationInputV4`) → index one PART entity.
  *
  * Safe for cross-wallet/cross-machine staging: wrapping needs only PUBLIC
  * inputs, and the fresh AES key is zeroized immediately after wrapping.
@@ -278,7 +389,8 @@ export interface PublishDripStageArgs {
 export async function publishDripStage(
   args: PublishDripStageArgs
 ): Promise<PublishStageResult> {
-  const { source, plan, gate, mimeType, wallet, signal, onChunkStage, publisherAddress } = args
+  const { source, plan, gate, mimeType, wallet, signal, onChunkStage } = args
+  const dripId = args.dripId ?? crypto.randomUUID()
 
   if (!VALID_CHAINS.includes(gate.chain)) {
     throw new DripPublishError(`Unsupported chain ${gate.chain}`, plan.dripIndex, 'encrypting')
@@ -347,30 +459,38 @@ export async function publishDripStage(
     })
     const encryptedAesKeyB64 = await wrapAesKey(aesKey, derivationInput)
 
-    // Index the chunk entity in Arkiv.
+    // Index the series header (find-or-create by drip_id) so the part can
+    // reference it, then index the chunk part entity in Arkiv.
     report({
       dripIndex: plan.dripIndex,
       stage: 'indexing',
       pieceCid: upload.pieceCid,
     })
-    const body = buildDripEntityBody({
+    const seriesRef =
+      args.seriesRef ??
+      (await ensureDripSeries(arkivClient, {
+        gate,
+        dripId,
+        dripTotal: plan.dripTotal,
+        targets: [Math.round(plan.marketCapTargetUsd)],
+        mimeType,
+      }))
+    const body = buildDripPartBody({
       plan,
       gate,
       pieceCid: upload.pieceCid,
       encryptedHash,
-      originalHash,
-      mimeType,
       encryptedAesKeyB64,
-      dripId: args.dripId ?? crypto.randomUUID(),
+      dripId,
+      seriesRef,
       epoch: publishEpoch,
-      publisherAddress: publisherAddress ?? wallet.account.address,
     })
 
     const { entityKey } = await arkivClient.createEntity({
       payload: jsonToPayload(body.payloadJson),
       contentType: 'application/json',
       attributes: body.attributes,
-      expiresIn: DRIP_ENTITY_EXPIRES_IN_SECONDS,
+      expiresIn: DRIP_PART_EXPIRES_IN_SECONDS,
     })
 
     report({
@@ -400,19 +520,38 @@ export async function publishDripStage(
 }
 
 /**
- * Publish a full drip in one sitting: n encrypted chunk entities sharing
- * one `dripId`. Thin sequential wrapper over `publishDripStage` kept for
- * bulk flows — each chunk depends on the previous one's success (a gap
- * would strand locked content behind a missing middle chunk), and it keeps
- * wallet prompts predictable.
+ * Publish a full drip in one sitting: one series header plus n part
+ * entities sharing one `dripId`. Thin sequential wrapper over
+ * `publishDripStage` kept for bulk flows — each chunk depends on the
+ * previous one's success (a gap would strand locked content behind a
+ * missing middle chunk), and it keeps wallet prompts predictable.
  */
 export async function publishDripChunks(args: PublishDripArgs): Promise<string[]> {
   const { source, plans, gate, mimeType, wallet, signal, onChunkStage } = args
 
   if (plans.length === 0) throw new DripPublishError('Drip has no chunks', -1, 'encrypting')
 
-  // One shared grouping id for the whole run.
+  // One shared grouping id + one series header for the whole run.
   const dripId = crypto.randomUUID()
+
+  // Series needs a write client of its own (stages each build theirs).
+  await createArkivWriteClient(wallet)
+  const provider = extractProvider(wallet.transport)
+  if (!provider) {
+    throw new DripPublishError('Wallet provider unavailable for Arkiv writes', -1, 'indexing')
+  }
+  const arkivClient = createArkivWalletClient({
+    chain: braga,
+    transport: custom(provider as never),
+    account: wallet.account.address as `0x${string}`,
+  })
+  const seriesRef = await ensureDripSeries(arkivClient, {
+    gate,
+    dripId,
+    dripTotal: plans.length,
+    targets: plans.map((p) => Math.round(p.marketCapTargetUsd)),
+    mimeType,
+  })
 
   const entityKeys: string[] = []
   for (const plan of plans) {
@@ -425,8 +564,8 @@ export async function publishDripChunks(args: PublishDripArgs): Promise<string[]
       wallet,
       signal,
       onChunkStage,
-      publisherAddress: wallet.account.address,
       dripId,
+      seriesRef,
     }).catch((error: unknown) => {
       // Re-tag pre-stage failures that never got a plan-scoped index.
       if (error instanceof DripPublishError && error.dripIndex < 0) {
@@ -440,8 +579,11 @@ export async function publishDripChunks(args: PublishDripArgs): Promise<string[]
   return entityKeys
 }
 
-/** ~10 years of entity lifetime (2s blocks => seconds here). */
-const DRIP_ENTITY_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 365 * 10
+/** Series header lifetime: 52 weeks (outlives its parts). */
+const DRIP_SERIES_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 7 * 52
+
+/** Part lifetime: 12 weeks — refreshed with EXTEND while the series is active. */
+const DRIP_PART_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 7 * 12
 
 function thresholdOf(gate: DripGateConfig): number {
   return Math.max(1, Math.floor(gate.gateThreshold))

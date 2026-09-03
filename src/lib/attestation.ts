@@ -21,6 +21,7 @@
 
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { sha256 } from '@noble/hashes/sha2.js'
+import { toChainVariant } from './gate-chains'
 import type {
   Attestation,
   MerkleAttestation,
@@ -239,9 +240,10 @@ export function attestationMatchesEntity(
     creator: string
     attributes: {
       gate_token?: string
-      gate_chain?: string
+      /** EIP-155 id (2.0 `gate_chain` spelling; compared via variant). */
+      gate_chain?: number
       gate_threshold?: number
-      cid_hash?: string
+      sha256_ct?: string
     }
   }
 ): boolean {
@@ -262,10 +264,13 @@ export function attestationMatchesEntity(
     return false
   }
 
-  // Attestation must be for this entity's chain (required)
+  // Attestation must be for this entity's chain (required).
+  // The canister records the Haven-AOL variant name; entities store the
+  // EIP-155 id — compare through the shared table.
+  const entityVariant = toChainVariant(entity.attributes.gate_chain)
   if (
-    !entity.attributes.gate_chain ||
-    attestation.chain.toLowerCase() !== entity.attributes.gate_chain.toLowerCase()
+    entityVariant === undefined ||
+    attestation.chain.toLowerCase() !== entityVariant.toLowerCase()
   ) {
     return false
   }
@@ -281,12 +286,12 @@ export function attestationMatchesEntity(
   }
 
   // Attestation must be bound to this entity's content (anti-replay).
-  // REQUIRED: if the entity has no cid_hash attribute, fail closed — the
+  // REQUIRED: if the entity has no sha256_ct attribute, fail closed — the
   // signature alone does not bind the attestation to specific content.
   if (
-    !entity.attributes.cid_hash ||
+    !entity.attributes.sha256_ct ||
     !attestation.cidHash ||
-    attestation.cidHash !== entity.attributes.cid_hash
+    attestation.cidHash.toLowerCase() !== entity.attributes.sha256_ct.toLowerCase()
   ) {
     return false
   }

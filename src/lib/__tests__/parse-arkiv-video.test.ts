@@ -1,16 +1,17 @@
 /**
- * Regression tests for `parseArkivEntityToVideo`.
+ * Regression tests for `parseArkivEntityToVideo` (ARKIV_FORMAT 2.0.0).
  *
  * The pre-Sprint-6 implementation used the v1-strict `parseGateMetadata`
- * helper for both `encryption_metadata` and `cid_encryption_metadata`, which
- * returned `null` for every Haven-AOL v3 record. The downstream `Video` object
- * therefore had `encryptionMetadata: undefined` for v3 uploads — the dapp
- * would then hit an "Invalid encryption metadata" error or (worse) treat
- * v3-encrypted content as un-encrypted.
+ * helper for both gate fields, which returned `null` for every Haven-AOL v3
+ * record. The downstream `Video` object therefore had
+ * `encryptionMetadata: undefined` for v3 uploads — the dapp would then hit
+ * an "Invalid encryption metadata" error or (worse) treat v3-encrypted
+ * content as un-encrypted.
  *
- * These tests pin the fix: v1 records still round-trip byte-identically, and
- * v3 records now flow through the `parseAnyGateMetadata` dispatcher and land
- * in the `Video` object unchanged.
+ * These tests pin the wiring: v1 records still round-trip, v3 records flow
+ * through the `parseAnyGateMetadata` dispatcher, and 2.0 canonical keys
+ * (`gate`, `piece`/`fcid`, `sha256_ct`, `mime`, `dur_s`, `vlm`, `seg`,
+ * `src`/`creator`, `pt_hash`) land in the `Video` object.
  *
  * @module lib/__tests__/parse-arkiv-video.test
  */
@@ -71,18 +72,16 @@ const V3_GATE = {
 }
 
 function makeEntity(overrides: {
-  encryption_metadata?: unknown
-  cid_encryption_metadata?: unknown
-  is_encrypted?: boolean
+  gate?: unknown
+  cid_gate?: unknown
 }) {
   return {
     key: '0x1',
     owner: '0xowner',
     payload: {
       title: 'test',
-      is_encrypted: overrides.is_encrypted ?? true,
-      encryption_metadata: overrides.encryption_metadata,
-      cid_encryption_metadata: overrides.cid_encryption_metadata,
+      gate: overrides.gate,
+      cid_gate: overrides.cid_gate,
     },
     attributes: {},
   }
@@ -91,7 +90,7 @@ function makeEntity(overrides: {
 describe('parseArkivEntityToVideo — v3 dispatcher wiring', () => {
   it('preserves v1 gate metadata unchanged (byte-identity regression guard)', () => {
     const video = parseArkivEntityToVideo(
-      makeEntity({ encryption_metadata: V1_GATE }) as never
+      makeEntity({ gate: V1_GATE }) as never
     )
     expect(video.isEncrypted).toBe(true)
     expect(video.encryptionMetadata).toEqual(V1_GATE)
@@ -99,7 +98,7 @@ describe('parseArkivEntityToVideo — v3 dispatcher wiring', () => {
 
   it('preserves v3 gate metadata (the actual bug fix — pre-fix this dropped to undefined)', () => {
     const video = parseArkivEntityToVideo(
-      makeEntity({ encryption_metadata: V3_GATE }) as never
+      makeEntity({ gate: V3_GATE }) as never
     )
     // Before the fix, this would be `undefined` because the v1-only parser
     // rejected `version: 3`. That in turn tripped the v1 `isGateMetadata`
@@ -112,8 +111,8 @@ describe('parseArkivEntityToVideo — v3 dispatcher wiring', () => {
   it('also routes cidEncryptionMetadata through the v3 dispatcher', () => {
     const video = parseArkivEntityToVideo(
       makeEntity({
-        encryption_metadata: V1_GATE,
-        cid_encryption_metadata: V3_GATE,
+        gate: V1_GATE,
+        cid_gate: V3_GATE,
       }) as never
     )
     expect(video.encryptionMetadata).toEqual(V1_GATE)
@@ -123,16 +122,93 @@ describe('parseArkivEntityToVideo — v3 dispatcher wiring', () => {
   it('returns undefined for unknown-version records instead of throwing', () => {
     const video = parseArkivEntityToVideo(
       makeEntity({
-        encryption_metadata: { version: 2, whatever: 'x' },
+        gate: { version: 2, whatever: 'x' },
       }) as never
     )
     expect(video.encryptionMetadata).toBeUndefined()
+    expect(video.isEncrypted).toBe(false)
   })
 
-  it('parses JSON-string encryption_metadata values (v3)', () => {
+  it('parses JSON-string gate values (v3)', () => {
     const video = parseArkivEntityToVideo(
-      makeEntity({ encryption_metadata: JSON.stringify(V3_GATE) }) as never
+      makeEntity({ gate: JSON.stringify(V3_GATE) }) as never
     )
     expect(video.encryptionMetadata).toEqual(V3_GATE)
+  })
+})
+
+describe('parseArkivEntityToVideo — 2.0 canonical keys', () => {
+  it('maps full-record keys (clear)', () => {
+    const video = parseArkivEntityToVideo({
+      key: '0x2',
+      owner: '0xOWNER',
+      payload: {
+        fcid: 'QmRoot',
+        size: 1024,
+        vlm: 'QmVlm',
+        vlm_model: 'zai-org/glm-4.6v-flash',
+        src: 'https://example.com/v.mp4',
+        creator: '@alice',
+        phash: 'abc123',
+        codecs: ['h264'],
+        seg: {
+          segment_index: 1,
+          start_timestamp: '2026-02-20T10:00:00Z',
+          mint_id: 'mint-9',
+        },
+      },
+      attributes: {
+        grp: 'haven.video.full',
+        title: 'hello',
+        mime: 1,
+        dur_s: 125,
+        sha256_ct: 'de'.repeat(32),
+      },
+    } as never)
+
+    expect(video.title).toBe('hello')
+    expect(video.owner).toBe('0xowner')
+    expect(video.filecoinCid).toBe('QmRoot')
+    expect(video.pieceCid).toBeUndefined()
+    expect(video.isEncrypted).toBe(false)
+    expect(video.contentMimeType).toBe('video/mp4')
+    expect(video.duration).toBe(125)
+    expect(video.hasAiData).toBe(true)
+    expect(video.vlmJsonCid).toBe('QmVlm')
+    expect(video.analysisModel).toBe('zai-org/glm-4.6v-flash')
+    expect(video.sourceUri).toBe('https://example.com/v.mp4')
+    expect(video.creatorHandle).toBe('@alice')
+    expect(video.phash).toBe('abc123')
+    expect(video.cidHash).toBe('de'.repeat(32))
+    expect(video.mintId).toBe('mint-9')
+    expect(video.segmentMetadata?.segmentIndex).toBe(1)
+    expect(video.codecVariants?.[0]?.codec).toBe('h264')
+  })
+
+  it('reads no legacy keys', () => {
+    const video = parseArkivEntityToVideo({
+      key: '0x3',
+      owner: '0xowner',
+      payload: {
+        filecoin_root_cid: 'QmLegacy',
+        encryption_metadata: V1_GATE,
+        is_encrypted: true,
+        content_mime_type: 'video/mp4',
+      },
+      attributes: {
+        title: 'legacy',
+        cid_hash: '00'.repeat(32),
+        duration: 99,
+        creator_handle: '@ghost',
+      },
+    } as never)
+
+    expect(video.filecoinCid).toBe('')
+    expect(video.encryptionMetadata).toBeUndefined()
+    expect(video.isEncrypted).toBe(false)
+    expect(video.contentMimeType).toBeUndefined()
+    expect(video.duration).toBe(0)
+    expect(video.creatorHandle).toBeUndefined()
+    expect(video.cidHash).toBeUndefined()
   })
 })

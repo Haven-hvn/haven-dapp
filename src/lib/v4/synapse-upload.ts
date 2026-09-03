@@ -28,7 +28,7 @@ export interface PublisherWalletLike {
 }
 
 export interface UploadPieceResult {
-  /** Piece CID (string form) — stored as Arkiv `piece_cid`. */
+  /** Piece CID (string form) — stored as Arkiv payload `piece`. */
   pieceCid: string
   /** Uploaded byte size. */
   size: number

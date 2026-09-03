@@ -2,7 +2,8 @@
 import { useEffect, useState } from 'react'
 import { normalizeCid } from '@/lib/ipfs'
 import { createArkivClient, parseEntityPayload } from '@/lib/arkiv'
-import { parseDripInfo } from '@/lib/parse-arkiv-video'
+import { parseDripInfo, type DripSeriesMeta } from '@/lib/parse-arkiv-video'
+import { toNetworkKey } from '@/lib/gate-chains'
 import { formatUsdCompact } from '@/lib/v4/drip-plan'
 
 interface DropItem {
@@ -94,32 +95,76 @@ export function UpcomingDrops() {
     async function load() {
       try {
         const client = createArkivClient()
-        // Query v4 drip entities via Arkiv - filter gate_type = 4 (numeric)
-        const result: any = await (client as any).query('gate_type = 4', { resultsPerPage: 12, includeData: { payload: true, attributes: true, metadata: true } })
-        const entities: any[] = result?.entities ?? []
+        // Query v4 drip PART entities (attributes only — never select payload
+        // for list rows) and join each distinct drip_id to its series header
+        // once for title/total/token/chain.
+        //
+        // NOTE: single-equality queries + client-side `grp` filtering — the
+        // pinned SDK (0.7.0) predates the AND/STARTSWITH/tagged-literal
+        // dialect documented in the spec cookbook.
+        const result: any = await (client as any).query(
+          'gate_type = 4',
+          { resultsPerPage: 24, includeData: { payload: false, attributes: true, metadata: true } }
+        )
+        const entities: any[] = (result?.entities ?? []).filter((e: any) =>
+          (e.attributes ?? []).some(
+            (a: any) => a.key === 'grp' && a.value === 'haven.video.drip.part'
+          )
+        )
         if (entities.length === 0) throw new Error('no drips')
-        const items: DropItem[] = entities.map((e: any) => {
+        const parts = entities.map((e: any) => {
           const attrs: Record<string, unknown> = {}
           for (const a of (e.attributes ?? [])) attrs[a.key] = a.value
-          let payloadData: Record<string, unknown> = {}
-          try {
-            const raw = e.payload ? Buffer.from(e.payload).toString('utf-8') : ''
-            // SDK payload is Uint8Array; if string try base64/json
-            if (typeof e.payload === 'string') payloadData = parseEntityPayload<Record<string, unknown>>(e.payload) ?? {}
-            else if (e.payload instanceof Uint8Array) payloadData = JSON.parse(Buffer.from(e.payload).toString('utf-8') || '{}')
-          } catch {}
-          const data = { ...attrs, ...payloadData }
-          const drip = parseDripInfo(data, payloadData)
+          return { key: String(e.key), attrs }
+        })
+        // One series fetch per distinct drip_id.
+        const dripIds = [...new Set(parts.map((p) => String(p.attrs.drip_id ?? '')))].filter(Boolean)
+        const seriesById = new Map<string, DripSeriesMeta & { creator?: string }>()
+        await Promise.all(
+          dripIds.map(async (dripId) => {
+            try {
+              const s: any = await (client as any).query(`drip_id = "${dripId}"`, {
+                resultsPerPage: 5,
+                includeData: { payload: true, attributes: true, metadata: false },
+              })
+              const se = (s?.entities ?? []).find((e: any) =>
+                (e.attributes ?? []).some(
+                  (a: any) => a.key === 'grp' && a.value === 'haven.video.drip.series'
+                )
+              )
+              if (!se) return
+              const sattrs: Record<string, unknown> = {}
+              for (const a of (se.attributes ?? [])) sattrs[a.key] = a.value
+              let spayload: Record<string, unknown> = {}
+              try {
+                if (typeof se.payload === 'string') spayload = parseEntityPayload<Record<string, unknown>>(se.payload) ?? {}
+                else if (se.payload instanceof Uint8Array) spayload = JSON.parse(Buffer.from(se.payload).toString('utf-8') || '{}')
+              } catch {}
+              seriesById.set(dripId, {
+                title: String(sattrs.title ?? ''),
+                dripTotal: Number(sattrs.drip_total ?? 1),
+                gateToken: String(sattrs.gate_token ?? ''),
+                gateChain: sattrs.gate_chain as string | number | undefined,
+                creator: typeof spayload.creator === 'string' ? spayload.creator : undefined,
+              })
+            } catch {}
+          })
+        )
+        const items: DropItem[] = parts.map(({ key, attrs }) => {
+          const dripId = String(attrs.drip_id ?? '')
+          const series = seriesById.get(dripId)
+          const drip = parseDripInfo(attrs, {}, series)
+          const networkKey = toNetworkKey(drip?.gateChain) ?? 'base'
           return {
-            id: String(e.key ?? drip?.dripId ?? Math.random()),
-            title: String(data.title ?? 'Untitled Drop'),
-            gateToken: String(drip?.gateToken ?? data.gate_token ?? ''),
-            gateChain: String(drip?.gateChain ?? data.gate_chain ?? 'base'),
-            marketCapTargetUsd: drip?.marketCapTargetUsd ?? Number(data.market_cap_target_usd ?? 0),
+            id: key,
+            title: series?.title || 'Untitled Drop',
+            gateToken: drip?.gateToken ?? '',
+            gateChain: networkKey,
+            marketCapTargetUsd: drip?.marketCapTargetUsd ?? 0,
             dripIndex: drip?.dripIndex ?? 0,
             dripTotal: drip?.dripTotal ?? 1,
-            dripId: drip?.dripId ?? String(e.key),
-            creatorHandle: data.creator_handle as string | undefined,
+            dripId: drip?.dripId ?? key,
+            creatorHandle: series?.creator,
           }
         }).filter((d: DropItem) => d.marketCapTargetUsd > 0)
         if (!cancelled) setDrops(items.length ? items : DEMO_DROPS)

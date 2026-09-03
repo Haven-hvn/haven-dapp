@@ -1,61 +1,72 @@
 /**
- * Parse Arkiv entities into {@link Video} records.
+ * Parse Arkiv entities into {@link Video} records (ARKIV_FORMAT 2.0.0).
+ *
+ * Canonical snake_case keys only — no camelCase fallbacks, no legacy keys.
+ * Attributes and the decoded payload merge into one record; the payload
+ * never mirrors attributes.
  *
  * @module lib/parse-arkiv-video
  */
 
 import type { Video } from '../types/video'
-import type { DripInfo } from '@/types/video'
+import type { DripInfo, VideoCodec } from '@/types/video'
 import { parseAnyGateMetadata } from './haven-aol'
 import { parseEntityPayload, type ArkivEntity } from './arkiv'
 import {
   getArkivEntityCreatedAtBlock,
   parseVideoCreatedAt,
 } from './arkiv-recency'
+import { toChainVariant } from './gate-chains'
+import { enumToMime } from './mime-enum'
+
+/** Series-header overlay for drip parts (one fetch per `drip_id`). */
+export interface DripSeriesMeta {
+  title?: string
+  dripTotal?: number
+  gateToken?: string
+  /** Haven-AOL variant or EIP id — resolved to the variant. */
+  gateChain?: string | number
+}
 
 /**
- * Parse V4 drip fields from merged attribute/payload data.
+ * Parse V4 drip fields from part attributes + series overlay.
  *
- * Attributes are the filterable source of truth (`gate_type`,
- * `market_cap_target_usd`, `drip_index`, …); the payload carries the same
- * fields under camelCase names. Either surface is accepted — attributes win
- * when both agree to be present. `gate_type` is numeric only: 4 = per-marketcap.
+ * Parts carry per-stage facts (`drip_id`, `drip_idx`, `mcap_usd`,
+ * `series_ref`); shared facts (title, total, token, chain) come from the
+ * series header. `gate_type` is numeric only: 4 = per-marketcap.
  */
 export function parseDripInfo(
   data: Record<string, unknown>,
-  payloadData: Record<string, unknown>
+  payloadData: Record<string, unknown>,
+  series?: DripSeriesMeta
 ): DripInfo | undefined {
-  const gateType = Number(data['gate_type'] ?? payloadData['gateType'] ?? payloadData['gate_type'] ?? NaN)
+  void payloadData
+  const gateType = Number(data['gate_type'])
   if (gateType !== 4) return undefined
 
-  const rawTarget = data['market_cap_target_usd'] ?? payloadData['marketCapTargetUsd']
-  const target = Number(rawTarget)
-  const dripIndex = Number(data['drip_index'] ?? payloadData['dripIndex'] ?? 0)
-  const dripTotal = Number(data['drip_total'] ?? payloadData['dripTotal'] ?? 1) || 1
-  const dripId = String(
-    data['drip_id'] ?? payloadData['dripId'] ?? ''
-  )
-  const oracleAddress =
-    (data['oracle_address'] as string | undefined) ??
-    (payloadData['oracleAddress'] as string | undefined)
+  const target = Number(data['mcap_usd'])
+  const dripIndex = Number(data['drip_idx'] ?? 0)
+  const dripId = String(data['drip_id'] ?? '')
+  const seriesRef = String(data['series_ref'] ?? '')
 
   if (!Number.isFinite(target) || target <= 0 || !dripId) return undefined
 
-  const gateToken = String(
-    data['gate_token'] ?? payloadData['tokenAddress'] ?? ''
-  )
+  const dripTotal =
+    Number(series?.dripTotal) ||
+    1
+
+  const gateToken = String(series?.gateToken ?? '')
+  const variant = toChainVariant(series?.gateChain)
 
   return {
     gateType: 4,
     marketCapTargetUsd: target,
     dripIndex: Number.isFinite(dripIndex) ? dripIndex : 0,
-    dripTotal,
+    dripTotal: Number.isFinite(dripTotal) && dripTotal > 0 ? dripTotal : 1,
     dripId,
     gateToken,
-    gateChain:
-      (data['gate_chain'] as string | undefined) ??
-      (payloadData['chain'] as string | undefined),
-    oracleAddress: oracleAddress || undefined,
+    gateChain: variant,
+    seriesRef: seriesRef || undefined,
   }
 }
 
@@ -77,11 +88,12 @@ export function parseArkivEntityToVideo(entity: ArkivEntity): Video {
   // Arkiv → Video parsing. The v1-strict `parseGateMetadata` used previously
   // returned `null` for every v3 record, silently dropping `encryptionMetadata`
   // and preventing downstream decrypt from ever seeing v3 gates.
+  // 2.0: the content gate lives under `gate` (was `encryption_metadata`).
   const encryptionMeta =
-    parseAnyGateMetadata(get('encryption_metadata')) ?? undefined
+    parseAnyGateMetadata(get('gate')) ?? undefined
 
 
-  const rawSegment = (get('segment_metadata') as Record<string, unknown>) || null
+  const rawSegment = (get('seg') as Record<string, unknown>) || null
   const segmentMetadata = rawSegment
     ? {
         startTimestamp: new Date(
@@ -91,65 +103,72 @@ export function parseArkivEntityToVideo(entity: ArkivEntity): Video {
           ? new Date(rawSegment.end_timestamp as string)
           : undefined,
         segmentIndex: (rawSegment.segment_index as number) ?? 0,
-        totalSegments: (rawSegment.total_segments as number) ?? 0,
+        totalSegments: 0,
         mintId: (rawSegment.mint_id as string) ?? '',
         recordingSessionId: rawSegment.recording_session_id as string | undefined,
       }
     : undefined
 
-  const vlmJsonCid = (get('vlm_json_cid') as string) || undefined
+  const vlmJsonCid = (get('vlm') as string) || undefined
   const createdAtBlock = getArkivEntityCreatedAtBlock(entity)
   const drip = parseDripInfo(data, payloadData)
+
+  const codecs = get('codecs')
+  const codecNames = Array.isArray(codecs)
+    ? codecs.filter((c): c is string => typeof c === 'string')
+    : []
 
   return {
     id: entity.key,
     owner: (entity.owner || '').toLowerCase(),
 
     title: (data.title as string) || 'Untitled',
-    description: (data.description as string) || '',
-    duration: (data.duration as number) || 0,
+    description: '',
+    duration: (data.dur_s as number) || 0,
 
-    filecoinCid: (get('filecoin_root_cid') as string) || '',
-    pieceCid: (get('piece_cid') as string) || undefined,
-    encryptedCid: (get('encrypted_cid') as string) || undefined,
+    filecoinCid: (get('fcid') as string) || '',
+    pieceCid: (get('piece') as string) || undefined,
 
-    isEncrypted: Boolean(get('is_encrypted')),
+    // Gate presence decides encryption — 2.0 carries no is_encrypted flag.
+    isEncrypted: encryptionMeta !== undefined,
     encryptionMetadata: encryptionMeta,
     drip,
 
     cidEncryptionMetadata:
-      parseAnyGateMetadata(get('cid_encryption_metadata')) ?? undefined,
+      parseAnyGateMetadata(get('cid_gate')) ?? undefined,
 
 
-    contentMimeType: (get('content_mime_type') as string) || undefined,
-    originalHash: (get('original_hash') as string) || undefined,
+    contentMimeType: enumToMime(get('mime')),
+    originalHash: (get('pt_hash') as string) || undefined,
 
-    hasAiData: Boolean(get('has_ai_data') || vlmJsonCid),
+    hasAiData: Boolean(vlmJsonCid),
     vlmJsonCid,
 
-    mintId: (get('mint_id') as string) || undefined,
+    mintId: (rawSegment?.mint_id as string) || undefined,
 
-    sourceUri: (get('source_uri') as string) || undefined,
-    creatorHandle: (get('creator_handle') as string) || undefined,
+    sourceUri: (get('src') as string) || undefined,
+    creatorHandle: (get('creator') as string) || undefined,
 
     createdAtBlock,
     createdAt: parseVideoCreatedAt(data, createdAtBlock),
-    updatedAt: (get('updated_at') as string)
-      ? new Date(get('updated_at') as string)
-      : undefined,
+    updatedAt: undefined,
 
-    codecVariants: (get('codec_variants') as Video['codecVariants']) || undefined,
+    codecVariants: codecNames.length > 0
+      ? codecNames.map((codec) => ({
+          codec: codec as VideoCodec,
+          cid: '',
+          qualityScore: 0,
+        }))
+      : undefined,
 
     segmentMetadata,
 
     phash: (get('phash') as string) || undefined,
-    analysisModel: (get('analysis_model') as string) || undefined,
-    cidHash: (get('cid_hash') as string) || undefined,
+    analysisModel: (get('vlm_model') as string) || undefined,
+    cidHash: (get('sha256_ct') as string) || undefined,
 
     arkivStatus: 'active',
 
-    expiresAtBlock: (get('expires_at_block') as number)
-      ? Number(get('expires_at_block'))
-      : undefined,
+    expiresAtBlock: undefined,
   }
 }

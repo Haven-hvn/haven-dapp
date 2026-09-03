@@ -2,7 +2,7 @@
  * Content Retrieval Service
  *
  * Fetches encrypted/plain bytes from Filecoin Onchain Cloud via Synapse using the
- * Filecoin Pin piece CID from Arkiv (`piece_cid`).
+ * Filecoin Pin piece CID from Arkiv (payload `piece`).
  *
  * @module services/ipfsService
  */
@@ -107,7 +107,7 @@ function isAbortError(error: unknown): boolean {
 // ============================================================================
 
 /**
- * Fetch bytes for a video using its Arkiv `piece_cid` (Filecoin Pin + Synapse).
+ * Fetch bytes for a video using its Arkiv `piece` locator (Filecoin Pin + Synapse).
  */
 export async function fetchPinnedContent(
   video: Video,

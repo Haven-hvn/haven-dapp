@@ -25,13 +25,13 @@ describe('requirePieceCid', () => {
     expect(requirePieceCid(video)).toBe(PIECE)
   })
 
-  it('throws when piece_cid is missing', () => {
+  it('throws when piece is missing', () => {
     const video = createMockVideo({ pieceCid: undefined })
-    expect(() => requirePieceCid(video)).toThrow(/Missing piece_cid/)
+    expect(() => requirePieceCid(video)).toThrow(/Missing piece locator/)
   })
 
-  it('throws when piece_cid is not a Filecoin piece CID', () => {
+  it('throws when piece is not a Filecoin piece CID', () => {
     const video = createMockVideo({ pieceCid: ROOT })
-    expect(() => requirePieceCid(video)).toThrow(/Invalid piece_cid/)
+    expect(() => requirePieceCid(video)).toThrow(/Invalid piece locator/)
   })
 })

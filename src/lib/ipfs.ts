@@ -1,7 +1,7 @@
 /**
  * CID normalization and retrieval error types.
  *
- * Content bytes are fetched via Synapse (`piece_cid`), not HTTP IPFS gateways.
+ * Content bytes are fetched via Synapse (payload `piece` / `fcid`), not HTTP IPFS gateways.
  *
  * @module lib/ipfs
  */

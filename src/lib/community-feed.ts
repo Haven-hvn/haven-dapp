@@ -10,6 +10,8 @@
 import { fetchAttestationPublicKey } from 'haven-aol'
 import { getOrCreateAgent, getHavenAolConfig } from './haven-aol/haven-aol-client'
 import { parseEntityPayload } from './arkiv'
+import { parseAnyGateMetadata } from './haven-aol/haven-aol-metadata'
+import { toChainId, toChainVariant } from './gate-chains'
 import {
   verifyAttestation,
   verifyMerkleAttestation,
@@ -58,7 +60,7 @@ export function clearAttestPublicKeyCache(): void {
 
 /**
  * Discover which token communities the user belongs to.
- * Queries user's own entities for unique gate_token values.
+ * Queries user's own full records for unique gate_token values.
  */
 export async function discoverUserCommunities(
   client: PublicArkivClient<Transport, Chain | undefined, undefined>,
@@ -66,7 +68,7 @@ export async function discoverUserCommunities(
 ): Promise<TokenGate[]> {
   const result = await client
     .buildQuery()
-    .where([eq('project', 'haven'), eq('type', 'video')])
+    .where([eq('grp', 'haven.video.full')])
     .ownedBy(walletAddress.toLowerCase() as `0x${string}`)
     .withAttributes(true)
     .limit(200)
@@ -79,8 +81,9 @@ export async function discoverUserCommunities(
     if (!attrs || attrs.length === 0) continue
 
     const gateToken = attrs.find((a) => a.key === 'gate_token')?.value as string | undefined
-    const gateChain = attrs.find((a) => a.key === 'gate_chain')?.value as string | undefined
+    const gateChainRaw = attrs.find((a) => a.key === 'gate_chain')?.value as string | number | undefined
     const gateThreshold = attrs.find((a) => a.key === 'gate_threshold')?.value as number | undefined
+    const gateChain = toChainVariant(gateChainRaw)
 
     if (gateToken && gateChain) {
       const key = `${gateChain}:${gateToken}`
@@ -110,13 +113,12 @@ export async function fetchCommunityFeedForToken(
   gate: TokenGate,
   limit: number = 20
 ): Promise<CommunityVideo[]> {
+  const chainId = toChainId(gate.chain)
+  const where = [eq('grp', 'haven.video.full'), eq('gate_token', gate.tokenAddress)]
+  if (chainId !== undefined) where.push(eq('gate_chain', chainId))
   const result = await client
     .buildQuery()
-    .where([
-      eq('project', 'haven'),
-      eq('type', 'video'),
-      eq('gate_token', gate.tokenAddress),
-    ])
+    .where(where)
     .orderBy('$createdAtBlock', 'number', 'desc')
     .withPayload(true)
     .withAttributes(true)
@@ -134,7 +136,7 @@ export async function fetchCommunityFeedForToken(
     }
 
     const payload = parseEntityPayload<Record<string, unknown>>(payloadStr) || {}
-    const attestation = (payload.attestation as Attestation | undefined) || null
+    const attestation = (payload.attn as Attestation | undefined) || null
 
     const attrs = entity.attributes || []
     const getAttr = (key: string): string | number | undefined =>
@@ -143,9 +145,10 @@ export async function fetchCommunityFeedForToken(
     // Surface the entity's own bound fields so verifyFeed can cross-check
     // the attestation against them. The query-time `gate` is what the caller
     // *asked* for; the entity's attributes are what it actually claims.
-    const entityCidHash = (getAttr('cid_hash') as string) || null
+    const entitySha256Ct = (getAttr('sha256_ct') as string) || null
     const entityGateThreshold = getAttr('gate_threshold') as number | undefined
-    const entityGateChain = getAttr('gate_chain') as string | undefined
+    const entityGateChain = toChainVariant(getAttr('gate_chain')) ?? gate.chain
+    const contentGate = parseAnyGateMetadata(payload.gate)
 
     return {
       id: entity.key,
@@ -153,11 +156,12 @@ export async function fetchCommunityFeedForToken(
       owner: (entity.owner || '').toLowerCase(),
       creatorAddress: (entity.creator || entity.owner || '').toLowerCase(),
       gateToken: gate.tokenAddress,
-      gateChain: entityGateChain ?? gate.chain,
+      gateChain: entityGateChain,
       gateThreshold: entityGateThreshold ?? gate.threshold,
       createdAtBlock: entity.createdAtBlock ? Number(entity.createdAtBlock) : 0,
-      isEncrypted: getAttr('is_encrypted') === 1,
-      cidHash: entityCidHash,
+      // Gate presence decides encryption — 2.0 carries no is_encrypted flag.
+      isEncrypted: contentGate !== null,
+      cidHash: entitySha256Ct,
       attestation,
       verified: false, // Set in verification step
     }
@@ -210,15 +214,15 @@ export async function verifyFeed(
       : verifyAttestation(video.attestation, canisterPubKey)
 
     // 2. Verify attestation matches this entity (anti-replay).
-    //    cid_hash binds the attestation to specific content — without it, an
+    //    sha256_ct binds the attestation to specific content — without it, an
     //    attacker can copy any valid attestation onto a different entity.
     const entityMatch = attestationMatchesEntity(video.attestation, {
       creator: video.creatorAddress,
       attributes: {
         gate_token: video.gateToken,
-        gate_chain: video.gateChain,
+        gate_chain: toChainId(video.gateChain),
         gate_threshold: video.gateThreshold,
-        cid_hash: video.cidHash ?? undefined,
+        sha256_ct: video.cidHash ?? undefined,
       },
     })
 

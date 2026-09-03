@@ -145,10 +145,13 @@ export function isArkivEntity(obj: unknown): obj is ArkivEntity {
  */
 export function isArkivPayload(obj: unknown): obj is ArkivPayload {
   if (typeof obj !== 'object' || obj === null) return false
-  
+
   const p = obj as Record<string, unknown>
-  
-  return typeof p.is_encrypted === 'boolean'
+
+  // 2.0 payloads carry no flags — gate presence decides encryption.
+  // Accept any object (key inventory is validated per-surface, not here).
+  void p
+  return true
 }
 
 /**
@@ -164,16 +167,21 @@ export function isArkivAttributes(obj: unknown): obj is ArkivAttributes {
   
   // Attributes are all optional, so just check types if present
   if (a.title !== undefined && typeof a.title !== 'string') return false
-  if (a.duration !== undefined && typeof a.duration !== 'number') return false
-  if (a.is_encrypted !== undefined && typeof a.is_encrypted !== 'number') return false
-  if (a.creator_handle !== undefined && typeof a.creator_handle !== 'string') return false
-  if (a.mint_id !== undefined && typeof a.mint_id !== 'string') return false
-  if (a.phash !== undefined && typeof a.phash !== 'string') return false
-  if (a.analysis_model !== undefined && typeof a.analysis_model !== 'string') return false
-  if (a.source_uri !== undefined && typeof a.source_uri !== 'string') return false
-  if (a.created_at !== undefined && typeof a.created_at !== 'string') return false
-  if (a.updated_at !== undefined && typeof a.updated_at !== 'string') return false
-  
+  if (a.grp !== undefined && typeof a.grp !== 'string') return false
+  if (a.dur_s !== undefined && typeof a.dur_s !== 'number') return false
+  if (a.mime !== undefined && typeof a.mime !== 'number') return false
+  if (a.gate_token !== undefined && typeof a.gate_token !== 'string') return false
+  if (a.gate_chain !== undefined && typeof a.gate_chain !== 'number') return false
+  if (a.gate_threshold !== undefined && typeof a.gate_threshold !== 'number') return false
+  if (a.gate_type !== undefined && typeof a.gate_type !== 'number') return false
+  if (a.gate_epoch !== undefined && typeof a.gate_epoch !== 'number') return false
+  if (a.sha256_ct !== undefined && typeof a.sha256_ct !== 'string') return false
+  if (a.mcap_usd !== undefined && typeof a.mcap_usd !== 'number') return false
+  if (a.drip_idx !== undefined && typeof a.drip_idx !== 'number') return false
+  if (a.drip_id !== undefined && typeof a.drip_id !== 'string') return false
+  if (a.drip_total !== undefined && typeof a.drip_total !== 'number') return false
+  if (a.series_ref !== undefined && typeof a.series_ref !== 'string') return false
+
   return true
 }
 
@@ -290,7 +298,7 @@ export function isLibraryState(obj: unknown): obj is LibraryState {
  * ```typescript
  * const payload = parseArkivPayload(entity.payload)
  * if (payload) {
- *   console.log(payload.filecoin_root_cid)
+ *   console.log(payload.fcid)
  * }
  * ```
  */

@@ -10,8 +10,6 @@
  * @module types/arkiv
  */
 
-import type { GateMetadataJson } from '@/lib/haven-aol'
-
 // ============================================================================
 // Raw Arkiv Entity Types
 // ============================================================================
@@ -28,10 +26,9 @@ import type { GateMetadataJson } from '@/lib/haven-aol'
  * const entity: ArkivEntity = {
  *   key: '0xabc123...',
  *   owner: '0xdef456...',
- *   attributes: { title: 'My Video', duration: 3600 },
+ *   attributes: { grp: 'haven.video.full', title: 'My Video', dur_s: 3600 },
  *   payload: 'base64encodedjson...',
  *   contentType: 'application/json',
- *   createdAt: '2024-01-15T10:30:00Z',
  * }
  * ```
  */
@@ -111,80 +108,43 @@ export interface ArkivSdkEntity {
  * Note: Attribute keys use snake_case to match the Arkiv SDK convention.
  */
 export interface ArkivAttributes {
+  /** Group taxonomy (`haven.video.full`, `haven.video.drip.*`, …) */
+  grp?: string
   // Basic metadata
-  /** Video title */
+  /** Video title (≤128 B) */
   title?: string
-  
-  /** Duration in seconds */
-  duration?: number
-  
-  // Creator info
-  /** Content creator handle/username */
-  creator_handle?: string
-  
-  /** Mint ID if video has been minted */
-  mint_id?: string
-  
-  // Encryption indicators
-  /** 
-   * Whether the video is encrypted.
-   * 1 = encrypted, undefined/0 = not encrypted
-   */
-  is_encrypted?: number
-  
-  /** 
-   * Encrypted CID (public for privacy-preserving lookups).
-   * The actual CID is encrypted; this allows checking existence
-   * without revealing the CID to everyone.
-   */
-  encrypted_cid?: string
-  
-  // Content identification
-  /** Perceptual hash for content deduplication */
-  phash?: string
-  
-  /** VLM model used for AI analysis */
-  analysis_model?: string
-  
-  /** Original source URL */
-  source_uri?: string
-  
-  // Timestamps (ISO 8601)
-  /** When the content was created */
-  created_at?: string
-  
-  /** When the content was last updated */
-  updated_at?: string
-  
-  // Additional searchable metadata
-  /** Tags for categorization */
-  tags?: string
-  
-  /** Content category */
-  category?: string
-  
-  /** Language code (e.g., 'en', 'es') */
-  language?: string
 
-  // Gate markers (public, filterable — see MEDIA_CONTENT_SPEC.md)
-  /** Gate ERC-20 contract address */
+  /** Duration in whole seconds (`dur_s`; 0/omit = unknown) */
+  dur_s?: number
+
+  /** MIME enum int (shared table in `lib/mime-enum`) */
+  mime?: number
+
+  // Gate corpus (public, filterable — see MEDIA_CONTENT_SPEC.md)
+  /** Gate ERC-20 contract address (lowercase hex) */
   gate_token?: string
-  /** Haven canonical chain name (EthMainnet, BaseMainnet, …) */
-  gate_chain?: string
+  /** EIP-155 chain id (see `lib/gate-chains`) */
+  gate_chain?: number
   /** Token balance threshold */
   gate_threshold?: number
-  /** Gate type: 1=per-file, 3=per-epoch, 4=per-marketcap (ATTR_UINT) */
+  /** Gate type: 1=per-file, 3=per-epoch, 4=per-marketcap */
   gate_type?: number
-  /** Corpus epoch for v3/v4 gates */
+  /** Corpus epoch for v3 gates */
   gate_epoch?: number
-  /** Whole-USD unlock target for v4 drip chunks */
-  market_cap_target_usd?: number
-  /** V4 drip position / count / grouping id */
-  drip_index?: number
-  drip_total?: number
+  /** Locator hash (hex digest of the root locator string) */
+  sha256_ct?: string
+
+  // V4 drip coordinates (parts carry stage facts; series carries the rest)
+  /** Whole-USD unlock target for this stage */
+  mcap_usd?: number
+  /** 0-based stage index */
+  drip_idx?: number
+  /** Stable run id (thread key) */
   drip_id?: string
-  /** Chainlink oracle proxy for v4 */
-  oracle_address?: string
+  /** Total stages (series header) */
+  drip_total?: number
+  /** Entity key of the series header (parts) */
+  series_ref?: string
 }
 
 /**
@@ -212,76 +172,61 @@ export interface ArkivSdkAttribute {
  * Note: Field names use snake_case to match the storage format.
  */
 export interface ArkivPayload {
-  // CID storage
-  /** 
-   * Root Filecoin CID for non-encrypted videos.
-   * This is the direct CID that can be used to fetch content.
+  // Locators (one per record class — never both)
+  /**
+   * Filecoin CID for clear records.
    */
-  filecoin_root_cid?: string
-  
-  /** 
-   * Encrypted CID (duplicate for convenience).
-   * Same as encrypted_cid in attributes but in decrypted form.
-   */
-  encrypted_cid?: string
-  
-  /** 
-   * CID hash for deduplication.
-   * Used to check if identical content already exists.
-   */
-  cid_hash?: string
-  
-  // Encryption metadata
-  /** 
-   * CID encryption metadata.
-   * Used when the CID itself is encrypted for privacy.
-   */
-  cid_encryption_metadata?: GateMetadataJson
+  fcid?: string
 
   /**
-   * Content encryption metadata (Haven-AOL gate v1 from haven-cli).
+   * Filecoin piece CID for gated records (Synapse download).
+   */
+  piece?: string
+
+  // Content gates (Haven-AOL JSON, frozen spellings inside the blob)
+  /**
+   * CID-layer gate (only when distinct from the content gate).
+   */
+  cid_gate?: string | Record<string, unknown>
+
+  /**
+   * Content gate (v1/v3 full records, v4 drip parts).
    * Stored as JSON string or object in the entity payload.
    */
-  encryption_metadata?: string | Record<string, unknown>
+  gate?: string | Record<string, unknown>
 
   // AI analysis
   /** CID of VLM analysis JSON on Filecoin */
-  vlm_json_cid?: string
-  
-  // Essential flags
-  /** Whether the content is encrypted */
-  is_encrypted: boolean
-  
-  // Segment metadata
-  /** Metadata for multi-segment recordings */
-  segment_metadata?: ArkivSegmentMetadata
-  
-  // Codec variants for adaptive playback
-  /** Available codec variants for this video */
-  codec_variants?: ArkivCodecVariant[]
-  
-  // Source information
+  vlm?: string
+
+  /** VLM model used for analysis */
+  vlm_model?: string
+
+  // Provenance (payload-only — off the indexed surface)
   /** Original source URL */
-  source_uri?: string
-  
+  src?: string
+
   /** Creator handle/username */
-  creator_handle?: string
-  
-  // Video metadata
-  /** Video description (can be longer than attribute) */
-  description?: string
-  
-  /** Thumbnail CID or URL */
-  thumbnail_cid?: string
-  
-  /** Video duration in seconds */
-  duration?: number
+  creator?: string
 
-  /** Gate-type mirror for v3/v4 payloads (3 or 4; v1 omits) */
-  gate_type?: number
+  /** Perceptual hash for content identification */
+  phash?: string
 
-  /** Corpus epoch for v3 payloads */
-  epoch?: number
+  /** Plaintext sha256 (pre-encryption) */
+  pt_hash?: string
+
+  /** Content size in bytes */
+  size?: number
+
+  /** Codec hints (e.g. `["h264"]`) */
+  codecs?: string[]
+
+  // Segments (for multi-segment recordings)
+  /** Segment block */
+  seg?: ArkivSegmentMetadata
+
+  // Attestation (canister-signed holding proof, single or Merkle-v2)
+  attn?: Record<string, unknown>
 }
 
 /**

@@ -59,7 +59,7 @@ function makeSignedAttestation(
 
   const base: SingleAttestation = {
     evmAddress: '0xCREATOR0000000000000000000000000000ABCD',
-    chain: 'base',
+    chain: 'BaseMainnet',
     tokenAddress: '0xTOKEN00000000000000000000000000000ABCDE',
     threshold: 100,
     balanceAtCheck: 500,
@@ -364,7 +364,7 @@ describe('attestationMatchesEntity', () => {
   function baseAttestation(): SingleAttestation {
     return {
       evmAddress: creator,
-      chain: 'base',
+      chain: 'BaseMainnet',
       tokenAddress: '0xTOKEN00000000000000000000000000000ABCDE',
       threshold: 100,
       balanceAtCheck: 500,
@@ -379,15 +379,15 @@ describe('attestationMatchesEntity', () => {
       creator,
       attributes: {
         gate_token: '0xTOKEN00000000000000000000000000000ABCDE',
-        gate_chain: 'base',
+        gate_chain: 8453,
         gate_threshold: 100,
-        cid_hash: cidHashA,
+        sha256_ct: cidHashA,
         ...over,
       } as {
         gate_token?: string
-        gate_chain?: string
+        gate_chain?: number
         gate_threshold?: number
-        cid_hash?: string
+        sha256_ct?: string
       },
     }
   }
@@ -397,21 +397,21 @@ describe('attestationMatchesEntity', () => {
   })
 
   // --- CROSS-POST REPLAY (the headline vulnerability) ---
-  it('REJECTS replay: attestation from entity A attached to entity B (different cid_hash)', () => {
+  it('REJECTS replay: attestation from entity A attached to entity B (different sha256_ct)', () => {
     const att = baseAttestation() // bound to cidHashA
-    const entity = entityAttrs({ cid_hash: cidHashB })
+    const entity = entityAttrs({ sha256_ct: cidHashB })
     expect(attestationMatchesEntity(att, entity)).toBe(false)
   })
 
-  it('REJECTS when entity has no cid_hash at all (fails closed)', () => {
+  it('REJECTS when entity has no sha256_ct at all (fails closed)', () => {
     const att = baseAttestation()
     const entity = {
       creator,
       attributes: {
         gate_token: '0xTOKEN00000000000000000000000000000ABCDE',
-        gate_chain: 'base',
+        gate_chain: 8453,
         gate_threshold: 100,
-        // cid_hash intentionally omitted
+        // sha256_ct intentionally omitted
       },
     }
     expect(attestationMatchesEntity(att, entity)).toBe(false)
@@ -444,7 +444,7 @@ describe('attestationMatchesEntity', () => {
     expect(
       attestationMatchesEntity(
         baseAttestation(),
-        entityAttrs({ gate_chain: 'ethereum' })
+        entityAttrs({ gate_chain: 1 })
       )
     ).toBe(false)
   })
@@ -459,7 +459,7 @@ describe('attestationMatchesEntity', () => {
     expect(
       attestationMatchesEntity(att, {
         creator,
-        attributes: { cid_hash: cidHashA },
+        attributes: { sha256_ct: cidHashA },
       })
     ).toBe(false)
   })
@@ -476,7 +476,7 @@ describe('attestationMatchesEntity', () => {
     function baseMerkle(): MerkleAttestation {
       return {
         evmAddress: creator,
-        chain: 'base',
+        chain: 'BaseMainnet',
         tokenAddress: '0xTOKEN00000000000000000000000000000ABCDE',
         threshold: 100,
         balanceAtCheck: 500,
@@ -495,7 +495,7 @@ describe('attestationMatchesEntity', () => {
 
     it('REJECTS replay: MerkleAttestation bound to cidHashA on entity with cidHashB', () => {
       expect(
-        attestationMatchesEntity(baseMerkle(), entityAttrs({ cid_hash: cidHashB }))
+        attestationMatchesEntity(baseMerkle(), entityAttrs({ sha256_ct: cidHashB }))
       ).toBe(false)
     })
 

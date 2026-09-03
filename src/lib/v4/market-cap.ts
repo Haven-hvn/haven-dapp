@@ -47,7 +47,7 @@ export interface MarketCapResult {
 // Bond contract lookup
 // ============================================================================
 
-/** Mint Club network key -> canonical bond contract (used as oracle_address). */
+/** Mint Club network key -> canonical bond contract (inside the v4 gate JSON). */
 const BOND_ADDRESS_HINTS: Record<string, string> = {
   base: '0xc5a076cad94176c2996B32d8466Be1cE757FAa27',
   ethereum: '0xc5a076cad94176c2996B32d8466Be1cE757FAa27',

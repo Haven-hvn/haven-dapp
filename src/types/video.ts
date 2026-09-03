@@ -10,30 +10,31 @@
 import type { GateMetadataJson, GateMetadataV3Json, GateMetadataV4Json } from '@/lib/haven-aol'
 
 /**
- * V4 drip unlock metadata — parsed from Arkiv attributes (filterable) and
- * payload extras (additive v4 fields on the v1 gate record).
+ * V4 drip unlock metadata — parsed from part attributes (`drip_id`,
+ * `drip_idx`, `mcap_usd`, `series_ref`) overlaid with the series header
+ * (title, total, token, chain).
  */
 export interface DripInfo {
   /** Numeric gate-type marker from `gate_type` (4 = per-marketcap). */
   gateType: 4
-  /** Market-cap unlock target in whole USD for this chunk. */
+  /** Market-cap unlock target in whole USD for this chunk (`mcap_usd`). */
   marketCapTargetUsd: number
-  /** 0-based position of this chunk within the drip. */
+  /** 0-based position of this chunk within the drip (`drip_idx`). */
   dripIndex: number
-  /** Total chunks in the drip. */
+  /** Total chunks in the drip (from the series header). */
   dripTotal: number
-  /** Stable id grouping all chunks of one publish. */
+  /** Stable id grouping all chunks of one publish (`drip_id`). */
   dripId: string
-  /** Gate token address whose market cap gates this chunk. */
+  /** Gate token address whose market cap gates this chunk (from series). */
   gateToken: string
-  /** Chain the gate token lives on (Haven-AOL chain variant name). */
+  /** Chain the gate token lives on (Haven-AOL variant, from series). */
   gateChain?: string
-  /** Bond/oracle contract address stored by the publisher (future use). */
-  oracleAddress?: string
+  /** Entity key of the series header (`series_ref`). */
+  seriesRef?: string
 }
 
 /**
- * Haven-AOL gate metadata (Arkiv `encryption_metadata` / `cid_encryption_metadata`).
+ * Haven-AOL gate metadata (Arkiv payload `gate` / `cid_gate`).
  *
  * A gate record is one of:
  *   • v1 (`{ version: 1, cid, chain, tokenAddress, threshold, encryptedAesKey }`) — the
@@ -111,13 +112,13 @@ export interface Video {
   /** Root CID for non-encrypted videos */
   filecoinCid?: string
 
-  /** Filecoin piece CID for Synapse download (payload `piece_cid`) */
+  /** Filecoin piece CID for Synapse download (payload `piece`) */
   pieceCid?: string
-  
-  /** Encrypted CID for encrypted videos */
+
+  /** Encrypted locator (2.0: gated records expose `piece`, never indexed) */
   encryptedCid?: string
-  
-  /** CID hash for deduplication */
+
+  /** Locator hash for dedup/restore (attribute `sha256_ct`) */
   cidHash?: string
   
   // Encryption
@@ -136,20 +137,20 @@ export interface Video {
    */
   drip?: DripInfo
 
-  /** Original MIME type (payload content_mime_type) */
+  /** Original MIME type (attribute `mime` enum, resolved to string) */
   contentMimeType?: string
 
-  /** SHA-256 of plaintext before encryption (payload original_hash) */
+  /** SHA-256 of plaintext before encryption (payload `pt_hash`) */
   originalHash?: string
   
   // AI analysis
   /** Whether AI analysis data is available */
   hasAiData: boolean
   
-  /** CID of VLM analysis JSON on Filecoin */
+  /** CID of VLM analysis JSON on Filecoin (payload `vlm`) */
   vlmJsonCid?: string
-  
-  /** VLM model used for analysis */
+
+  /** VLM model used for analysis (payload `vlm_model`) */
   analysisModel?: string
   
   /** Perceptual hash for content identification */

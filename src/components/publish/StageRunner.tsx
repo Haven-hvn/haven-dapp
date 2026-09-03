@@ -30,7 +30,7 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react'
-import { useAccount, useWalletClient } from 'wagmi'
+import { useWalletClient } from 'wagmi'
 
 import { formatUsdCompact, stageLabel, type DripChunkPlan } from '@/lib/v4/drip-plan'
 import {
@@ -99,7 +99,6 @@ export function StageRunner({
   initialStageFile,
   onComplete,
 }: StageRunnerProps) {
-  const { address } = useAccount()
   const { data: walletClient } = useWalletClient()
 
   const [verify, setVerify] = useState<VerifyState>('idle')
@@ -203,7 +202,6 @@ export function StageRunner({
         gate: gate as DripGateConfig,
         mimeType,
         wallet: walletClient as unknown as Parameters<typeof publishDripStage>[0]['wallet'],
-        publisherAddress: address,
         signal: controller.signal,
         onChunkStage: (p) => setProgress(p),
       })
@@ -219,7 +217,7 @@ export function StageRunner({
       abortRef.current = null
       setPublishing(false)
     }
-  }, [walletClient, publishing, verify, plan, gate, mimeType, address, onComplete, stageSource])
+  }, [walletClient, publishing, verify, plan, gate, mimeType, onComplete, stageSource])
 
   const verified = verify === 'ok'
   const ready = verified && !publishing && !stageDone && walletClient != null

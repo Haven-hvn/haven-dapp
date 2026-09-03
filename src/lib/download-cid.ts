@@ -2,8 +2,8 @@
  * Filecoin Pin piece CID helpers for Synapse download.
  *
  * Uploads via filecoin-pin produce a **piece CID** (`bafkzcib…`) stored on Arkiv as
- * `piece_cid`. Haven retrieves encrypted CAR bytes only through
- * `synapse.storage.download({ pieceCid })`.
+ * payload `piece` (gated records) / `fcid` (clear records). Haven retrieves
+ * encrypted CAR bytes only through `synapse.storage.download({ pieceCid })`.
  *
  * @module lib/download-cid
  */
@@ -18,18 +18,18 @@ export function isFilecoinPieceCid(cid: string): boolean {
 }
 
 /**
- * Require a valid Filecoin piece CID on the video (Arkiv `piece_cid`).
+ * Require a valid Filecoin piece CID on the video (Arkiv payload `piece`).
  */
 export function requirePieceCid(video: Video): string {
   const raw = video.pieceCid?.trim()
   if (!raw) {
     throw new Error(
-      'Missing piece_cid on Arkiv. Re-upload with haven-cli so the entity stores the Filecoin Pin piece CID for Synapse download.'
+      'Missing piece locator on Arkiv. Re-upload with haven-cli so the entity stores the Filecoin Pin piece CID for Synapse download.'
     )
   }
   const cid = normalizeCid(raw)
   if (!isFilecoinPieceCid(cid)) {
-    throw new Error(`Invalid piece_cid on Arkiv (expected bafkzcib…): ${raw}`)
+    throw new Error(`Invalid piece locator on Arkiv (expected bafkzcib…): ${raw}`)
   }
   return cid
 }

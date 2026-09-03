@@ -27,24 +27,26 @@ function entityWith(
   } as unknown as ArkivEntity
 }
 
-const V4_ATTRS = {
-  project: 'haven',
-  type: 'video',
+const SERIES = {
   title: 'Drip film',
-  is_encrypted: 1,
+  dripTotal: 3,
+  gateToken: '0xaa000000000000000000000000000000000000001',
+  gateChain: 'BaseMainnet',
+}
+
+const V4_PART_ATTRS = {
+  grp: 'haven.video.drip.part',
   gate_type: 4,
-  market_cap_target_usd: 5_000_000,
-  drip_index: 2,
-  drip_total: 3,
+  mcap_usd: 5_000_000,
+  drip_idx: 2,
   drip_id: 'drip-abc',
-  oracle_address: '0xc5a076cad94176c2996B32d8466Be1cE757FAa27',
-  gate_token: '0xaa000000000000000000000000000000000000001',
-  gate_chain: 'BaseMainnet',
+  series_ref: '0xseries',
+  sha256_ct: 'ab'.repeat(32),
 }
 
 describe('parseDripInfo', () => {
-  it('parses a full v4 attribute set', () => {
-    const drip = parseDripInfo(V4_ATTRS, {})
+  it('parses part attrs overlaid with the series header', () => {
+    const drip = parseDripInfo(V4_PART_ATTRS, {}, SERIES)
     expect(drip).toMatchObject({
       gateType: 4,
       marketCapTargetUsd: 5_000_000,
@@ -53,42 +55,54 @@ describe('parseDripInfo', () => {
       dripId: 'drip-abc',
       gateToken: '0xaa000000000000000000000000000000000000001',
       gateChain: 'BaseMainnet',
+      seriesRef: '0xseries',
     })
   })
 
-  it('accepts camelCase payload extras as fallback', () => {
-    const drip = parseDripInfo(
-      {},
-      {
-        gateType: 4,
-        marketCapTargetUsd: '250000',
-        dripIndex: 0,
-        dripTotal: 2,
-        dripId: 'p-1',
-        tokenAddress: '0xbb2',
-        chain: 'EthMainnet',
-      }
-    )
-    expect(drip?.marketCapTargetUsd).toBe(250_000)
-    expect(drip?.gateToken).toBe('0xbb2')
+  it('resolves EIP chain ids from the series to variants', () => {
+    const drip = parseDripInfo(V4_PART_ATTRS, {}, { ...SERIES, gateChain: 8453 })
+    expect(drip?.gateChain).toBe('BaseMainnet')
+  })
+
+  it('defaults the series overlay when absent', () => {
+    const drip = parseDripInfo(V4_PART_ATTRS, {})
+    expect(drip?.dripTotal).toBe(1)
+    expect(drip?.gateToken).toBe('')
+    expect(drip?.gateChain).toBeUndefined()
   })
 
   it('returns undefined for non-v4 records (v1/v3 unaffected)', () => {
     expect(parseDripInfo({ gate_type: 3 }, {})).toBeUndefined()
+    expect(parseDripInfo({ gate_type: 1 }, {})).toBeUndefined()
     expect(parseDripInfo({}, {})).toBeUndefined()
   })
 
   it('returns undefined without a usable target or drip id', () => {
-    expect(parseDripInfo({ ...V4_ATTRS, market_cap_target_usd: 0 }, {})).toBeUndefined()
-    expect(parseDripInfo({ ...V4_ATTRS, drip_id: '' }, {})).toBeUndefined()
+    expect(parseDripInfo({ ...V4_PART_ATTRS, mcap_usd: 0 }, {}, SERIES)).toBeUndefined()
+    expect(parseDripInfo({ ...V4_PART_ATTRS, drip_id: '' }, {}, SERIES)).toBeUndefined()
+  })
+
+  it('ignores legacy keys (no fallback reads)', () => {
+    expect(
+      parseDripInfo(
+        {
+          gate_type: 4,
+          market_cap_target_usd: 5_000_000,
+          drip_index: 2,
+          drip_id: 'drip-abc',
+        },
+        {}
+      )
+    ).toBeUndefined()
   })
 })
 
 describe('parseArkivEntityToVideo v4 integration', () => {
-  it('maps a v4 chunk entity to Video.drip', () => {
+  it('maps a v4 part entity to Video.drip', () => {
     const video = parseArkivEntityToVideo(
-      entityWith(V4_ATTRS, {
-        encryption_metadata: {
+      entityWith(V4_PART_ATTRS, {
+        piece: 'bafychunk',
+        gate: JSON.stringify({
           version: 4,
           cid: 'bafychunk',
           chain: 'BaseMainnet',
@@ -98,14 +112,14 @@ describe('parseArkivEntityToVideo v4 integration', () => {
           marketCapTarget: 5_000_000,
           oracleAddress: '0xc5a076cad94176c2996b32d8466be1ce757faa27',
           encryptedAesKey: 'AAA=',
-        },
-        dripId: 'drip-abc',
+        }),
       })
     )
 
     expect(video.isEncrypted).toBe(true)
     expect(video.drip?.dripIndex).toBe(2)
     expect(video.drip?.gateType).toBe(4)
+    expect(video.pieceCid).toBe('bafychunk')
     // Native v4 metadata parses through the dispatcher → decryptAnyContentKey
     // routes to the V4 canister path (market-cap gate server-side).
     expect(video.encryptionMetadata?.version).toBe(4)
@@ -114,9 +128,20 @@ describe('parseArkivEntityToVideo v4 integration', () => {
   it('leaves plain v3 entities drip-free', () => {
     const video = parseArkivEntityToVideo(
       entityWith(
-        { project: 'haven', type: 'video', is_encrypted: 1 },
         {
-          encryption_metadata: {
+          grp: 'haven.video.full',
+          title: 'v3 film',
+          gate_type: 3,
+          gate_token: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbc3',
+          gate_chain: 11155111,
+          gate_threshold: 2,
+          gate_epoch: 670,
+          sha256_ct: 'cd'.repeat(32),
+          mime: 1,
+          dur_s: 300,
+        },
+        {
+          gate: JSON.stringify({
             version: 3,
             cid: 'bafybeiv3corpus',
             chain: 'EthSepolia',
@@ -124,12 +149,15 @@ describe('parseArkivEntityToVideo v4 integration', () => {
             threshold: '2',
             epoch: 670,
             encryptedAesKey: 'AAA=',
-          },
+          }),
         }
       )
     )
     expect(video.drip).toBeUndefined()
     expect(video.encryptionMetadata?.version).toBe(3)
+    expect(video.isEncrypted).toBe(true)
+    expect(video.contentMimeType).toBe('video/mp4')
+    expect(video.duration).toBe(300)
   })
 })
 
