@@ -165,6 +165,26 @@ export interface ArkivAttributes {
   
   /** Language code (e.g., 'en', 'es') */
   language?: string
+
+  // Gate markers (public, filterable — see MEDIA_CONTENT_SPEC.md)
+  /** Gate ERC-20 contract address */
+  gate_token?: string
+  /** Haven canonical chain name (EthMainnet, BaseMainnet, …) */
+  gate_chain?: string
+  /** Token balance threshold */
+  gate_threshold?: number
+  /** Gate type: 1=per-file, 3=per-epoch, 4=per-marketcap (ATTR_UINT) */
+  gate_type?: number
+  /** Corpus epoch for v3/v4 gates */
+  gate_epoch?: number
+  /** Whole-USD unlock target for v4 drip chunks */
+  market_cap_target_usd?: number
+  /** V4 drip position / count / grouping id */
+  drip_index?: number
+  drip_total?: number
+  drip_id?: string
+  /** Chainlink oracle proxy for v4 */
+  oracle_address?: string
 }
 
 /**
@@ -256,6 +276,12 @@ export interface ArkivPayload {
   
   /** Video duration in seconds */
   duration?: number
+
+  /** Gate-type mirror for v3/v4 payloads (3 or 4; v1 omits) */
+  gate_type?: number
+
+  /** Corpus epoch for v3 payloads */
+  epoch?: number
 }
 
 /**

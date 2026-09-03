@@ -21,8 +21,8 @@ Without a canister change there is no on-chain market-cap check. Enforcement:
 Per-chunk key independence still holds because each chunk's IBE identity is
 `SHA256("accessol:" + chain + ":" + token + ":" + threshold + ":" + cid_i)` —
 the CID differs per chunk. If/when the canister grows `requestDecryptionKeyV4`,
-the stored records already carry every field needed
-(`market_cap_target_usd`, `oracle_address`, `gate_version="v4"`).
+   the stored records already carry every field needed
+(`market_cap_target_usd`, `oracle_address`, `gate_type=4`).
 
 ## Publisher pipeline (one drag-drop)
 
@@ -39,9 +39,9 @@ file ──split(n ranges)──▶ per chunk i:
   4. arkivWallet.createEntity({
        payload: JSON(v1 gate metadata ⊕ v4 fields),
        contentType: 'application/json',
-       attributes: { project:'haven', type:'video', title, is_encrypted:1,
-         piece_cid, cid_hash, gate_token, gate_chain, gate_threshold:i32,
-         gate_version:'v4', market_cap_target_usd: dec, drip_index:i32,
+        attributes: { project:'haven', type:'video', title, is_encrypted:1,
+          piece_cid, cid_hash, gate_token, gate_chain, gate_threshold:i32,
+          gate_type:4, market_cap_target_usd: dec, drip_index:i32,
          drip_total:i32, drip_id:str, oracle_address:str, content_mime_type },
        expires: ExpirationTime.fromDays(3650) })
 ```

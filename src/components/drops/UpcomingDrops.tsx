@@ -94,8 +94,8 @@ export function UpcomingDrops() {
     async function load() {
       try {
         const client = createArkivClient()
-        // Query v4 drip entities via Arkiv - filter gate_version = v4
-        const result: any = await (client as any).query('gate_version = "v4"', { resultsPerPage: 12, includeData: { payload: true, attributes: true, metadata: true } })
+        // Query v4 drip entities via Arkiv - filter gate_type = 4 (numeric)
+        const result: any = await (client as any).query('gate_type = 4', { resultsPerPage: 12, includeData: { payload: true, attributes: true, metadata: true } })
         const entities: any[] = result?.entities ?? []
         if (entities.length === 0) throw new Error('no drips')
         const items: DropItem[] = entities.map((e: any) => {
@@ -162,7 +162,7 @@ export function UpcomingDrops() {
           </a>
         ))}
       </div>
-      <p className="label text-fg-5 mt-3">Tokens are mint.club bonding-curve tokens launched via Haven drip (gate_version v4).</p>
+      <p className="label text-fg-5 mt-3">Tokens are mint.club bonding-curve tokens launched via Haven drip (gate_type 4).</p>
     </div>
   )
 }

@@ -2,7 +2,7 @@
  * V4 Arkiv entity builder tests — pure wire-shape pinning.
  *
  * Guarantees under test:
- *   1. Attributes carry the filterable v4 surface (`gate_version`,
+ *   1. Attributes carry the filterable v4 surface (`gate_type`,
  *      `market_cap_target_usd`, `drip_*`, `oracle_address`) alongside the
  *      standard haven video attrs the community feed already queries.
  *   2. Payload parses as v1 gate metadata via `parseAnyGateMetadata` (so
@@ -59,7 +59,7 @@ describe('buildDripEntityBody attributes', () => {
   })
 
   it('carries the filterable v4 surface', () => {
-    expect(findAttr(body.attributes, 'gate_version')).toBe('v4')
+    expect(findAttr(body.attributes, 'gate_type')).toBe(4)
     expect(findAttr(body.attributes, 'market_cap_target_usd')).toBe(5_000_000)
     expect(findAttr(body.attributes, 'drip_index')).toBe(1)
     expect(findAttr(body.attributes, 'drip_total')).toBe(3)

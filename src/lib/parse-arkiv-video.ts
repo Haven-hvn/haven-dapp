@@ -16,17 +16,17 @@ import {
 /**
  * Parse V4 drip fields from merged attribute/payload data.
  *
- * Attributes are the filterable source of truth (`gate_version`,
+ * Attributes are the filterable source of truth (`gate_type`,
  * `market_cap_target_usd`, `drip_index`, …); the payload carries the same
  * fields under camelCase names. Either surface is accepted — attributes win
- * when both agree to be present.
+ * when both agree to be present. `gate_type` is numeric only: 4 = per-marketcap.
  */
 export function parseDripInfo(
   data: Record<string, unknown>,
   payloadData: Record<string, unknown>
 ): DripInfo | undefined {
-  const gateVersion = data['gate_version'] ?? payloadData['gateVersion']
-  if (gateVersion !== 'v4') return undefined
+  const gateType = Number(data['gate_type'] ?? payloadData['gateType'] ?? payloadData['gate_type'] ?? NaN)
+  if (gateType !== 4) return undefined
 
   const rawTarget = data['market_cap_target_usd'] ?? payloadData['marketCapTargetUsd']
   const target = Number(rawTarget)
@@ -46,7 +46,7 @@ export function parseDripInfo(
   )
 
   return {
-    gateVersion: 'v4',
+    gateType: 4,
     marketCapTargetUsd: target,
     dripIndex: Number.isFinite(dripIndex) ? dripIndex : 0,
     dripTotal,

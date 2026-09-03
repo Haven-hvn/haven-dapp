@@ -32,7 +32,7 @@ const V4_ATTRS = {
   type: 'video',
   title: 'Drip film',
   is_encrypted: 1,
-  gate_version: 'v4',
+  gate_type: 4,
   market_cap_target_usd: 5_000_000,
   drip_index: 2,
   drip_total: 3,
@@ -46,7 +46,7 @@ describe('parseDripInfo', () => {
   it('parses a full v4 attribute set', () => {
     const drip = parseDripInfo(V4_ATTRS, {})
     expect(drip).toMatchObject({
-      gateVersion: 'v4',
+      gateType: 4,
       marketCapTargetUsd: 5_000_000,
       dripIndex: 2,
       dripTotal: 3,
@@ -60,7 +60,7 @@ describe('parseDripInfo', () => {
     const drip = parseDripInfo(
       {},
       {
-        gateVersion: 'v4',
+        gateType: 4,
         marketCapTargetUsd: '250000',
         dripIndex: 0,
         dripTotal: 2,
@@ -74,7 +74,7 @@ describe('parseDripInfo', () => {
   })
 
   it('returns undefined for non-v4 records (v1/v3 unaffected)', () => {
-    expect(parseDripInfo({ gate_version: 'v3' }, {})).toBeUndefined()
+    expect(parseDripInfo({ gate_type: 3 }, {})).toBeUndefined()
     expect(parseDripInfo({}, {})).toBeUndefined()
   })
 
@@ -105,7 +105,7 @@ describe('parseArkivEntityToVideo v4 integration', () => {
 
     expect(video.isEncrypted).toBe(true)
     expect(video.drip?.dripIndex).toBe(2)
-    expect(video.drip?.gateVersion).toBe('v4')
+    expect(video.drip?.gateType).toBe(4)
     // Native v4 metadata parses through the dispatcher → decryptAnyContentKey
     // routes to the V4 canister path (market-cap gate server-side).
     expect(video.encryptionMetadata?.version).toBe(4)

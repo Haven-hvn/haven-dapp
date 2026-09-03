@@ -3,7 +3,7 @@
  *
  * Each drip chunk becomes ONE Arkiv entity:
  *   - attributes are the filterable surface (`project`, `type`, `gate_*`,
- *     `gate_version="v4"`, `market_cap_target_usd`, `drip_index`,
+ *     `gate_type=4`, `market_cap_target_usd`, `drip_index`,
  *     `published_by`) so `arkiv_query` can filter drips by target or
  *     uploader;
  *   - payload is the v4 gate-metadata JSON every existing reader already
@@ -108,7 +108,8 @@ export function buildDripEntityBody(args: {
     { key: 'gate_chain', value: gate.chain },
     { key: 'gate_threshold', value: threshold },
     // -- v4 surface ---------------------------------------------------------
-    { key: 'gate_version', value: 'v4' },
+    // gate_type=4 (ATTR_UINT): 1=per-file, 3=per-epoch, 4=per-marketcap.
+    { key: 'gate_type', value: 4 },
     { key: 'market_cap_target_usd', value: targetUsd },
     { key: 'drip_index', value: plan.dripIndex },
     { key: 'drip_total', value: plan.dripTotal },

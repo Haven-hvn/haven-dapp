@@ -14,8 +14,8 @@ import type { GateMetadataJson, GateMetadataV3Json, GateMetadataV4Json } from '@
  * payload extras (additive v4 fields on the v1 gate record).
  */
 export interface DripInfo {
-  /** 'v4' marker from `gate_version`. */
-  gateVersion: 'v4'
+  /** Numeric gate-type marker from `gate_type` (4 = per-marketcap). */
+  gateType: 4
   /** Market-cap unlock target in whole USD for this chunk. */
   marketCapTargetUsd: number
   /** 0-based position of this chunk within the drip. */
@@ -131,7 +131,7 @@ export interface Video {
   cidEncryptionMetadata?: EncryptionMetadata
 
   /**
-   * V4 drip unlock info. Present when `gate_version === 'v4'` — the entity is
+   * V4 drip unlock info. Present when `gate_type === 4` — the entity is
    * one chunk of a market-cap-gated drip release.
    */
   drip?: DripInfo
