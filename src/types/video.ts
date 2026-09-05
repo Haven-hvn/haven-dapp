@@ -17,8 +17,18 @@ import type { GateMetadataJson, GateMetadataV3Json, GateMetadataV4Json } from '@
 export interface DripInfo {
   /** Numeric gate-type marker from `gate_type` (4 = per-marketcap). */
   gateType: 4
-  /** Market-cap unlock target in whole USD for this chunk (`mcap_usd`). */
+  /** Market-cap unlock target in whole USD for this chunk (`mcap_usd`, creator intent). */
   marketCapTargetUsd: number
+  /**
+   * Sealed consensus target from the part payload's gate record, when the
+   * payload was available AND its oracle is a known Bond contract (whole
+   * ETH the canister enforces). Absent on attribute-only parses
+   * (discovery paths pass no payload) and on legacy parts — callers fall
+   * back to `marketCapTargetUsd` for display.
+   */
+  marketCapTarget?: number
+  /** Units of `marketCapTarget`. Present iff `marketCapTarget` is. */
+  targetUnit?: 'usd' | 'reserve'
   /** 0-based position of this chunk within the drip (`drip_idx`). */
   dripIndex: number
   /** Total chunks in the drip (from the series header). */

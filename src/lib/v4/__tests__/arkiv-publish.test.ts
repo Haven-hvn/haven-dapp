@@ -149,6 +149,23 @@ describe('buildDripPartBody attributes', () => {
     const gate = JSON.parse(body.payloadJson.gate as string)
     expect(gate.marketCapTarget).toBe(1_500_001)
   })
+
+  it('seals the consensus target (whole ETH) while mcap_usd stays USD intent', () => {
+    const body = buildDripPartBody({
+      ...PART_ARGS,
+      plan: {
+        dripIndex: 1,
+        marketCapTargetUsd: 5_000_000,
+        marketCapTarget: 1563,
+        targetUnit: 'reserve',
+      },
+    })
+    // Discovery/display attr keeps the dollar intent…
+    expect(findAttr(body.attributes, 'mcap_usd')).toBe(5_000_000)
+    // …but the gate the canister enforces carries sealed ETH.
+    const gate = JSON.parse(body.payloadJson.gate as string)
+    expect(gate.marketCapTarget).toBe(1563)
+  })
 })
 
 describe('buildDripPartBody payload', () => {

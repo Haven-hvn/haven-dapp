@@ -393,6 +393,7 @@ describe('createDripSessionFromSlates', () => {
       config: { chunkCount: 3, targetsUsd: [1_000_000, 5_000_000, 10_000_000] },
       gate: GATE,
       slates,
+      sealed: { targets: [313, 1563, 3125], unit: 'reserve' },
     })
     if (!session) throw new Error('slate session creation failed')
 
@@ -412,6 +413,41 @@ describe('createDripSessionFromSlates', () => {
       'haven.drip.slates.v1:' + slates.map((s) => s.sha256.toLowerCase()).join(':')
     )
     expect(session.sourceSha256).toBe(expectedCommitment)
+    // Sealed consensus fields ride every stage plan verbatim.
+    session.stages.forEach((stage, i) => {
+      expect(stage.plan.marketCapTarget).toBe([313, 1563, 3125][i])
+      expect(stage.plan.targetUnit).toBe('reserve')
+    })
+  })
+
+  it('rejects malformed sealed targets (length, order, units)', async () => {
+    const slates = await makeSlates()
+    const base = {
+      title: 't',
+      mimeType: 'video/mp4',
+      config: { chunkCount: 3, targetsUsd: [1_000_000, 5_000_000, 10_000_000] },
+      gate: GATE,
+      slates,
+    }
+    // Length mismatch.
+    await expect(
+      createDripSessionFromSlates({ ...base, sealed: { targets: [1, 2], unit: 'reserve' } })
+    ).resolves.toBeNull()
+    // Not strictly ascending.
+    await expect(
+      createDripSessionFromSlates({ ...base, sealed: { targets: [5, 5, 9], unit: 'reserve' } })
+    ).resolves.toBeNull()
+    // Non-positive.
+    await expect(
+      createDripSessionFromSlates({ ...base, sealed: { targets: [0, 2, 3], unit: 'reserve' } })
+    ).resolves.toBeNull()
+    // Unknown unit.
+    await expect(
+      createDripSessionFromSlates({
+        ...base,
+        sealed: { targets: [1, 2, 3], unit: 'usd-legacy' as never },
+      })
+    ).resolves.toBeNull()
   })
 
   it('rejects slate count mismatch, all-empty slates, bad hashes', async () => {
@@ -420,6 +456,7 @@ describe('createDripSessionFromSlates', () => {
       mimeType: 'video/mp4',
       config: { chunkCount: 2, targetsUsd: [1, 2] },
       gate: GATE,
+      sealed: { targets: [1, 2], unit: 'reserve' },
     }
     const good = await makeSlates()
 
@@ -454,6 +491,7 @@ describe('createDripSessionFromSlates', () => {
       config: { chunkCount: 3, targetsUsd: [10, 20, 30] },
       gate: GATE,
       slates,
+      sealed: { targets: [1, 2, 3], unit: 'reserve' },
     }))!
     const text = JSON.stringify(toDripManifest(session))
     expect(parseDripManifest(JSON.parse(text))).toEqual(session)
@@ -467,6 +505,7 @@ describe('createDripSessionFromSlates', () => {
       config: { chunkCount: 3, targetsUsd: [10, 20, 30] },
       gate: GATE,
       slates,
+      sealed: { targets: [1, 2, 3], unit: 'reserve' },
     }))!
     const m = cloneManifest(session)
     const stages = m.stages as Array<Record<string, unknown>>

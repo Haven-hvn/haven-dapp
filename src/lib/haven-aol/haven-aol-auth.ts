@@ -438,7 +438,8 @@ export interface SignedGateRequestV4 {
  * @param walletClient    Connected wallet (wagmi `useWalletClient` shape).
  * @param epoch           From `metadata.epoch` of the chunk — never
  *                        `currentEpoch()` (Key Design Decision #7).
- * @param marketCapTarget Whole-USD unlock target from the chunk metadata.
+ * @param marketCapTarget Sealed unlock target from the chunk metadata
+ *                        (whole reserve units) — passed through opaquely.
  */
 export async function createSignedGateRequestV4(
   walletClient: WalletClientLike,

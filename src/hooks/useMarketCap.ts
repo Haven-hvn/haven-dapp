@@ -13,8 +13,11 @@
 
 import { useQuery } from '@tanstack/react-query'
 import {
+  fetchEthUsd,
+  fetchTokenCeiling,
   fetchTokenMarketCap,
   type MarketCapResult,
+  type TokenCeiling,
 } from '@/lib/v4/market-cap'
 
 const STALE_MS = 15_000
@@ -55,6 +58,49 @@ export function useMarketCap(token: string | null | undefined, network?: string)
       void query.refetch()
     },
   }
+}
+
+/**
+ * Poll the live WETH/USD rate for seal-time USD→ETH conversion and dual
+ * display. Null while unavailable — seal must block (fail closed), never
+ * guess. Refreshes slower than token caps: the rate only matters at seal
+ * minute, not per block.
+ */
+export function useEthUsd(): { ethUsd: number | null; isLoading: boolean } {
+  const query = useQuery({
+    queryKey: ['v4-eth-usd'],
+    queryFn: () => fetchEthUsd(),
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+    retry: 1,
+  })
+  return { ethUsd: query.data ?? null, isLoading: query.isLoading }
+}
+
+/**
+ * Poll a gate token's curve ceiling (`maxSupply × finalPrice`).
+ *
+ * Fail-soft: `ceiling` is null while loading or when the curve cannot be
+ * read. Callers must treat null as "cannot verify" — never as a license to
+ * seal unreachable rungs, and never as a reason to block sealing outright
+ * (the rate path failing must not brick the wizard).
+ */
+export function useTokenCeiling(
+  token: string | null | undefined,
+  network?: string
+): { ceiling: TokenCeiling | null; isLoading: boolean } {
+  const enabled = Boolean(token && token.trim().length > 0)
+
+  const query = useQuery({
+    queryKey: ['v4-token-ceiling', network ?? 'base', (token ?? '').trim()],
+    queryFn: () => fetchTokenCeiling({ token: token as string, network }),
+    enabled,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+    retry: 1,
+  })
+
+  return { ceiling: query.data ?? null, isLoading: enabled && query.isLoading }
 }
 
 /**

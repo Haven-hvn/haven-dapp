@@ -8,8 +8,15 @@ import { describe, it, expect } from 'vitest'
 import {
   MAX_DRIP_CHUNKS,
   DRIP_TARGET_PRESETS,
+  RUNG_USD_STOPS,
+  firstStopIndexAbove,
   formatUsdCompact,
+  nearestStopIndexBelow,
+  nextStopAbove,
   planDripChunks,
+  sealTargetsUsdToReserve,
+  sealedTargetOf,
+  sealedTargetsExceedingCeiling,
   sliceDripChunk,
   validateDripConfig,
 } from '../drip-plan'
@@ -147,5 +154,74 @@ describe('DRIP_TARGET_PRESETS', () => {
         targetsUsd: preset.targetsUsd,
       })).toEqual([])
     }
+  })
+  it('every preset value sits on a rung stop (sliders can represent them)', () => {
+    for (const preset of DRIP_TARGET_PRESETS) {
+      for (const t of preset.targetsUsd) {
+        expect(RUNG_USD_STOPS).toContain(t)
+      }
+    }
+  })
+})
+
+describe('rung stops', () => {
+  it('nearestStopIndexBelow snaps down, firstStopIndexAbove is strict', () => {
+    expect(nearestStopIndexBelow(5_000_000)).toBe(RUNG_USD_STOPS.indexOf(5_000_000))
+    expect(nearestStopIndexBelow(6_000_000)).toBe(RUNG_USD_STOPS.indexOf(5_000_000))
+    expect(nearestStopIndexBelow(500)).toBe(0)
+    expect(firstStopIndexAbove(5_000_000)).toBe(RUNG_USD_STOPS.indexOf(10_000_000))
+    expect(firstStopIndexAbove(6_000_000)).toBe(RUNG_USD_STOPS.indexOf(10_000_000))
+  })
+  it('nextStopAbove grows to the next stop, doubling past the top', () => {
+    expect(nextStopAbove(10_000_000)).toBe(25_000_000)
+    expect(nextStopAbove(1_000_000_000)).toBe(2_000_000_000)
+  })
+})
+
+describe('sealedTargetOf', () => {
+  it('prefers the sealed value, falls back to USD intent for legacy plans', () => {
+    expect(sealedTargetOf({ marketCapTargetUsd: 5_000_000, marketCapTarget: 1563, targetUnit: 'reserve' })).toEqual({
+      target: 1563,
+      unit: 'reserve',
+    })
+    expect(sealedTargetOf({ marketCapTargetUsd: 5_000_000 })).toEqual({
+      target: 5_000_000,
+      unit: 'usd',
+    })
+    expect(sealedTargetOf({ marketCapTargetUsd: 5_000_000, marketCapTarget: 0 })).toEqual({
+      target: 5_000_000,
+      unit: 'usd',
+    })
+  })
+})
+
+describe('sealTargetsUsdToReserve', () => {
+  it('converts at the seal-minute rate, whole ETH, minimum 1', () => {
+    expect(sealTargetsUsdToReserve([1_000_000, 5_000_000, 10_000_000], 3200)).toEqual([
+      313, 1563, 3125,
+    ])
+    expect(sealTargetsUsdToReserve([100], 3200)).toEqual([1])
+  })
+  it('refuses without a rate or with unsafe inputs', () => {
+    expect(sealTargetsUsdToReserve([1_000_000], null)).toBeNull()
+    expect(sealTargetsUsdToReserve([1_000_000], 0)).toBeNull()
+    expect(sealTargetsUsdToReserve([0, 5_000_000], 3200)).toBeNull()
+    // Rounding collisions must never share one bar.
+    expect(sealTargetsUsdToReserve([3200, 3201], 3200)).toBeNull()
+  })
+})
+
+describe('sealedTargetsExceedingCeiling', () => {
+  it('flags sealed rungs above the curve max', () => {
+    // Wizard token ceiling: 1B × 0.00001 ETH = 10,000 ETH.
+    expect(sealedTargetsExceedingCeiling([313, 1563, 3125], 10_000)).toEqual([])
+    expect(sealedTargetsExceedingCeiling([313, 15_625, 312_500], 10_000)).toEqual([1, 2])
+  })
+  it('treats equality as reachable and unknown ceilings as unverifiable', () => {
+    expect(sealedTargetsExceedingCeiling([10_000], 10_000)).toEqual([])
+    expect(sealedTargetsExceedingCeiling([312_500], null)).toEqual([])
+    expect(sealedTargetsExceedingCeiling([312_500], undefined)).toEqual([])
+    expect(sealedTargetsExceedingCeiling(null, 10_000)).toEqual([])
+    expect(sealedTargetsExceedingCeiling([312_500], 0)).toEqual([])
   })
 })

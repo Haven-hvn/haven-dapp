@@ -119,17 +119,14 @@ export function mapGateError(gateError: unknown): HavenAolDecryptError {
     )
   }
 
-  // Protocol v4: market-cap gate not satisfied (whole USD on both fields).
+  // Protocol v4: market-cap gate not satisfied. Both fields are whole
+  // reserve units (whole ETH for curve gates) — the curve is the only
+  // price source, so there is no USD leg to format.
   if ('MarketCapNotReached' in err) {
     const details = err.MarketCapNotReached as { required?: bigint; actual?: bigint }
     const fmt = (n?: bigint) => {
       if (typeof n !== 'bigint') return '?'
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        maximumFractionDigits: 0,
-        notation: 'compact',
-      }).format(Number(n))
+      return `${Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 })} ETH`
     }
     return new HavenAolDecryptError(
       `Market cap ${fmt(details.actual)} has not reached the unlock target ${fmt(details.required)} yet.`,
@@ -137,7 +134,8 @@ export function mapGateError(gateError: unknown): HavenAolDecryptError {
     )
   }
 
-  // Protocol v4: oracle returned a malformed or stale answer.
+  // Protocol v4: non-Bond oracle, unsupported reserve, or failed
+  // supply/decimals/curve probe.
   if ('InvalidOracle' in err) {
     return new HavenAolDecryptError(
       `Price oracle error: ${err.InvalidOracle}. Please try again shortly.`,

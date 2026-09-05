@@ -34,8 +34,14 @@ import {
 import {
   DRIP_TARGET_PRESETS,
   MAX_DRIP_CHUNKS,
+  RUNG_USD_STOPS,
+  firstStopIndexAbove,
   formatUsdCompact,
+  nearestStopIndexBelow,
+  nextStopAbove,
   planDripChunks,
+  sealedTargetsExceedingCeiling,
+  sealTargetsUsdToReserve,
   stageLabel,
   validateDripConfig,
   type DripChunkPlan,
@@ -44,7 +50,7 @@ import { createDripSessionFromSlates, saveDripSession, type DripSession } from '
 import { sha256Hex } from '@/lib/crypto'
 import { resolveMintToken } from '@/lib/v4/market-cap'
 import { createMintClubToken } from '@/lib/v4/mint-create'
-import { useMarketCap } from '@/hooks/useMarketCap'
+import { useEthUsd, useMarketCap, useTokenCeiling } from '@/hooks/useMarketCap'
 import { useToast } from '@/hooks/useToast'
 import { VALID_CHAINS, type Chain } from 'haven-aol'
 import { MarketPreview } from './MarketPreview'
@@ -60,8 +66,6 @@ const STEP_META: Record<StepId, { folio: string; title: string }> = {
   gate: { folio: '03', title: 'The gate' },
   seal: { folio: '04', title: 'Seal the plan' },
 }
-
-const ORACLE_ADDR_RE = /^0x[0-9a-fA-F]{40}$/
 
 type SlateEntry =
   | { status: 'hashing' }
@@ -97,7 +101,13 @@ export function CreateWizard({ onSealed }: CreateWizardProps) {
   const [resolvedToken, setResolvedToken] = useState<{ address: string; symbol: string | null } | null>(
     null
   )
-  const [oracleAddress, setOracleAddress] = useState('')
+  /**
+   * Mint.club Bond contract for the active network. Bond-only canister:
+   * this address IS the committed oracle (auto-filled, never pasted) —
+   * the curve is the only price source. Null while the chain is
+   * unconfigured or the lookup is in flight.
+   */
+  const [bondAddress, setBondAddress] = useState<string | null>(null)
   const [resolving, setResolving] = useState(false)
   const [resolveError, setResolveError] = useState<string | null>(null)
   const [chain, setChain] = useState<Chain>('BaseMainnet')
@@ -127,8 +137,10 @@ export function CreateWizard({ onSealed }: CreateWizardProps) {
   )
   const slatesDone = slates.length === chunkCount && readySlates.length === chunkCount
 
-  const oracleValid = ORACLE_ADDR_RE.test(oracleAddress.trim())
-  const gateDone = resolvedToken != null && oracleValid && threshold >= 1
+  // The committed oracle is derived, not entered: always the chain's Bond
+  // contract. No feed field exists because no feed exists.
+  const oracleAddress = bondAddress ?? ''
+  const gateDone = resolvedToken != null && bondAddress != null && threshold >= 1
 
   const doneFlags: Record<StepId, boolean> = {
     ladder: ladderDone,
@@ -156,6 +168,43 @@ export function CreateWizard({ onSealed }: CreateWizardProps) {
   }
   const networkHint = havenChainToMintNetwork[chain] ?? 'base'
   const { marketCapUsd } = useMarketCap(resolvedToken?.address ?? null, networkHint)
+  // Seal-minute ETH rate: converts USD rung intent into the whole-ETH
+  // targets the canister enforces. Null blocks sealing (fail closed).
+  const { ethUsd } = useEthUsd()
+  const sealedTargets = useMemo(
+    () => sealTargetsUsdToReserve(targetsUsd, ethUsd),
+    [targetsUsd, ethUsd]
+  )
+
+  // Curve ceiling (`maxSupply × finalPrice`): sealed whole-ETH rungs above it
+  // can never unlock — minting halts at max supply with the price pinned at
+  // the final step. Unknown ceilings never block (fail-soft); only a known,
+  // exceeded ceiling blocks the seal.
+  const { ceiling: tokenCeiling, isLoading: ceilingLoading } = useTokenCeiling(
+    resolvedToken?.address ?? null,
+    networkHint
+  )
+  const ceilingKnown =
+    tokenCeiling != null &&
+    tokenCeiling.isNativeReserve !== false &&
+    tokenCeiling.ceilingReserveWhole != null
+  const unreachableSealed = ceilingKnown
+    ? sealedTargetsExceedingCeiling(sealedTargets, tokenCeiling?.ceilingReserveWhole)
+    : []
+
+  // Refresh the Bond address whenever the gate chain changes so the
+  // Bond-is-not-a-feed guard below compares against the right contract.
+  useEffect(() => {
+    let cancelled = false
+    void import('@/lib/v4/market-cap').then((m) =>
+      m.getBondContractAddress(networkHint).then((bond) => {
+        if (!cancelled) setBondAddress(bond)
+      })
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [networkHint])
 
   // Handlers — ladder ----------------------------------------------------------
   const applyPreset = useCallback((targets: number[]) => {
@@ -170,18 +219,20 @@ export function CreateWizard({ onSealed }: CreateWizardProps) {
       const next = [...prev]
       while (next.length < clamped) {
         const last = next[next.length - 1] ?? 1_000_000
-        next.push(last * 5)
+        next.push(nextStopAbove(last))
       }
       next.length = clamped
       return next
     })
   }, [])
 
-  const setTarget = useCallback((index: number, value: string) => {
-    const parsed = Number(value.replace(/[^0-9.]/g, ''))
+  /** Snap rung `index` to a canonical stop — free precision is not offered. */
+  const setTargetStop = useCallback((index: number, stopIdx: number) => {
+    const stop = RUNG_USD_STOPS[stopIdx]
+    if (stop == null) return
     setTargetsUsd((prev) => {
       const next = [...prev]
-      next[index] = Number.isFinite(parsed) ? Math.round(parsed) : 0
+      next[index] = stop
       return next
     })
   }, [])
@@ -267,8 +318,8 @@ export function CreateWizard({ onSealed }: CreateWizardProps) {
     setCreatingToken(false)
     if (r.address) {
       setResolvedToken({ address: r.address, symbol: newTokenSymbol })
-      const bond = await (await import('@/lib/v4/market-cap')).getBondContractAddress(networkHint)
-      if (bond) setOracleAddress(bond)
+      // No oracle fill needed: the committed oracle derives from the
+      // chain's Bond contract (see `oracleAddress` above).
       toast.showSuccess('Token created: ' + r.address)
     } else {
       setCreateError(r.error ?? 'Create failed')
@@ -276,11 +327,23 @@ export function CreateWizard({ onSealed }: CreateWizardProps) {
   }, [walletClient, networkHint, newTokenName, newTokenSymbol, toast])
 
   // Handlers — seal --------------------------------------------------------------
-  const canSeal = ladderDone && slatesDone && gateDone && !sealing
+  // Sealing is only possible with a live ETH rate: Bond targets are whole
+  // ETH converted at seal minute, and a missing rate blocks rather than
+  // guesses. `sealedTargets` is exactly what the canister enforces.
+  // A known-exceeded curve ceiling also blocks: that chunk could never open.
+  const canSeal =
+    ladderDone && slatesDone && gateDone && sealedTargets != null && unreachableSealed.length === 0 && !sealing
   const sealingRef = useRef(false)
 
   const handleSeal = useCallback(async () => {
-    if (sealingRef.current || !canSeal || !resolvedToken) return
+    if (
+      sealingRef.current ||
+      !canSeal ||
+      !resolvedToken ||
+      sealedTargets == null ||
+      unreachableSealed.length > 0
+    )
+      return
     sealingRef.current = true
     setSealing(true)
     try {
@@ -299,6 +362,7 @@ export function CreateWizard({ onSealed }: CreateWizardProps) {
           fileSize: s.size,
           sha256: s.sha256,
         })),
+        sealed: { targets: sealedTargets, unit: 'reserve' },
       })
       if (!created) {
         toast.showError('Could not lock that plan — check the ladder and gate.')
@@ -317,6 +381,8 @@ export function CreateWizard({ onSealed }: CreateWizardProps) {
   }, [
     canSeal,
     resolvedToken,
+    sealedTargets,
+    unreachableSealed.length,
     title,
     readySlates,
     chunkCount,
@@ -388,9 +454,10 @@ export function CreateWizard({ onSealed }: CreateWizardProps) {
                 <LadderPanel
                   chunkCount={chunkCount}
                   targetsUsd={targetsUsd}
+                  ethUsd={ethUsd}
                   configErrors={configErrors}
                   onChunkCount={setChunkCountSafe}
-                  onTarget={setTarget}
+                  onTargetStop={setTargetStop}
                   onPreset={applyPreset}
                   onNext={goNext}
                 />
@@ -423,16 +490,17 @@ export function CreateWizard({ onSealed }: CreateWizardProps) {
                   onGateTokenInput={(v) => {
                     setGateTokenInput(v)
                     setResolvedToken(null)
-                    setOracleAddress('')
                     setResolveError(null)
                   }}
                   resolving={resolving}
                   onResolve={() => void handleResolveToken()}
                   resolveError={resolveError}
                   resolvedToken={resolvedToken}
-                  oracleAddress={oracleAddress}
-                  onOracle={setOracleAddress}
-                  oracleValid={oracleValid}
+                  bondAddress={bondAddress}
+                  ceilingReserveWhole={ceilingKnown ? (tokenCeiling?.ceilingReserveWhole ?? null) : null}
+                  ceilingUsd={ceilingKnown ? (tokenCeiling?.ceilingUsd ?? null) : null}
+                  ceilingKnown={ceilingKnown}
+                  ceilingLoading={ceilingLoading}
                   chain={chain}
                   onChain={setChain}
                   threshold={threshold}
@@ -446,12 +514,20 @@ export function CreateWizard({ onSealed }: CreateWizardProps) {
                   onTitle={setTitle}
                   chunkCount={chunkCount}
                   targetsUsd={targetsUsd}
+                  sealedTargets={sealedTargets}
+                  ethUsd={ethUsd}
                   slates={slates}
                   plans={draftPlans}
                   resolvedToken={resolvedToken}
                   chain={chain}
                   threshold={threshold}
+                  oracleAddress={oracleAddress}
                   marketCapUsd={marketCapUsd}
+                  ceilingReserveWhole={ceilingKnown ? (tokenCeiling?.ceilingReserveWhole ?? null) : null}
+                  ceilingUsd={ceilingKnown ? (tokenCeiling?.ceilingUsd ?? null) : null}
+                  ceilingKnown={ceilingKnown}
+                  ceilingLoading={ceilingLoading}
+                  unreachableSealed={unreachableSealed}
                   canSeal={canSeal}
                   sealing={sealing}
                   onSeal={() => void handleSeal()}
@@ -543,26 +619,31 @@ function LockedEntry({ id }: { id: StepId }) {
 function LadderPanel({
   chunkCount,
   targetsUsd,
+  ethUsd,
   configErrors,
   onChunkCount,
-  onTarget,
+  onTargetStop,
   onPreset,
   onNext,
 }: {
   chunkCount: number
   targetsUsd: number[]
+  /** Live WETH/USD for dual display; null renders `≈ …` (never blocks). */
+  ethUsd: number | null
   configErrors: ReturnType<typeof validateDripConfig>
   onChunkCount: (n: number) => void
-  onTarget: (index: number, value: string) => void
+  onTargetStop: (index: number, stopIdx: number) => void
   onPreset: (targets: number[]) => void
   onNext: () => void
 }) {
   const valid = configErrors.length === 0
+  const lastStop = RUNG_USD_STOPS.length - 1
   return (
     <div className="panel-double p-5 sm:p-6 space-y-6 crop-marks">
       <p className="prose-body text-fine leading-relaxed text-fg-3">
         How many separate uploads should this release have, and what market cap unlocks each?
-        Every rung gets its own file, its own key, its own reveal.
+        Every rung gets its own file, its own key, its own reveal. Pick rungs in dollars —
+        they seal as whole ETH, converted at the seal-minute rate.
       </p>
 
       {/* FIG.01 — the ladder, drawn to log-scale */}
@@ -586,24 +667,39 @@ function LadderPanel({
         />
       </div>
 
-      <div className="space-y-2" data-testid="drip-target-list">
-        {targetsUsd.map((t, i) => (
-          <div key={i} className="flex items-center gap-3">
-            <span className="w-24 shrink-0 label text-fg-4 truncate">
-              {stageLabel(i, targetsUsd.length)}
-            </span>
-            <div className="relative flex-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-5">$</span>
+      <div className="space-y-4" data-testid="drip-target-list">
+        {targetsUsd.map((t, i) => {
+          // Slider bounds keep rungs strictly ascending by construction:
+          // this rung must sit strictly between its neighbours' stops.
+          const minStop = i === 0 ? 0 : Math.min(firstStopIndexAbove(targetsUsd[i - 1]), lastStop)
+          const rawMax =
+            i === targetsUsd.length - 1 ? lastStop : firstStopIndexAbove(targetsUsd[i + 1]) - 1
+          const maxStop = Math.max(minStop, Math.min(rawMax, lastStop))
+          const pos = Math.max(minStop, Math.min(nearestStopIndexBelow(t), maxStop))
+          return (
+            <div key={i} className="space-y-1.5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="label text-fg-4 truncate">
+                  {stageLabel(i, targetsUsd.length)}
+                </span>
+                <span className="datum text-seal-text tabular-nums whitespace-nowrap">
+                  {formatUsdCompact(t)}
+                  <span className="text-fg-4"> ≈ {ethText(t, ethUsd)}</span>
+                </span>
+              </div>
               <input
-                inputMode="numeric"
-                value={String(t)}
-                onChange={(e) => onTarget(i, e.target.value)}
-                className="w-full bg-transparent border border-line-strong focus:border-seal outline-none pl-7 pr-3 py-1.5 text-small font-[family-name:var(--font-ledger)] tabular-nums"
+                type="range"
+                min={minStop}
+                max={maxStop}
+                value={pos}
+                onChange={(e) => onTargetStop(i, Number(e.target.value))}
+                className="w-full accent-[var(--seal)]"
+                data-testid={`drip-target-slider-${i}`}
+                aria-label={`${stageLabel(i, targetsUsd.length)} unlock target`}
               />
             </div>
-            <span className="w-14 text-right datum text-fg-4">{formatUsdCompact(t)}</span>
-          </div>
-        ))}
+          )
+        })}
         {configErrors.some((e) => e.code === 'TARGETS_NOT_ASCENDING') && (
           <p className="text-nano text-destructive flex items-center gap-1.5 font-[family-name:var(--font-ledger)] uppercase tracking-[0.08em]">
             <AlertCircle className="h-3 w-3" /> Targets must be strictly ascending.
@@ -951,9 +1047,20 @@ interface GatePanelProps {
   onResolve: () => void
   resolveError: string | null
   resolvedToken: { address: string; symbol: string | null } | null
-  oracleAddress: string
-  onOracle: (v: string) => void
-  oracleValid: boolean
+  /**
+   * Chain's Bond contract — the committed oracle, auto-filled, never pasted.
+   * Null while the lookup is in flight or the chain is unconfigured; the
+   * gate cannot arm until it resolves.
+   */
+  bondAddress: string | null
+  /** Curve ceiling (whole reserve units) when known — rungs above it brick. */
+  ceilingReserveWhole: number | null
+  /** USD approximation of the ceiling for display. Null when unknown. */
+  ceilingUsd: number | null
+  /** True when the ceiling was read and applies to this token's reserve. */
+  ceilingKnown: boolean
+  /** True while the ceiling lookup is in flight. */
+  ceilingLoading: boolean
   chain: Chain
   onChain: (c: Chain) => void
   threshold: number
@@ -978,9 +1085,11 @@ function GatePanel(props: GatePanelProps) {
     onResolve,
     resolveError,
     resolvedToken,
-    oracleAddress,
-    onOracle,
-    oracleValid,
+    bondAddress,
+    ceilingReserveWhole,
+    ceilingUsd,
+    ceilingKnown,
+    ceilingLoading,
     chain,
     onChain,
     threshold,
@@ -988,13 +1097,14 @@ function GatePanel(props: GatePanelProps) {
     onNext,
     walletConnected,
   } = props
-  const done = resolvedToken != null && oracleValid && threshold >= 1
+  const done = resolvedToken != null && bondAddress != null && threshold >= 1
 
   return (
     <div className="panel-double p-5 sm:p-6 space-y-5 crop-marks">
       <p className="prose-body text-fine leading-relaxed text-fg-3">
-        Readers hold this token; its live market cap decides which rungs are open. Pick an existing
-        bonding-curve token or mint a fresh one — the oracle auto-fills on mint.
+        Readers hold this token; its live market cap decides which rungs are open. Unlock is
+        enforced by the Haven-AOL canister — not on the mint chain — priced off the mint.club
+        bonding curve. No feed: rungs seal as whole ETH and open on curve math alone.
       </p>
 
       <div className="space-y-2">
@@ -1059,8 +1169,8 @@ function GatePanel(props: GatePanelProps) {
               </p>
             )}
             <p className="label !whitespace-normal normal-case tracking-[0.02em] leading-relaxed">
-              Creates ERC20 via mint.club bonding curve; oracle auto-filled to Bond contract. No
-              copy-paste needed.
+              Creates an ERC20 via the mint.club bonding curve. Pricing commits to the
+              chain&apos;s Bond contract automatically — there is no feed to paste.
             </p>
           </div>
         )}
@@ -1094,23 +1204,42 @@ function GatePanel(props: GatePanelProps) {
           </p>
         )}
 
-        {resolvedToken && (
-          <div className="space-y-2 pt-1">
-            <label className="block label mb-2">Chainlink USD price feed (oracle) for this token</label>
-            <input
-              value={oracleAddress}
-              onChange={(e) => onOracle(e.target.value)}
-              placeholder="0x… AggregatorV3 proxy address"
-              className="field-input"
-              data-testid="oracle-address-input"
-            />
-            {oracleAddress.trim().length > 0 && !oracleValid && (
-              <p className="text-nano font-[family-name:var(--font-ledger)] tracking-[0.04em] text-seal-text leading-relaxed">
-                Must be a 42-char 0x address — the canister calls latestRoundData() on it and fails
-                closed on bad feeds.
-              </p>
-            )}
-          </div>
+        {resolvedToken && bondAddress && (
+          <p
+            className="seal-mark stamp-in w-fit !border-[var(--color-arkiv)] !text-[var(--color-arkiv)] !bg-transparent"
+            data-testid="gate-curve-pricing"
+          >
+            <CheckCircle2 className="h-3 w-3" />
+            Priced off the curve · {shortAddr(bondAddress)}
+          </p>
+        )}
+
+        {resolvedToken && !bondAddress && (
+          <p className="text-nano text-destructive flex items-center gap-1.5 font-[family-name:var(--font-ledger)] uppercase tracking-[0.08em]">
+            <AlertCircle className="h-3 w-3" /> Curve pricing is not configured on this chain
+            yet — the gate cannot arm here.
+          </p>
+        )}
+
+        {resolvedToken && bondAddress && ceilingLoading && (
+          <p className="text-nano text-fg-4 flex items-center gap-1.5 font-[family-name:var(--font-ledger)] uppercase tracking-[0.08em]">
+            <Loader2 className="h-3 w-3 animate-spin" /> Checking curve max…
+          </p>
+        )}
+
+        {resolvedToken && bondAddress && !ceilingLoading && ceilingKnown && ceilingReserveWhole != null && (
+          <p className="text-nano text-fg-4 flex items-center gap-1.5 font-[family-name:var(--font-ledger)] uppercase tracking-[0.08em]">
+            <CheckCircle2 className="h-3 w-3" /> Curve max ≈ {formatEthWhole(ceilingReserveWhole)}
+            {ceilingUsd != null ? ` (${formatUsdCompact(Math.round(ceilingUsd))})` : ''} — rungs
+            above this can never unlock.
+          </p>
+        )}
+
+        {resolvedToken && bondAddress && !ceilingLoading && !ceilingKnown && (
+          <p className="text-nano text-fg-4 flex items-center gap-1.5 font-[family-name:var(--font-ledger)] uppercase tracking-[0.08em]">
+            <AlertCircle className="h-3 w-3" /> Curve max unavailable — keep rungs under
+            maxSupply × finalPrice.
+          </p>
         )}
 
         {resolveError && (
@@ -1153,10 +1282,10 @@ function GatePanel(props: GatePanelProps) {
         >
           {done ? (
             <>
-              <CheckCircle2 className="h-3.5 w-3.5" /> Gate armed
+              <CheckCircle2 className="h-3.5 w-3.5" /> Gate armed · curve pricing
             </>
           ) : (
-            'Resolve a token + oracle to continue'
+            'Resolve a token on a curve-priced chain to continue'
           )}
         </span>
         <button onClick={onNext} disabled={!done} className="action action-sealed disabled:opacity-30 disabled:pointer-events-none">
@@ -1176,12 +1305,20 @@ function SealPanel({
   onTitle,
   chunkCount,
   targetsUsd,
+  sealedTargets,
+  ethUsd,
   slates,
   plans,
   resolvedToken,
   chain,
   threshold,
+  oracleAddress,
   marketCapUsd,
+  ceilingReserveWhole,
+  ceilingUsd,
+  ceilingKnown,
+  ceilingLoading,
+  unreachableSealed,
   canSeal,
   sealing,
   onSeal,
@@ -1190,12 +1327,31 @@ function SealPanel({
   onTitle: (v: string) => void
   chunkCount: number
   targetsUsd: number[]
+  /**
+   * Whole-ETH targets converted at the seal-minute rate — EXACTLY what the
+   * canister enforces. Null blocks sealing (rate unavailable): guessing
+   * would seal a bar nobody agreed to.
+   */
+  sealedTargets: number[] | null
+  ethUsd: number | null
   slates: (SlateEntry | null)[]
   plans: DripChunkPlan[] | null
   resolvedToken: { address: string; symbol: string | null } | null
   chain: Chain
   threshold: number
+  /** Committed oracle — always the chain's Bond contract. Shown verbatim. */
+  oracleAddress: string
   marketCapUsd: number | null | undefined
+  /** Curve ceiling (whole reserve units) when known. */
+  ceilingReserveWhole: number | null
+  /** USD approximation of the ceiling for display. Null when unknown. */
+  ceilingUsd: number | null
+  /** True when the ceiling was read and applies to this token's reserve. */
+  ceilingKnown: boolean
+  /** True while the ceiling lookup is in flight. */
+  ceilingLoading: boolean
+  /** Sealed-rung indexes above the ceiling — sealing stays locked. */
+  unreachableSealed: number[]
   canSeal: boolean
   sealing: boolean
   onSeal: () => void
@@ -1220,32 +1376,60 @@ function SealPanel({
         <div className="label mb-2">Stage manifest</div>
         <table className="specimen" data-testid="seal-manifest">
           <thead>
-            <tr>
-              <th>Rung</th>
-              <th>File</th>
-              <th className="!text-right">Size</th>
-              <th className="!text-right">Unlocks @</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ready.map((s, i) => (
-              <tr key={i}>
-                <td className="whitespace-nowrap">{stageLabel(i, chunkCount)}</td>
-                <td className="max-w-[180px] truncate">{s.file.name}</td>
-                <td className="text-right tabular-nums">{(s.size / 1024 / 1024).toFixed(1)} MB</td>
-                <td className="text-right tabular-nums text-seal-text">
-                  {formatUsdCompact(targetsUsd[i] ?? 0)}
-                </td>
+              <tr>
+                <th>Rung</th>
+                <th>File</th>
+                <th className="!text-right">Size</th>
+                <th className="!text-right">Unlocks @ (enforced)</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        {resolvedToken && (
-          <p className="mt-3 text-nano font-[family-name:var(--font-ledger)] uppercase tracking-[0.1em] text-fg-4">
-            gate {resolvedToken.symbol ?? shortAddr(resolvedToken.address)} · {chain} · ≥{threshold}{' '}
-            holder{threshold === 1 ? '' : 's'} · oracle {shortAddr(resolvedToken.address)}
-          </p>
-        )}
+            </thead>
+            <tbody>
+              {ready.map((s, i) => (
+                <tr key={i}>
+                  <td className="whitespace-nowrap">{stageLabel(i, chunkCount)}</td>
+                  <td className="max-w-[180px] truncate">{s.file.name}</td>
+                  <td className="text-right tabular-nums">{(s.size / 1024 / 1024).toFixed(1)} MB</td>
+                  <td className="text-right tabular-nums text-seal-text">
+                    {sealedTargets != null ? (
+                      <>
+                        {formatEthWhole(sealedTargets[i] ?? 0)}
+                        <span className="block text-fg-4">≈ {formatUsdCompact(targetsUsd[i] ?? 0)} intent</span>
+                      </>
+                    ) : (
+                      <>
+                        {formatUsdCompact(targetsUsd[i] ?? 0)}
+                        <span className="block text-fg-4">≈ … ETH · waiting on rate</span>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {resolvedToken && (
+            <p className="mt-3 text-nano font-[family-name:var(--font-ledger)] uppercase tracking-[0.1em] text-fg-4">
+              gate {resolvedToken.symbol ?? shortAddr(resolvedToken.address)} · {chain} · ≥{threshold}{' '}
+              holder{threshold === 1 ? '' : 's'} · curve {shortAddr(oracleAddress)}
+            </p>
+          )}
+          {ethUsd != null && (
+            <p className="mt-1 text-nano font-[family-name:var(--font-ledger)] uppercase tracking-[0.1em] text-fg-5">
+              sealed @ {Math.round(ethUsd).toLocaleString('en-US')} USD/ETH — the ETH figures
+              above are the enforced bars
+            </p>
+          )}
+          {ceilingKnown && ceilingReserveWhole != null && (
+            <p className="mt-1 text-nano font-[family-name:var(--font-ledger)] uppercase tracking-[0.1em] text-fg-4">
+              curve max {formatEthWhole(ceilingReserveWhole)}
+              {ceilingUsd != null ? ` (≈ ${formatUsdCompact(Math.round(ceilingUsd))})` : ''} — rungs
+              above this never unlock
+            </p>
+          )}
+          {resolvedToken && !ceilingLoading && !ceilingKnown && (
+            <p className="mt-1 text-nano font-[family-name:var(--font-ledger)] uppercase tracking-[0.1em] text-fg-5">
+              curve max unknown — confirm rungs sit under maxSupply × finalPrice
+            </p>
+          )}
       </div>
 
       {plans && (
@@ -1268,9 +1452,29 @@ function SealPanel({
           )}
         </button>
         <p className="label !whitespace-normal normal-case tracking-[0.02em] leading-relaxed">
-          Sealing freezes each stage&apos;s byte range, a SHA-256 fingerprint per file and the shared
-          drip id. Nothing uploads yet — every stage publishes separately, whenever you&apos;re ready.
+          Sealing freezes each stage&apos;s byte range, a SHA-256 fingerprint per file, the
+          shared drip id, and the whole-ETH rung bars above — converted from your dollar
+          ladder at the seal-minute rate. Nothing uploads yet — every stage publishes
+          separately, whenever you&apos;re ready.
         </p>
+        {sealedTargets == null && (
+          <p className="text-nano text-destructive flex items-center gap-1.5 font-[family-name:var(--font-ledger)] uppercase tracking-[0.08em]">
+            <AlertCircle className="h-3 w-3" /> Live ETH rate unavailable — sealing stays
+            locked until it resolves.
+          </p>
+        )}
+        {unreachableSealed.length > 0 && ceilingReserveWhole != null && (
+          <p
+            className="text-nano text-destructive flex items-center gap-1.5 font-[family-name:var(--font-ledger)] uppercase tracking-[0.08em]"
+            data-testid="seal-ceiling-error"
+          >
+            <AlertCircle className="h-3 w-3" />{' '}
+            {unreachableSealed.map((i) => stageLabel(i, chunkCount)).join(', ')} seal
+            {unreachableSealed.length === 1 ? 's' : ''} above the curve max (
+            {formatEthWhole(ceilingReserveWhole)}) and can never unlock — lower the ladder
+            or use a token with a larger maxSupply × finalPrice.
+          </p>
+        )}
       </div>
     </div>
   )
@@ -1283,4 +1487,19 @@ function SealPanel({
 function shortAddr(value: string): string {
   if (!value) return ''
   return value.length > 14 ? `${value.slice(0, 8)}…${value.slice(-4)}` : value
+}
+
+/**
+ * Dual-display ETH leg: whole ETH for a USD intent at the live rate, or an
+ * ellipsis while the rate loads. Display only — sealing recomputes from
+ * the same rate at seal minute.
+ */
+function ethText(usd: number, ethUsd: number | null): string {
+  if (ethUsd == null || !Number.isFinite(ethUsd) || ethUsd <= 0) return '… ETH'
+  return `${Math.max(1, Math.round(usd / ethUsd)).toLocaleString('en-US')} ETH`
+}
+
+/** Whole-ETH figure for a sealed target (the enforced number, shown exact). */
+function formatEthWhole(eth: number): string {
+  return `${eth.toLocaleString('en-US')} ETH`
 }

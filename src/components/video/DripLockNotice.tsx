@@ -54,6 +54,16 @@ export function DripLockNotice({ drip, gateTokenOverride }: DripLockNoticeProps)
     marketCapUsd != null && Number.isFinite(marketCapUsd)
       ? Math.max(0, drip.marketCapTargetUsd - marketCapUsd)
       : null
+  // Enforced bar from the sealed gate record (whole ETH the canister
+  // checks). Absent on attribute-only parses — then the USD intent above
+  // is all we can honestly show.
+  const enforcedEth =
+    drip.targetUnit === 'reserve' &&
+    typeof drip.marketCapTarget === 'number' &&
+    Number.isSafeInteger(drip.marketCapTarget) &&
+    drip.marketCapTarget > 0
+      ? drip.marketCapTarget
+      : null
   const tradeUrl = trimmedToken ? buildMintClubUrl(trimmedToken, networkKey) : null
   const tokenLabel = symbol ?? shortenAddress(trimmedToken)
   const shareText =
@@ -123,6 +133,15 @@ export function DripLockNotice({ drip, gateTokenOverride }: DripLockNoticeProps)
           </span>
           )
         </p>
+        {enforcedEth != null && (
+          <p className="text-sm text-fg-4" data-testid="drip-enforced-bar">
+            Enforced bar{' '}
+            <span className="font-medium tabular-nums text-fg-2">
+              {enforcedEth.toLocaleString('en-US')} ETH
+            </span>{' '}
+            — what the canister actually checks
+          </p>
+        )}
         <p className="mx-auto flex max-w-md items-center justify-center gap-1.5 text-sm font-medium text-fg-2">
           <TrendingUp className="h-4 w-4 text-seal-text" aria-hidden />
           {pct != null ? (

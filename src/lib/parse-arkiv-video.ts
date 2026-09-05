@@ -11,6 +11,7 @@
 import type { Video } from '../types/video'
 import type { DripInfo, VideoCodec } from '@/types/video'
 import { parseAnyGateMetadata } from './haven-aol'
+import { isKnownBondAddress } from './v4/market-cap'
 import { parseEntityPayload, type ArkivEntity } from './arkiv'
 import {
   getArkivEntityCreatedAtBlock,
@@ -34,13 +35,18 @@ export interface DripSeriesMeta {
  * Parts carry per-stage facts (`drip_id`, `drip_idx`, `mcap_usd`,
  * `series_ref`); shared facts (title, total, token, chain) come from the
  * series header. `gate_type` is numeric only: 4 = per-marketcap.
+ *
+ * When the part payload is available, the sealed consensus target rides
+ * along from the payload's gate record — but ONLY when its oracle is a
+ * known Bond contract (whole ETH the canister enforces). Anything else
+ * (absent payload, unparseable gate, non-Bond oracle) leaves the sealed
+ * fields off and callers display the USD intent.
  */
 export function parseDripInfo(
   data: Record<string, unknown>,
   payloadData: Record<string, unknown>,
   series?: DripSeriesMeta
 ): DripInfo | undefined {
-  void payloadData
   const gateType = Number(data['gate_type'])
   if (gateType !== 4) return undefined
 
@@ -58,9 +64,35 @@ export function parseDripInfo(
   const gateToken = String(series?.gateToken ?? '')
   const variant = toChainVariant(series?.gateChain)
 
+  let sealed: { marketCapTarget: number; targetUnit: 'usd' | 'reserve' } | undefined
+  try {
+    const gate = parseAnyGateMetadata(
+      (payloadData as Record<string, unknown> | undefined)?.['gate']
+    )
+    if (
+      gate !== null &&
+      typeof gate === 'object' &&
+      (gate as { version?: unknown }).version === 4
+    ) {
+      const v4 = gate as { marketCapTarget?: unknown; oracleAddress?: unknown }
+      if (
+        typeof v4.marketCapTarget === 'number' &&
+        Number.isSafeInteger(v4.marketCapTarget) &&
+        v4.marketCapTarget > 0 &&
+        typeof v4.oracleAddress === 'string' &&
+        isKnownBondAddress(v4.oracleAddress)
+      ) {
+        sealed = { marketCapTarget: v4.marketCapTarget, targetUnit: 'reserve' }
+      }
+    }
+  } catch {
+    // Payload gate unreadable — USD intent display below. Never throw.
+  }
+
   return {
     gateType: 4,
     marketCapTargetUsd: target,
+    ...(sealed ?? {}),
     dripIndex: Number.isFinite(dripIndex) ? dripIndex : 0,
     dripTotal: Number.isFinite(dripTotal) && dripTotal > 0 ? dripTotal : 1,
     dripId,

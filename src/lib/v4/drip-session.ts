@@ -44,6 +44,7 @@ import {
   planDripChunks,
   validateDripConfig,
   type DripChunkPlan,
+  type TargetUnit,
 } from './drip-plan'
 
 // ============================================================================
@@ -182,14 +183,30 @@ export async function createDripSessionFromSlates(args: {
   config: { chunkCount: number; targetsUsd: number[] }
   gate: DripGateConfigSnapshot
   slates: Array<{ fileName: string; fileSize: number; sha256: string }>
+  /**
+   * Sealed consensus targets (whole units in `unit`), computed by the
+   * sealer at seal time — e.g. whole ETH converted from the USD intent at
+   * the seal-minute rate. Stamped verbatim into every stage plan; publish
+   * and derivation enforce THESE numbers. Null-return (refuse to seal)
+   * unless they are present, length-matched, positive safe integers, and
+   * strictly ascending.
+   */
+  sealed: { targets: number[]; unit: TargetUnit }
 }): Promise<DripSession | null> {
-  const { config, slates } = args
+  const { config, slates, sealed } = args
   if (validateDripConfig(config).length > 0) return null
   if (slates.length !== config.chunkCount) return null
   if (!slates.every((s) => Number.isSafeInteger(s.fileSize) && s.fileSize >= 0)) return null
   if (!slates.every((s) => SHA256_HEX_RE.test(s.sha256))) return null
   if (!slates.some((s) => s.fileSize > 0)) return null
   if (!isGateShapeValid(args.gate)) return null
+  if (!Array.isArray(sealed?.targets) || sealed.targets.length !== config.chunkCount) return null
+  if (sealed.unit !== 'usd' && sealed.unit !== 'reserve') return null
+  for (let i = 0; i < sealed.targets.length; i++) {
+    const t = sealed.targets[i]
+    if (!Number.isSafeInteger(t) || t <= 0) return null
+    if (i > 0 && t <= sealed.targets[i - 1]) return null
+  }
 
   const fileSize = slates.reduce((total, s) => total + s.fileSize, 0)
 
@@ -207,6 +224,8 @@ export async function createDripSessionFromSlates(args: {
         startByte: cursor,
         endByte,
         marketCapTargetUsd: config.targetsUsd[i],
+        marketCapTarget: sealed.targets[i],
+        targetUnit: sealed.unit,
       },
       source: {
         fileName: s.fileName,
@@ -558,6 +577,22 @@ export function parseDripManifest(raw: unknown): DripSession | null {
       seenHole = true
     }
 
+    // Sealed consensus fields: absent on legacy sessions (USD intent
+    // applies); present-but-malformed is a hard reject — these numbers
+    // reach the canister verbatim.
+    let sealedPlan: { marketCapTarget: number; targetUnit: TargetUnit } | undefined
+    if (p.marketCapTarget != null || p.targetUnit != null) {
+      if (
+        typeof p.marketCapTarget !== 'number' ||
+        !Number.isSafeInteger(p.marketCapTarget) ||
+        p.marketCapTarget <= 0 ||
+        (p.targetUnit !== 'usd' && p.targetUnit !== 'reserve')
+      ) {
+        return null
+      }
+      sealedPlan = { marketCapTarget: p.marketCapTarget, targetUnit: p.targetUnit }
+    }
+
     stages.push({
       plan: {
         dripIndex: i,
@@ -565,6 +600,7 @@ export function parseDripManifest(raw: unknown): DripSession | null {
         startByte: p.startByte as number,
         endByte: p.endByte as number,
         marketCapTargetUsd: p.marketCapTargetUsd as number,
+        ...(sealedPlan ?? {}),
       },
       result,
       ...(sourceMeta ? { source: sourceMeta } : {}),

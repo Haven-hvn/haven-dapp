@@ -41,7 +41,7 @@ import { mimeToEnum } from '../mime-enum'
 import { havenStreamEncrypt, zeroAesKey } from './streaming-encrypt'
 import { computeDripDerivationInput, wrapAesKey } from './ibe-wrap'
 import { getUploadSynapse, uploadEncryptedPiece } from './synapse-upload'
-import type { DripChunkPlan } from './drip-plan'
+import { sealedTargetOf, type DripChunkPlan } from './drip-plan'
 
 // ============================================================================
 // Entity body (pure — unit tested)
@@ -134,7 +134,7 @@ export function buildDripSeriesBody(args: {
  * so tests can pin the exact wire shapes without mocks.
  */
 export function buildDripPartBody(args: {
-  plan: Pick<DripChunkPlan, 'dripIndex' | 'marketCapTargetUsd'>
+  plan: Pick<DripChunkPlan, 'dripIndex' | 'marketCapTargetUsd' | 'marketCapTarget' | 'targetUnit'>
   gate: DripGateConfig
   pieceCid: string
   /** sha256 hex of the ciphertext bytes (stored bare-lowercase). */
@@ -153,6 +153,10 @@ export function buildDripPartBody(args: {
 
   const threshold = Math.max(1, Math.floor(gate.gateThreshold))
   const targetUsd = Math.round(plan.marketCapTargetUsd)
+  // Consensus target: the sealed value (whole ETH for curve gates), never
+  // the USD intent. `mcap_usd` below stays USD — it is discovery/display,
+  // not consensus.
+  const sealed = sealedTargetOf(plan)
 
   const attributes = [
     { key: 'grp', value: 'haven.video.drip.part' },
@@ -171,7 +175,7 @@ export function buildDripPartBody(args: {
     tokenAddress: gate.gateToken,
     threshold,
     epoch,
-    marketCapTarget: targetUsd,
+    marketCapTarget: sealed.target,
     oracleAddress: gate.oracleAddress,
     encryptedAesKey: encryptedAesKeyB64,
   })
@@ -449,12 +453,15 @@ export async function publishDripStage(
     })
 
     // IBE-wrap the content key to this chunk's v4 identity.
+    // marketCapTarget MUST equal the sealed gate-metadata value above —
+    // derivation and gate disagreeing bricks the chunk for every reader.
+    const derivationSealed = sealedTargetOf(plan)
     const derivationInput = await computeDripDerivationInput({
       chain: gate.chain,
       tokenAddress: gate.gateToken,
       threshold: BigInt(thresholdOf(gate)),
       epoch: BigInt(publishEpoch),
-      marketCapTarget: BigInt(Math.round(plan.marketCapTargetUsd)),
+      marketCapTarget: BigInt(derivationSealed.target),
       cid: upload.pieceCid,
     })
     const encryptedAesKeyB64 = await wrapAesKey(aesKey, derivationInput)

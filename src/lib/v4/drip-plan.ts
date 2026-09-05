@@ -27,9 +27,23 @@ export interface DripChunkPlan {
   startByte: number
   /** Exclusive end byte in the source file. */
   endByte: number
-  /** Market-cap unlock target for this chunk, in whole USD. */
+  /** Market-cap unlock target for this chunk, in whole USD (creator intent). */
   marketCapTargetUsd: number
+  /**
+   * Sealed consensus target (whole units in `targetUnit`), stamped at seal
+   * time. The canister enforces THIS number — the Bond curve is the only
+   * price source, so for curve gates this is whole ETH converted from the
+   * USD intent at the seal-minute rate. Absent on pre-unit sessions, which
+   * read as USD intent (and fail closed against the Bond-only canister
+   * unless their oracle already names the Bond).
+   */
+  marketCapTarget?: number
+  /** Units of `marketCapTarget`. Defaults to `'usd'` when absent. */
+  targetUnit?: TargetUnit
 }
+
+/** Units a sealed rung target is expressed in. The canister is Bond-only. */
+export type TargetUnit = 'usd' | 'reserve'
 
 /** Publisher-supplied drip configuration (pre-validation). */
 export interface DripPlanConfig {
@@ -75,6 +89,129 @@ export const DRIP_TARGET_PRESETS: ReadonlyArray<{
   { label: 'Early · Late', targetsUsd: [2_500_000, 10_000_000] },
   { label: 'Single drop', targetsUsd: [5_000_000] },
 ]
+
+/**
+ * Canonical rung stops (whole USD) for the ladder amount sliders. Targets
+ * stay coarse by construction — snap-to-stop makes sub-stop precision
+ * unrepresentable, which matches the curve-gaming guidance (thin curves
+ * move on single mints; rungs must be wide bars, not fine lines).
+ */
+export const RUNG_USD_STOPS: ReadonlyArray<number> = [
+  1_000_000,
+  2_500_000,
+  5_000_000,
+  10_000_000,
+  25_000_000,
+  50_000_000,
+  100_000_000,
+  250_000_000,
+  500_000_000,
+  1_000_000_000,
+]
+
+/** Index of the greatest stop <= value (0 when value is below all stops). */
+export function nearestStopIndexBelow(value: number): number {
+  let idx = 0
+  for (let i = 0; i < RUNG_USD_STOPS.length; i++) {
+    if (RUNG_USD_STOPS[i] <= value) idx = i
+    else break
+  }
+  return idx
+}
+
+/**
+ * Index of the first stop strictly above value (`RUNG_USD_STOPS.length`
+ * when none). Slider upper bounds derive from this so rungs stay strictly
+ * ascending by construction.
+ */
+export function firstStopIndexAbove(value: number): number {
+  for (let i = 0; i < RUNG_USD_STOPS.length; i++) {
+    if (RUNG_USD_STOPS[i] > value) return i
+  }
+  return RUNG_USD_STOPS.length
+}
+
+/** Smallest stop strictly above value, else double (off-stops headroom). */
+export function nextStopAbove(value: number): number {
+  for (const stop of RUNG_USD_STOPS) {
+    if (stop > value) return stop
+  }
+  return value * 2
+}
+
+/**
+ * Consensus target for a chunk plan: the sealed value when present, else
+ * the USD intent (pre-unit sessions). Publish and derivation MUST use this
+ * — never `marketCapTargetUsd` directly — or Bond gates seal USD numbers
+ * the canister reads as ETH.
+ */
+export function sealedTargetOf(plan: Pick<DripChunkPlan, 'marketCapTarget' | 'marketCapTargetUsd' | 'targetUnit'>): {
+  target: number
+  unit: TargetUnit
+} {
+  if (
+    typeof plan.marketCapTarget === 'number' &&
+    Number.isSafeInteger(plan.marketCapTarget) &&
+    plan.marketCapTarget > 0
+  ) {
+    return { target: plan.marketCapTarget, unit: plan.targetUnit ?? 'usd' }
+  }
+  return { target: Math.round(plan.marketCapTargetUsd), unit: 'usd' }
+}
+
+/**
+ * Seal USD rung intents into whole reserve units (whole ETH) at the
+ * seal-minute rate. Pure — the wizard calls this at seal time and stamps
+ * the result into the session, so the sealed number is exactly what the
+ * canister enforces.
+ *
+ * Returns null when sealing is unsafe: missing rate, non-positive/unsafe
+ * inputs, or rounded values that are not strictly ascending (whole-ETH
+ * rounding can only collide far below realistic rung scales, but the
+ * check is load-bearing — equal adjacent targets would share one bar).
+ */
+export function sealTargetsUsdToReserve(
+  targetsUsd: number[],
+  ethUsdRate: number | null | undefined
+): number[] | null {
+  if (ethUsdRate == null || !Number.isFinite(ethUsdRate) || ethUsdRate <= 0) return null
+  const sealed: number[] = []
+  for (const t of targetsUsd) {
+    if (!Number.isFinite(t) || t <= 0) return null
+    const whole = Math.max(1, Math.round(t / ethUsdRate))
+    if (!Number.isSafeInteger(whole)) return null
+    if (sealed.length > 0 && whole <= sealed[sealed.length - 1]) return null
+    sealed.push(whole)
+  }
+  return sealed
+}
+
+/**
+ * Indexes of sealed (whole-reserve) targets that exceed the token's curve
+ * ceiling (`maxSupply × finalPrice`) and can therefore never unlock.
+ *
+ * Pure — the wizard blocks sealing when this is non-empty. An unknown
+ * ceiling (null/undefined/non-positive) yields `[]` (cannot verify, so no
+ * block); the seal UI must say so rather than staying silent.
+ */
+export function sealedTargetsExceedingCeiling(
+  sealed: number[] | null | undefined,
+  ceilingWhole: number | null | undefined
+): number[] {
+  if (
+    !sealed ||
+    ceilingWhole == null ||
+    !Number.isSafeInteger(ceilingWhole) ||
+    ceilingWhole <= 0
+  ) {
+    return []
+  }
+  const out: number[] = []
+  sealed.forEach((t, i) => {
+    if (Number.isSafeInteger(t) && t > ceilingWhole) out.push(i)
+  })
+  return out
+}
 
 // ============================================================================
 // Validation + planning

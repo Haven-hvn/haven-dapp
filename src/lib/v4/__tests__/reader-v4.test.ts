@@ -95,6 +95,48 @@ describe('parseDripInfo', () => {
       )
     ).toBeUndefined()
   })
+
+  it('attaches the sealed bar from a Bond-oracle payload gate', () => {
+    const payload = {
+      gate: JSON.stringify({
+        version: 4,
+        cid: 'bafybei',
+        chain: 'BaseMainnet',
+        tokenAddress: '0xaa00000000000000000000000000000000000001',
+        threshold: '1',
+        epoch: 0,
+        marketCapTarget: 1563,
+        oracleAddress: '0xc5a076cad94176c2996B32d8466Be1cE757FAa27',
+        encryptedAesKey: 'AAECAwQFBgcICQ==',
+      }),
+    }
+    const drip = parseDripInfo(V4_PART_ATTRS, payload, SERIES)
+    expect(drip?.marketCapTarget).toBe(1563)
+    expect(drip?.targetUnit).toBe('reserve')
+    // USD intent still rides along for display.
+    expect(drip?.marketCapTargetUsd).toBe(5_000_000)
+  })
+
+  it('leaves sealed fields off for non-Bond oracles and bad payloads', () => {
+    const feedPayload = {
+      gate: JSON.stringify({
+        version: 4,
+        cid: 'bafybei',
+        chain: 'BaseMainnet',
+        tokenAddress: '0xaa00000000000000000000000000000000000001',
+        threshold: '1',
+        epoch: 0,
+        marketCapTarget: 5_000_000,
+        oracleAddress: '0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419',
+        encryptedAesKey: 'AAECAwQFBgcICQ==',
+      }),
+    }
+    const legacy = parseDripInfo(V4_PART_ATTRS, feedPayload, SERIES)
+    expect(legacy?.marketCapTarget).toBeUndefined()
+    expect(legacy?.targetUnit).toBeUndefined()
+    const broken = parseDripInfo(V4_PART_ATTRS, { gate: 'not-json' }, SERIES)
+    expect(broken?.marketCapTarget).toBeUndefined()
+  })
 })
 
 describe('parseArkivEntityToVideo v4 integration', () => {

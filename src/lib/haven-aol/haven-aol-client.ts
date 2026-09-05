@@ -398,9 +398,10 @@ export async function batchRequestDecryptionKeyV3(
 // v4 Candid surface (market-cap-gated drip — additive)
 // =============================================================================
 //
-// The v4 request mirrors GateRequestV3 plus `marketCapTarget` (whole USD)
-// and `oracleAddress` (Chainlink aggregator proxy). The error variant adds
-// `MarketCapNotReached` / `InvalidOracle`. Candid shape mirrors the
+// The v4 request mirrors GateRequestV3 plus `marketCapTarget` (whole
+// reserve units — whole ETH for curve gates) and `oracleAddress` (must
+// name the chain's Bond contract; the curve is the only price source).
+// The error variant adds `MarketCapNotReached` / `InvalidOracle`. Candid shape mirrors the
 // canister's backend.did v4 service entries.
 
 const GateRequestV4Type = IDL.Record({
