@@ -41,7 +41,6 @@
     "@ipld/car": "5.4.7",
     "@ipld/dag-pb": "4.1.7",
     "@mint.club/v2-sdk": "2.0.0",
-    "@royalty-router/sdk": "file:../mint-glue-graduate/sdk",
     "@noble/curves": "2.3.0",
     "@noble/hashes": "2.3.0",
     "@radix-ui/react-dialog": "1.1.23",

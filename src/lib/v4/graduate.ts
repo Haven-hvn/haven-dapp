@@ -6,19 +6,17 @@
  * deployed AND a factory address is configured (see env). Chains without a
  * configured factory fall back to mint.club-only (`mint-create.ts`).
  *
- * The SDK is loaded dynamically so the publish wizard keeps its lazy,
- * browser-only footprint for web3 paths.
+ * Launch math comes from the vendored `@/lib/graduate-sdk` copy; the wizard
+ * loads it dynamically so the publish path keeps its lazy browser-only
+ * footprint for web3 code.
  *
  * @module lib/v4/graduate
  */
 
-export interface GraduateDeployment {
+import type { Deployment as SdkDeployment } from '@/lib/graduate-sdk/addresses'
+
+export interface GraduateDeployment extends SdkDeployment {
   chainId: number
-  bond: `0x${string}`
-  bondTokenImplementation: `0x${string}`
-  hook: `0x${string}`
-  poolManager: `0x${string}`
-  wnative: `0x${string}`
   factory: `0x${string}`
 }
 
@@ -102,14 +100,15 @@ export async function createGraduatedToken(
   const d = getGraduateDeployment(chain)
   if (!d) return { address: null, router: null, error: 'Graduate path not configured on this chain' }
   try {
-    const sdk = await import('@royalty-router/sdk')
+    const { recommendedIntent } = await import('@/lib/graduate-sdk/defaults')
+    const { buildLaunch, launch } = await import('@/lib/graduate-sdk/launch')
     const wallet = walletClient as { account?: { address: `0x${string}` } }
     const feeRecipient =
       args.feeRecipient ?? wallet.account?.address ?? ('0x0000000000000000000000000000000000000000' as const)
     // Recommended tokenomics: 15% royalty both ways, 0.3% pool fee, 100%
     // compounding, smooth 20-step geometric curve over the wizard's
     // 1B-supply / 0.0000001→0.00001 ETH range, swap-free WETH-reserve route.
-    const intent = sdk.recommendedIntent({
+    const intent = recommendedIntent({
       name: name.trim(),
       symbol: symbol.trim(),
       reserveToken: d.wnative,
@@ -121,14 +120,14 @@ export async function createGraduatedToken(
         endPrice: 10_000_000_000_000n, // 0.00001 ETH
       },
     })
-    const built = await sdk.buildLaunch(
-      publicClient as Parameters<typeof sdk.buildLaunch>[0],
+    const built = await buildLaunch(
+      publicClient as Parameters<typeof buildLaunch>[0],
       d,
       intent
     )
-    const r = await sdk.launch(
-      publicClient as Parameters<typeof sdk.launch>[0],
-      walletClient as Parameters<typeof sdk.launch>[1],
+    const r = await launch(
+      publicClient as Parameters<typeof launch>[0],
+      walletClient as Parameters<typeof launch>[1],
       d,
       built
     )
