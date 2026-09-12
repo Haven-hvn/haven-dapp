@@ -1,5 +1,5 @@
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
-import { mainnet, sepolia } from '@reown/appkit/networks'
+import { mainnet, sepolia, optimism, base, arbitrum } from '@reown/appkit/networks'
 import type { AppKitNetwork } from '@reown/appkit/networks'
 
 // Get projectId from https://dashboard.reown.com
@@ -9,7 +9,7 @@ if (!projectId) {
   console.warn('NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID is not defined. WalletConnect will not work.')
 }
 
-export const networks = [mainnet, sepolia] as [AppKitNetwork, ...AppKitNetwork[]]
+export const networks = [optimism, base, arbitrum, mainnet, sepolia] as [AppKitNetwork, ...AppKitNetwork[]]
 
 // Set up the Wagmi Adapter (Config)
 export const wagmiAdapter = new WagmiAdapter({

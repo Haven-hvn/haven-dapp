@@ -19,7 +19,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useWalletClient } from 'wagmi'
+import { usePublicClient, useWalletClient } from 'wagmi'
 import {
   AlertCircle,
   ArrowRight,
@@ -50,6 +50,7 @@ import { createDripSessionFromSlates, saveDripSession, type DripSession } from '
 import { sha256Hex } from '@/lib/crypto'
 import { resolveMintToken } from '@/lib/v4/market-cap'
 import { createMintClubToken } from '@/lib/v4/mint-create'
+import { isGraduationSupported, launchModeFor } from '@/lib/v4/launch-venues'
 import { useEthUsd, useMarketCap, useTokenCeiling } from '@/hooks/useMarketCap'
 import { useToast } from '@/hooks/useToast'
 import { VALID_CHAINS, type Chain } from 'haven-aol'
@@ -80,6 +81,7 @@ export interface CreateWizardProps {
 export function CreateWizard({ onSealed }: CreateWizardProps) {
   const toast = useToast()
   const { data: walletClient } = useWalletClient()
+  const publicClient = usePublicClient()
 
   const [step, setStep] = useState<StepId>('ladder')
 
@@ -110,7 +112,7 @@ export function CreateWizard({ onSealed }: CreateWizardProps) {
   const [bondAddress, setBondAddress] = useState<string | null>(null)
   const [resolving, setResolving] = useState(false)
   const [resolveError, setResolveError] = useState<string | null>(null)
-  const [chain, setChain] = useState<Chain>('BaseMainnet')
+  const [chain, setChain] = useState<Chain>('OptimismMainnet')
   const [threshold, setThreshold] = useState(1)
 
   // 04 — seal -----------------------------------------------------------------
@@ -166,7 +168,7 @@ export function CreateWizard({ onSealed }: CreateWizardProps) {
     ArbitrumOne: 'arbitrum',
     OptimismMainnet: 'optimism',
   }
-  const networkHint = havenChainToMintNetwork[chain] ?? 'base'
+  const networkHint = havenChainToMintNetwork[chain] ?? 'optimism'
   const { marketCapUsd } = useMarketCap(resolvedToken?.address ?? null, networkHint)
   // Seal-minute ETH rate: converts USD rung intent into the whole-ETH
   // targets the canister enforces. Null blocks sealing (fail closed).
@@ -309,6 +311,39 @@ export function CreateWizard({ onSealed }: CreateWizardProps) {
     }
     setCreatingToken(true)
     setCreateError(null)
+    // Graduate path first on Glue + Uniswap + mint.club chains: one tx
+    // creates the bond token, the V4 pool, and the royalty router that
+    // locks liquidity. Falls back to mint.club-only (0 fee) when no
+    // factory is configured or the graduate launch fails before broadcast.
+    if (isGraduationSupported(chain)) {
+      const { getGraduateDeployment, createGraduatedToken } = await import('@/lib/v4/graduate')
+      if (getGraduateDeployment(chain) != null && publicClient != null) {
+        const g = await createGraduatedToken({
+          publicClient: publicClient as unknown,
+          walletClient: walletClient as unknown,
+          chain,
+          name: newTokenName,
+          symbol: newTokenSymbol,
+        })
+        setCreatingToken(false)
+        if (g.address) {
+          setResolvedToken({ address: g.address, symbol: newTokenSymbol })
+          toast.showSuccess('Graduated token created: ' + g.address)
+          return
+        }
+        // Pre-broadcast failures (bad input, symbol taken, simulation)
+        // fall through to mint.club-only; post-broadcast failure is
+        // returned as an error above only when nothing was sent.
+        if (g.error != null && /not configured/i.test(g.error)) {
+          // fall through
+        } else if (g.address == null && g.txHash == null) {
+          // Simulation / pre-flight failure: surface it, don't silently
+          // downgrade to a different token shape.
+          setCreateError(g.error ?? 'Graduate launch failed')
+          return
+        }
+      }
+    }
     const r = await createMintClubToken({
       walletClient: walletClient as Parameters<typeof createMintClubToken>[0]['walletClient'],
       network: networkHint,
@@ -324,7 +359,7 @@ export function CreateWizard({ onSealed }: CreateWizardProps) {
     } else {
       setCreateError(r.error ?? 'Create failed')
     }
-  }, [walletClient, networkHint, newTokenName, newTokenSymbol, toast])
+  }, [walletClient, publicClient, chain, networkHint, newTokenName, newTokenSymbol, toast])
 
   // Handlers — seal --------------------------------------------------------------
   // Sealing is only possible with a live ETH rate: Bond targets are whole
@@ -503,6 +538,7 @@ export function CreateWizard({ onSealed }: CreateWizardProps) {
                   ceilingLoading={ceilingLoading}
                   chain={chain}
                   onChain={setChain}
+                  networkHint={networkHint}
                   threshold={threshold}
                   onThreshold={setThreshold}
                   onNext={goNext}
@@ -1063,6 +1099,8 @@ interface GatePanelProps {
   ceilingLoading: boolean
   chain: Chain
   onChain: (c: Chain) => void
+  /** Mint.club network key for the active gate chain (display label). */
+  networkHint: string
   threshold: number
   onThreshold: (n: number) => void
   onNext: () => void
@@ -1092,6 +1130,7 @@ function GatePanel(props: GatePanelProps) {
     ceilingLoading,
     chain,
     onChain,
+    networkHint,
     threshold,
     onThreshold,
     onNext,
@@ -1155,7 +1194,7 @@ function GatePanel(props: GatePanelProps) {
                   <Loader2 className="h-4 w-4 animate-spin" /> Minting…
                 </>
               ) : (
-                'Mint token on ' + (chain === 'BaseMainnet' ? 'base' : chain.toLowerCase())
+                'Mint token on ' + networkHint
               )}
             </button>
             {!walletConnected && (
@@ -1263,6 +1302,15 @@ function GatePanel(props: GatePanelProps) {
               </option>
             ))}
           </select>
+          {launchModeFor(chain) === 'mint-only' ? (
+            <p className="text-nano text-fg-4 mt-2 font-[family-name:var(--font-ledger)] uppercase tracking-[0.08em]">
+              Mint.club only on this chain — 0 creator fee, no liquidity pool.
+            </p>
+          ) : (
+            <p className="text-nano text-fg-4 mt-2 font-[family-name:var(--font-ledger)] uppercase tracking-[0.08em]">
+              Graduates to Uniswap on this chain — 15% royalty auto-locked as liquidity.
+            </p>
+          )}
         </div>
         <div>
           <label className="block label mb-2">Holder threshold</label>
