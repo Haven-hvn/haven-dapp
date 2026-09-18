@@ -66,8 +66,7 @@ jobs:
           NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL || 'https://haven.pinme.eth.limo/' }}
           NEXT_PUBLIC_ALCHEMY_API_KEY: ${{ secrets.NEXT_PUBLIC_ALCHEMY_API_KEY }}
           NEXT_PUBLIC_ALCHEMY_RPC: ${{ secrets.NEXT_PUBLIC_ALCHEMY_RPC }}
-          NEXT_PUBLIC_ARKIV_RPC_URL: ${{ secrets.NEXT_PUBLIC_ARKIV_RPC_URL || 'https://braga.hoodi.arkiv.network/rpc' }}
-          NEXT_PUBLIC_ARKIV_API_URL: ${{ secrets.NEXT_PUBLIC_ARKIV_API_URL || 'https://braga.hoodi.arkiv.network/api' }}
+          NEXT_PUBLIC_ARKIV_RPC_URL: ${{ secrets.NEXT_PUBLIC_ARKIV_RPC_URL || 'https://rpc.tiramisu.db-chain.testnet.arkiv.network' }}
           NEXT_PUBLIC_LIT_NETWORK: ${{ secrets.NEXT_PUBLIC_LIT_NETWORK || 'naga-dev' }}
         run: |
           echo "Building Next.js application..."

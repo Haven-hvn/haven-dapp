@@ -33,7 +33,7 @@
     "postinstall": "node scripts/ensure-haven-aol.mjs"
   },
   "dependencies": {
-    "@arkiv-network/sdk": "0.7.0",
+    "@arkiv-network/sdk": "^0.8.1",
     "@base-org/account": "2.5.10",
     "@filoz/synapse-sdk": "1.1.1",
     "@icp-sdk/core": "6.1.0",

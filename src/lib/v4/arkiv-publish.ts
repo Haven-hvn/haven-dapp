@@ -10,11 +10,14 @@
  *     `drip_idx`, `series_ref`, `mcap_usd`, `sha256_ct` + payload
  *     `{ piece, gate }` — 12-week BTL, refreshed with EXTEND while active.
  *
- * Attribute values are SDK 0.7.0 `{key, value: string|number}` (integers
- * only): `gate_token` is a lowercase-hex str (spec `addr`), `sha256_ct` a
- * hex str (spec `bytes32`), `series_ref` the series entity key hex
- * (spec `key` — no key constructor exists yet, so string equality), and
- * `gate_chain` the EIP-155 id (see `lib/gate-chains`).
+ * Attribute values are bare SDK 0.8 `AttributeInputs` (string → `str`,
+ * number → `i32` — the exact wire types 0.7 wrote): `gate_token` is a
+ * lowercase-hex str (spec `addr`), `sha256_ct` a hex str (spec `bytes32`),
+ * `series_ref` the series entity key hex (spec `key`), and `gate_chain`
+ * the EIP-155 id (see `lib/gate-chains`). Bare values are deliberate —
+ * comparisons are type-exact, so tagged constructors would fragment
+ * discovery between dapp-written and CLI-written entities (see
+ * `lib/arkiv-attrs`).
  *
  * `publishDripStage` runs ONE unlock stage end-to-end: slice -> stream-
  * encrypt -> pin to Filecoin -> IBE-wrap content key -> index in Arkiv.
@@ -30,11 +33,16 @@ import {
   custom,
   type WalletClient,
 } from 'viem'
-import { braga } from '@arkiv-network/sdk/chains'
-import { createWalletClient as createArkivWalletClient } from '@arkiv-network/sdk'
-import { jsonToPayload } from '@arkiv-network/sdk/utils'
+import { tiramisu } from '@arkiv-network/sdk/chains'
+import {
+  createWalletClient as createArkivWalletClient,
+  type QueryOptions,
+} from '@arkiv-network/sdk'
+import type { AttributeInputs } from '@arkiv-network/sdk/attr'
+import { ExpirationTime, jsonToPayload } from '@arkiv-network/sdk/utils'
 import type { Chain as HavenChain } from 'haven-aol'
 import { VALID_CHAINS, buildGateMetadataV4 } from 'haven-aol'
+import { toAttributeInputs, toAttributeRecord } from '../arkiv-attrs'
 import { sha256Hex } from '../crypto'
 import { toChainId } from '../gate-chains'
 import { mimeToEnum } from '../mime-enum'
@@ -198,20 +206,13 @@ export interface SeriesStore {
   createEntity: (args: {
     payload: Uint8Array
     contentType: string
-    attributes: Array<{ key: string; value: string | number }>
-    expiresIn: number
+    attributes: AttributeInputs
+    expires: ReturnType<typeof ExpirationTime.fromWeeks>
   }) => Promise<{ entityKey: string }>
   query?: (
     query: string,
-    opts?: unknown
-  ) => Promise<{ entities?: Array<{ key?: string; attributes?: Array<{ key: string; value: unknown }> }> }>
-}
-
-function findAttr(
-  attrs: Array<{ key: string; value: unknown }> | undefined,
-  key: string
-): unknown {
-  return attrs?.find((a) => a.key === key)?.value
+    opts?: QueryOptions
+  ) => Promise<{ entities?: Array<{ key?: string; attributes?: unknown }> }>
 }
 
 /**
@@ -236,10 +237,10 @@ export async function ensureDripSeries(
   if (store.query) {
     try {
       const result = await store.query(`drip_id = "${args.dripId}"`, {
-        resultsPerPage: 5,
+        limit: 5,
       })
       for (const entity of result?.entities ?? []) {
-        if (findAttr(entity.attributes, 'grp') === 'haven.video.drip.series') {
+        if (toAttributeRecord(entity.attributes)['grp'] === 'haven.video.drip.series') {
           return String(entity.key)
         }
       }
@@ -252,14 +253,14 @@ export async function ensureDripSeries(
   const { entityKey } = await store.createEntity({
     payload: jsonToPayload(body.payloadJson),
     contentType: 'application/json',
-    attributes: body.attributes,
-    expiresIn: DRIP_SERIES_EXPIRES_IN_SECONDS,
+    attributes: toAttributeInputs(body.attributes),
+    expires: ExpirationTime.fromWeeks(DRIP_SERIES_LIFETIME_WEEKS),
   })
   return entityKey
 }
 
 // ============================================================================
-// Braga wallet client (writes)
+// Tiramisu wallet client (writes)
 // ============================================================================
 
 export interface PublisherWalletLike {
@@ -269,7 +270,7 @@ export interface PublisherWalletLike {
 
 /**
  * Build an Arkiv wallet client bound to the connected browser provider.
- * Best-effort switches the wallet to the Braga network first; rejection is
+ * Best-effort switches the wallet to the Tiramisu network first; rejection is
  * surfaced as a descriptive error because writes will fail otherwise.
  */
 export async function createArkivWriteClient(
@@ -285,16 +286,16 @@ export async function createArkivWriteClient(
   try {
     await (provider as { request: (args: unknown) => Promise<unknown> }).request({
       method: 'wallet_switchEthereumChain',
-      params: [{ chainId: '0x' + braga.id.toString(16) }],
+      params: [{ chainId: '0x' + tiramisu.id.toString(16) }],
     })
   } catch {
     // User rejected the switch or the network needs adding — proceed and let
-    // createEntity fail loudly if the wallet really cannot sign on Braga.
+    // createEntity fail loudly if the wallet really cannot sign on Tiramisu.
   }
 
   return createViemWalletClient({
     account: wallet.account.address as `0x${string}`,
-    chain: braga,
+    chain: tiramisu,
     transport: custom(provider as never),
   })
 }
@@ -408,14 +409,14 @@ export async function publishDripStage(
     )
   }
 
-  // Performs the Braga network switch (best-effort) before any writes.
+  // Performs the Tiramisu network switch (best-effort) before any writes.
   await createArkivWriteClient(wallet)
   const provider = extractProvider(wallet.transport)
   if (!provider) {
     throw new DripPublishError('Wallet provider unavailable for Arkiv writes', plan.dripIndex, 'indexing')
   }
   const arkivClient = createArkivWalletClient({
-    chain: braga,
+    chain: tiramisu,
     transport: custom(provider as never),
     account: wallet.account.address as `0x${string}`,
   })
@@ -496,8 +497,8 @@ export async function publishDripStage(
     const { entityKey } = await arkivClient.createEntity({
       payload: jsonToPayload(body.payloadJson),
       contentType: 'application/json',
-      attributes: body.attributes,
-      expiresIn: DRIP_PART_EXPIRES_IN_SECONDS,
+      attributes: toAttributeInputs(body.attributes),
+      expires: ExpirationTime.fromWeeks(DRIP_PART_LIFETIME_WEEKS),
     })
 
     report({
@@ -548,7 +549,7 @@ export async function publishDripChunks(args: PublishDripArgs): Promise<string[]
     throw new DripPublishError('Wallet provider unavailable for Arkiv writes', -1, 'indexing')
   }
   const arkivClient = createArkivWalletClient({
-    chain: braga,
+    chain: tiramisu,
     transport: custom(provider as never),
     account: wallet.account.address as `0x${string}`,
   })
@@ -587,10 +588,10 @@ export async function publishDripChunks(args: PublishDripArgs): Promise<string[]
 }
 
 /** Series header lifetime: 52 weeks (outlives its parts). */
-const DRIP_SERIES_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 7 * 52
+const DRIP_SERIES_LIFETIME_WEEKS = 52
 
 /** Part lifetime: 12 weeks — refreshed with EXTEND while the series is active. */
-const DRIP_PART_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 7 * 12
+const DRIP_PART_LIFETIME_WEEKS = 12
 
 function thresholdOf(gate: DripGateConfig): number {
   return Math.max(1, Math.floor(gate.gateThreshold))

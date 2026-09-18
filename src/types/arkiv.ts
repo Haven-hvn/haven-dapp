@@ -65,33 +65,33 @@ export interface ArkivEntity {
 export interface ArkivSdkEntity {
   /** Entity key (hex string) */
   key: `0x${string}`
-  
+
   /** Content MIME type */
   contentType?: string
-  
+
   /** Owner address */
   owner?: `0x${string}`
-  
+
   /** Block number when entity expires (undefined = never) */
   expiresAtBlock?: bigint
-  
+
   /** Block number when entity was created */
   createdAtBlock?: bigint
-  
+
   /** Block number when entity was last modified */
   lastModifiedAtBlock?: bigint
-  
+
   /** Transaction index within the block */
   transactionIndexInBlock?: bigint
-  
+
   /** Operation index within the transaction */
   operationIndexInTransaction?: bigint
-  
+
   /** Raw payload bytes */
   payload?: Uint8Array
-  
-  /** Array of attributes */
-  attributes: ArkivSdkAttribute[]
+
+  /** Attributes as read back (SDK 0.8 tagged map) */
+  attributes: Record<string, ArkivSdkAttribute>
 }
 
 // ============================================================================
@@ -148,15 +148,14 @@ export interface ArkivAttributes {
 }
 
 /**
- * Single attribute as stored by the SDK.
- * The SDK stores attributes as an array of key-value pairs.
+ * Single attribute value as read back by the SDK (0.8 tagged form).
  */
 export interface ArkivSdkAttribute {
-  /** Attribute key */
-  key: string
-  
-  /** Attribute value (string or number) */
-  value: string | number
+  /** Attribute type tag (`str`, `i32`, `addr`, …) */
+  type: string
+
+  /** Decoded attribute value */
+  value: string | number | boolean | bigint
 }
 
 // ============================================================================
@@ -382,39 +381,39 @@ export class ArkivError extends Error {
 // ============================================================================
 
 /**
- * Convert attributes array to record object.
- * 
- * @param attributes - Array of SDK attributes
+ * Convert a tagged attribute map to a bare record object.
+ *
+ * @param attributes - SDK 0.8 tagged attribute map
  * @returns Record object for easier access
  */
 export function attributesArrayToRecord(
-  attributes: ArkivSdkAttribute[]
-): Record<string, string | number> {
-  const record: Record<string, string | number> = {}
-  
-  for (const attr of attributes) {
-    record[attr.key] = attr.value
+  attributes: Record<string, ArkivSdkAttribute>
+): Record<string, string | number | boolean | bigint> {
+  const record: Record<string, string | number | boolean | bigint> = {}
+
+  for (const [key, attr] of Object.entries(attributes)) {
+    record[key] = attr.value
   }
-  
+
   return record
 }
 
 /**
- * Convert attributes record to array format.
- * 
+ * Convert a bare record to bare SDK attribute inputs.
+ *
  * @param record - Record object
- * @returns Array of SDK attributes
+ * @returns Bare-value map for `createEntity`
  */
 export function attributesRecordToArray(
-  record: Record<string, string | number | undefined>
-): ArkivSdkAttribute[] {
-  const array: ArkivSdkAttribute[] = []
-  
+  record: Record<string, string | number | boolean | bigint | undefined>
+): Record<string, string | number | boolean | bigint> {
+  const out: Record<string, string | number | boolean | bigint> = {}
+
   for (const [key, value] of Object.entries(record)) {
     if (value !== undefined) {
-      array.push({ key, value })
+      out[key] = value
     }
   }
-  
-  return array
+
+  return out
 }

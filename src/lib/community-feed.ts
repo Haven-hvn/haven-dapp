@@ -23,8 +23,9 @@ import {
   type CommunityVideo,
   type TokenGate,
 } from '@/types/attestation'
-import type { PublicArkivClient, Entity } from '@arkiv-network/sdk'
+import type { PublicArkivClient } from '@arkiv-network/sdk'
 import { eq } from '@arkiv-network/sdk/query'
+import { toAttributeRecord } from './arkiv-attrs'
 import type { Transport, Chain } from 'viem'
 
 // ============================================================================
@@ -67,22 +68,21 @@ export async function discoverUserCommunities(
   walletAddress: string
 ): Promise<TokenGate[]> {
   const result = await client
-    .buildQuery()
+    .select({ key: true, attributes: true })
     .where([eq('grp', 'haven.video.full')])
     .ownedBy(walletAddress.toLowerCase() as `0x${string}`)
-    .withAttributes(true)
     .limit(200)
     .fetch()
 
   const gateMap = new Map<string, TokenGate>()
 
   for (const entity of result.entities) {
-    const attrs = entity.attributes
-    if (!attrs || attrs.length === 0) continue
+    const attrs = toAttributeRecord(entity.attributes)
+    if (Object.keys(attrs).length === 0) continue
 
-    const gateToken = attrs.find((a) => a.key === 'gate_token')?.value as string | undefined
-    const gateChainRaw = attrs.find((a) => a.key === 'gate_chain')?.value as string | number | undefined
-    const gateThreshold = attrs.find((a) => a.key === 'gate_threshold')?.value as number | undefined
+    const gateToken = attrs['gate_token'] as string | undefined
+    const gateChainRaw = attrs['gate_chain'] as string | number | undefined
+    const gateThreshold = attrs['gate_threshold'] as number | undefined
     const gateChain = toChainVariant(gateChainRaw)
 
     if (gateToken && gateChain) {
@@ -116,17 +116,14 @@ export async function fetchCommunityFeedForToken(
   const chainId = toChainId(gate.chain)
   const where = [eq('grp', 'haven.video.full'), eq('gate_token', gate.tokenAddress)]
   if (chainId !== undefined) where.push(eq('gate_chain', chainId))
+  // SDK 0.8 has no server-side ordering — sort newest-first below.
   const result = await client
-    .buildQuery()
+    .select()
     .where(where)
-    .orderBy('$createdAtBlock', 'number', 'desc')
-    .withPayload(true)
-    .withAttributes(true)
-    .withMetadata(true)
     .limit(limit)
     .fetch()
 
-  return result.entities.map((entity: Entity) => {
+  const videos = result.entities.map((entity) => {
     // Entity payload is Uint8Array — decode to base64 for parseEntityPayload
     let payloadStr = ''
     if (entity.payload) {
@@ -138,9 +135,9 @@ export async function fetchCommunityFeedForToken(
     const payload = parseEntityPayload<Record<string, unknown>>(payloadStr) || {}
     const attestation = (payload.attn as Attestation | undefined) || null
 
-    const attrs = entity.attributes || []
+    const attrs = toAttributeRecord(entity.attributes)
     const getAttr = (key: string): string | number | undefined =>
-      attrs.find((a) => a.key === key)?.value
+      attrs[key] as string | number | undefined
 
     // Surface the entity's own bound fields so verifyFeed can cross-check
     // the attestation against them. The query-time `gate` is what the caller
@@ -158,7 +155,7 @@ export async function fetchCommunityFeedForToken(
       gateToken: gate.tokenAddress,
       gateChain: entityGateChain,
       gateThreshold: entityGateThreshold ?? gate.threshold,
-      createdAtBlock: entity.createdAtBlock ? Number(entity.createdAtBlock) : 0,
+      createdAtBlock: entity.createdAt ? Number(entity.createdAt) : 0,
       // Gate presence decides encryption — 2.0 carries no is_encrypted flag.
       isEncrypted: contentGate !== null,
       cidHash: entitySha256Ct,
@@ -166,6 +163,9 @@ export async function fetchCommunityFeedForToken(
       verified: false, // Set in verification step
     }
   })
+
+  videos.sort((a, b) => b.createdAtBlock - a.createdAtBlock)
+  return videos
 }
 
 /**

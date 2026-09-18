@@ -1,7 +1,9 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { and, eq } from '@arkiv-network/sdk/query'
 import { normalizeCid } from '@/lib/ipfs'
 import { createArkivClient, parseEntityPayload } from '@/lib/arkiv'
+import { toAttributeRecord } from '@/lib/arkiv-attrs'
 import { parseDripInfo, type DripSeriesMeta } from '@/lib/parse-arkiv-video'
 import { toNetworkKey } from '@/lib/gate-chains'
 import { formatUsdCompact } from '@/lib/v4/drip-plan'
@@ -99,22 +101,18 @@ export function UpcomingDrops() {
         // for list rows) and join each distinct drip_id to its series header
         // once for title/total/token/chain.
         //
-        // NOTE: single-equality queries + client-side `grp` filtering — the
-        // pinned SDK (0.7.0) predates the AND/STARTSWITH/tagged-literal
-        // dialect documented in the spec cookbook.
-        const result: any = await (client as any).query(
-          'gate_type = 4',
-          { resultsPerPage: 24, includeData: { payload: false, attributes: true, metadata: true } }
-        )
-        const entities: any[] = (result?.entities ?? []).filter((e: any) =>
-          (e.attributes ?? []).some(
-            (a: any) => a.key === 'grp' && a.value === 'haven.video.drip.part'
-          )
+        // Bare eq() values map to str/i32 — the same types writers emit.
+        const result = await client
+          .select({ key: true, attributes: true })
+          .where([and(eq('grp', 'haven.video.drip.part'), eq('gate_type', 4))])
+          .limit(24)
+          .fetch()
+        const entities = result.entities.filter(
+          (e) => toAttributeRecord(e.attributes)['grp'] === 'haven.video.drip.part'
         )
         if (entities.length === 0) throw new Error('no drips')
-        const parts = entities.map((e: any) => {
-          const attrs: Record<string, unknown> = {}
-          for (const a of (e.attributes ?? [])) attrs[a.key] = a.value
+        const parts = entities.map((e) => {
+          const attrs = toAttributeRecord(e.attributes)
           return { key: String(e.key), attrs }
         })
         // One series fetch per distinct drip_id.
@@ -123,18 +121,16 @@ export function UpcomingDrops() {
         await Promise.all(
           dripIds.map(async (dripId) => {
             try {
-              const s: any = await (client as any).query(`drip_id = "${dripId}"`, {
-                resultsPerPage: 5,
-                includeData: { payload: true, attributes: true, metadata: false },
-              })
-              const se = (s?.entities ?? []).find((e: any) =>
-                (e.attributes ?? []).some(
-                  (a: any) => a.key === 'grp' && a.value === 'haven.video.drip.series'
-                )
+              const s = await client
+                .select({ key: true, attributes: true, payload: true })
+                .where([eq('drip_id', dripId)])
+                .limit(5)
+                .fetch()
+              const se = s.entities.find(
+                (e) => toAttributeRecord(e.attributes)['grp'] === 'haven.video.drip.series'
               )
               if (!se) return
-              const sattrs: Record<string, unknown> = {}
-              for (const a of (se.attributes ?? [])) sattrs[a.key] = a.value
+              const sattrs = toAttributeRecord(se.attributes)
               let spayload: Record<string, unknown> = {}
               try {
                 if (typeof se.payload === 'string') spayload = parseEntityPayload<Record<string, unknown>>(se.payload) ?? {}
@@ -182,7 +178,7 @@ export function UpcomingDrops() {
   return (
     <div data-testid="upcoming-drops">
       {isDemo && drops !== null && (
-        <p className="label text-fg-5 px-1 pb-2">Demo preview — Arkiv L3 (braga.hoodi.arkiv.network) is indexing haven drips</p>
+        <p className="label text-fg-5 px-1 pb-2">Demo preview — Arkiv L3 (tiramisu) is indexing haven drips</p>
       )}
       <div className="grid gap-3 max-h-[520px] overflow-y-auto pr-1">
         {items.map((item) => (

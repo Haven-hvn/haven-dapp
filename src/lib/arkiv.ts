@@ -9,15 +9,15 @@
  * pagination, and entity parsing correctly.
  */
 
-import { 
-  createPublicClient, 
-  type Entity, 
-  type QueryOptions, 
-  type QueryReturnType,
+import {
+  createPublicClient,
+  type Entity,
   type PublicArkivClient,
+  NoEntityFoundError,
 } from '@arkiv-network/sdk'
 import { http, type Hex, type Transport, type Chain } from 'viem'
-import { braga } from '@arkiv-network/sdk/chains'
+import { tiramisu } from '@arkiv-network/sdk/chains'
+import { toAttributeRecord } from './arkiv-attrs'
 import {
   parseCreatedAtBlock,
   pickLatestArkivEntity,
@@ -28,7 +28,7 @@ import {
 // ============================================================================
 
 const ARKIV_RPC_URL = process.env.NEXT_PUBLIC_ARKIV_RPC_URL ||
-  'https://braga.hoodi.arkiv.network/rpc'
+  'https://rpc.tiramisu.db-chain.testnet.arkiv.network'
 
 // ============================================================================
 // Types
@@ -99,7 +99,7 @@ export class ArkivError extends Error {
  * This client is optimized for browser environments and read-only operations.
  * For read-only queries, no private key is required.
  * 
- * @returns A PublicArkivClient instance configured for the Braga chain
+ * @returns A PublicArkivClient instance configured for the Tiramisu chain
  * 
  * @example
  * ```typescript
@@ -112,7 +112,7 @@ export function createArkivClient(): PublicArkivClient<Transport, Chain | undefi
   const transport = http(ARKIV_RPC_URL)
   
   return createPublicClient({
-    chain: braga,
+    chain: tiramisu,
     transport,
   }) as PublicArkivClient<Transport, Chain | undefined, undefined>
 }
@@ -145,26 +145,29 @@ export async function queryEntitiesByOwner(
     cursor,
     includePayload = true,
     includeAttributes = true,
-    includeMetadata = true,
   } = options
 
-  // Build query string for owner filter
-  const query = `$owner = "${ownerAddress.toLowerCase()}"`
-
-  // Build query options
-  const queryOptions: QueryOptions = {
-    includeData: {
-      payload: includePayload,
-      attributes: includeAttributes,
-      metadata: includeMetadata,
-    },
-    resultsPerPage: maxResults,
-    ...(cursor && { cursor }),
+  // Identity fields are always selected (cheap, and transformEntity needs
+  // owner + creation block); payload/attributes honor the include flags so
+  // list rows never over-fetch sealed bytes.
+  const selection: Record<string, boolean> = {
+    key: true,
+    owner: true,
+    creator: true,
+    createdAt: true,
+    contentType: true,
   }
+  if (includeAttributes) selection.attributes = true
+  if (includePayload) selection.payload = true
 
   try {
-    const result: QueryReturnType = await client.query(query, queryOptions)
-    
+    const builder = client
+      .select(selection)
+      .ownedBy(ownerAddress.toLowerCase() as Hex)
+      .limit(maxResults)
+    if (cursor) builder.cursor(cursor)
+    const result = await builder.fetch()
+
     // Transform SDK Entity to our ArkivEntity format
     return result.entities.map(transformEntity)
   } catch (error) {
@@ -189,13 +192,18 @@ export async function getEntity(
 ): Promise<ArkivEntity | null> {
   try {
     const entity: Entity = await client.getEntity(entityKey as `0x${string}`)
-    
+
     if (!entity) {
       return null
     }
-    
+
     return transformEntity(entity)
   } catch (error) {
+    // 0.8 throws on missing keys where 0.7 returned empty — preserve the
+    // historical null-on-missing contract for existing callers.
+    if (error instanceof NoEntityFoundError) {
+      return null
+    }
     throw new ArkivError(
       error instanceof Error ? error.message : 'Failed to get entity',
       'GET_ERROR',
@@ -245,24 +253,15 @@ export async function getAllEntitiesByOwner(
   let hasMore = true
   
   while (hasMore && allEntities.length < maxResults) {
-    const options: ArkivQueryOptions = {
-      maxResults: Math.min(50, maxResults - allEntities.length),
-      cursor,
-    }
-    
-    const query = `$owner = "${ownerAddress.toLowerCase()}"`
-    const queryOptions: QueryOptions = {
-      includeData: {
-        payload: true,
-        attributes: true,
-        metadata: true,
-      },
-      resultsPerPage: options.maxResults,
-      ...(cursor && { cursor }),
-    }
-    
+    const pageSize = Math.min(50, maxResults - allEntities.length)
+
     try {
-      const result: QueryReturnType = await client.query(query, queryOptions)
+      const builder = client
+        .select()
+        .ownedBy(ownerAddress.toLowerCase() as Hex)
+        .limit(pageSize)
+      if (cursor) builder.cursor(cursor)
+      const result = await builder.fetch()
       const entities = result.entities.map(transformEntity)
       
       allEntities.push(...entities)
@@ -283,38 +282,21 @@ export async function getAllEntitiesByOwner(
 /**
  * Get the single most recently created entity for an owner.
  *
- * Uses Arkiv query ordering by `$createdAtBlock` descending with a limit of 1
- * so the library does not paginate through the full entity history.
+ * SDK 0.8 has no server-side ordering, so this fetches the owner's recent
+ * page and picks the highest creation block client-side.
  */
 export async function getLatestEntityByOwner(
   client: PublicArkivClient<Transport, Chain | undefined, undefined>,
   ownerAddress: string
 ): Promise<ArkivEntity | null> {
-  const owner = ownerAddress.toLowerCase() as Hex
-
   try {
-    const result = await client
-      .buildQuery()
-      .ownedBy(owner)
-      .orderBy('$createdAtBlock', 'number', 'desc')
-      .withAttributes(true)
-      .withMetadata(true)
-      .withPayload(true)
-      .limit(1)
-      .fetch()
-
-    const ordered = result.entities[0]
-    if (ordered) {
-      return transformEntity(ordered)
-    }
-
-    const fallback = await queryEntitiesByOwner(client, ownerAddress, {
+    const recent = await queryEntitiesByOwner(client, ownerAddress, {
       maxResults: 100,
-      includePayload: true,
+      includePayload: false,
       includeAttributes: true,
       includeMetadata: true,
     })
-    return pickLatestArkivEntity(fallback)
+    return pickLatestArkivEntity(recent)
   } catch (error) {
     throw new ArkivError(
       error instanceof Error ? error.message : 'Failed to fetch latest entity',
@@ -329,45 +311,68 @@ export async function getLatestEntityByOwner(
 // ============================================================================
 
 /**
+ * Minimal structural view of an SDK entity — satisfied by the SDK 0.8
+ * `Entity`/`FullEntity` (and tolerant of legacy/test shapes).
+ */
+interface RawSdkEntity {
+  key?: unknown
+  owner?: unknown
+  payload?: unknown
+  contentType?: unknown
+  attributes?: unknown
+  /** SDK 0.8 creation block. */
+  createdAt?: unknown
+  /** Legacy 0.7 creation block field. */
+  createdAtBlock?: unknown
+}
+
+/**
  * Transform an SDK Entity to our ArkivEntity format.
- * 
+ *
  * @param entity - The SDK Entity
  * @returns Transformed ArkivEntity
  */
 function transformEntity(entity: Entity): ArkivEntity {
+  const raw = entity as unknown as RawSdkEntity
+
   // Convert payload from Uint8Array to base64 string
   let payload = ''
-  if (entity.payload) {
-    // Convert Uint8Array to base64
-    const bytes = new Uint8Array(entity.payload)
+  if (raw.payload instanceof Uint8Array) {
+    const bytes = new Uint8Array(raw.payload)
     const binary = bytes.reduce((acc, byte) => acc + String.fromCharCode(byte), '')
     payload = typeof window !== 'undefined'
       ? btoa(binary)
       : Buffer.from(bytes).toString('base64')
+  } else if (typeof raw.payload === 'string') {
+    payload = raw.payload
   }
-  
-  // Convert attributes array to record
-  const attributes: Record<string, unknown> = {}
-  if (entity.attributes && Array.isArray(entity.attributes)) {
-    for (const attr of entity.attributes) {
-      attributes[attr.key] = attr.value
-    }
-  }
-  
+
+  // Normalize the SDK 0.8 tagged map (or a legacy array) to a record
+  const attributes = toAttributeRecord(raw.attributes)
+
   // Get content type from entity or attributes
-  const contentType = entity.contentType || 
-    (attributes.contentType as string) || 
+  const contentType = (typeof raw.contentType === 'string' && raw.contentType) ||
+    (attributes.contentType as string) ||
     'application/octet-stream'
-  
-  const createdAtBlock = parseCreatedAtBlock(entity.createdAtBlock)
+
+  const createdRaw = (raw.createdAt ?? raw.createdAtBlock) as
+    | string
+    | number
+    | bigint
+    | undefined
+    | null
+  const createdAtBlock = parseCreatedAtBlock(createdRaw)
 
   return {
-    key: entity.key,
-    owner: entity.owner || '',
+    key: typeof raw.key === 'string' ? raw.key : String(raw.key ?? ''),
+    owner: typeof raw.owner === 'string' ? raw.owner : '',
     attributes,
     payload,
     content_type: contentType,
-    created_at: entity.createdAtBlock?.toString() || '',
+    created_at:
+      typeof createdRaw === 'bigint'
+        ? createdRaw.toString()
+        : String(createdRaw ?? ''),
     created_at_block: createdAtBlock,
   }
 }

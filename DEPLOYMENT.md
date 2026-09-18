@@ -40,8 +40,7 @@ cp .env.local.example .env.local
 | `NEXT_PUBLIC_ALCHEMY_API_KEY` | Alchemy API key for RPC | - |
 | `NEXT_PUBLIC_ALCHEMY_RPC` | Custom Alchemy RPC URL | - |
 | `NEXT_PUBLIC_CHAIN_ID` | Default chain ID | 1 (Ethereum) |
-| `NEXT_PUBLIC_ARKIV_RPC_URL` | Arkiv RPC URL | `https://braga.hoodi.arkiv.network/rpc` |
-| `NEXT_PUBLIC_ARKIV_API_URL` | Arkiv HTTP API URL | `https://braga.hoodi.arkiv.network/api` |
+| `NEXT_PUBLIC_ARKIV_RPC_URL` | Arkiv RPC URL | `https://rpc.tiramisu.db-chain.testnet.arkiv.network` |
 | `NEXT_PUBLIC_ICP_HOST` | ICP API host for Haven-AOL | `https://icp-api.io` |
 | `NEXT_PUBLIC_HAVEN_AOL_CANISTER_ID` | Haven-AOL canister ID | (see `.env.local.example`) |
 | `NEXT_PUBLIC_EIP712_CHAIN_ID` | EIP-712 chain ID for gate signatures | `1` |
