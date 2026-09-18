@@ -53,7 +53,7 @@ export interface HavenAolConfig {
  */
 export function getHavenAolConfig(): HavenAolConfig {
   const host = process.env.NEXT_PUBLIC_ICP_HOST || 'https://icp-api.io'
-  const canisterId = process.env.NEXT_PUBLIC_HAVEN_AOL_CANISTER_ID || 'dciac-uaaaa-aaaad-qlzuq-cai'
+  const canisterId = process.env.NEXT_PUBLIC_HAVEN_AOL_CANISTER_ID || 'gny6k-fqaaa-aaaab-ag3ra-cai'
   const eip712ChainId = BigInt(process.env.NEXT_PUBLIC_EIP712_CHAIN_ID || '1')
   const eip712VerifyingContract = process.env.NEXT_PUBLIC_EIP712_VERIFYING_CONTRACT || '0x0000000000000000000000000000000000000000'
   const fetchRootKey = process.env.NEXT_PUBLIC_HAVEN_AOL_FETCH_ROOT_KEY === 'true'
