@@ -25,6 +25,10 @@
  * cap rung, possibly from different wallets/machines; `publishDripChunks`
  * keeps the classic one-sitting whole-drip loop on top of it.
  *
+ * No attestation is requested here, deliberately: for a single-launcher
+ * publish the holding-proof adds no signal over entity ownership (see
+ * docs `decisions/ADR-002-deferred-launcher-attestation.md`).
+ *
  * @module lib/v4/arkiv-publish
  */
 

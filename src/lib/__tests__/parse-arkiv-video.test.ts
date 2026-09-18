@@ -51,7 +51,7 @@ vi.mock('../arkiv', () => ({
 }))
 
 // Import AFTER mocks are declared.
-import { parseArkivEntityToVideo } from '../parse-arkiv-video'
+import { parseArkivEntityToVideo, selectLiveStages } from '../parse-arkiv-video'
 
 const V1_GATE = {
   version: 1 as const,
@@ -210,5 +210,35 @@ describe('parseArkivEntityToVideo — 2.0 canonical keys', () => {
     expect(video.duration).toBe(0)
     expect(video.creatorHandle).toBeUndefined()
     expect(video.cidHash).toBeUndefined()
+  })
+})
+
+describe('selectLiveStages', () => {
+  const stage = (dripId: string, dripIndex: number) => ({ dripId, dripIndex })
+
+  it('keeps a fully contiguous launch', () => {
+    const items = [stage('a', 0), stage('a', 1), stage('a', 2)]
+    expect(selectLiveStages(items)).toEqual(items)
+  })
+
+  it('truncates stages past the first gap', () => {
+    const items = [stage('a', 0), stage('a', 1), stage('a', 3), stage('a', 4)]
+    expect(selectLiveStages(items)).toEqual([stage('a', 0), stage('a', 1)])
+  })
+
+  it('drops a launch missing stage 0 entirely', () => {
+    const items = [stage('a', 1), stage('a', 2)]
+    expect(selectLiveStages(items)).toEqual([])
+  })
+
+  it('treats each launch independently and preserves input order', () => {
+    const items = [stage('b', 1), stage('a', 0), stage('b', 0), stage('a', 1)]
+    expect(selectLiveStages(items)).toEqual(items)
+  })
+
+  it('ignores duplicate, negative, and non-integer indexes', () => {
+    const s0 = stage('a', 0)
+    const items = [s0, stage('a', 0), stage('a', -1), stage('a', 1.5), stage('a', 1)]
+    expect(selectLiveStages(items)).toEqual([s0, stage('a', 1)])
   })
 })

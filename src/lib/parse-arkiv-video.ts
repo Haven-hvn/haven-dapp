@@ -204,3 +204,39 @@ export function parseArkivEntityToVideo(entity: ArkivEntity): Video {
     expiresAtBlock: undefined,
   }
 }
+
+/**
+ * Reader-side launch death: keep only the contiguous stage prefix per launch.
+ *
+ * Arkiv entities expire independently, so a launch can die partially — stage 2
+ * expires while 3–5 live on. Writers accept that (unreleased content should
+ * die); readers therefore treat a launch with a hole as dead: stages stop at
+ * the first gap, and a launch missing stage 0 disappears entirely. Stages are
+ * 0-based (`drip_idx`); input order is preserved.
+ *
+ * Best-effort under pagination: callers that cap their part query can mistake
+ * a cut-off page for a gap. Fetch whole launches before applying this.
+ */
+export function selectLiveStages<T extends { dripId: string; dripIndex: number }>(
+  items: readonly T[]
+): T[] {
+  const byLaunch = new Map<string, T[]>()
+  for (const item of items) {
+    const group = byLaunch.get(item.dripId)
+    if (group) group.push(item)
+    else byLaunch.set(item.dripId, [item])
+  }
+  const live = new Set<T>()
+  for (const group of byLaunch.values()) {
+    const byIndex = new Map<number, T>()
+    for (const item of group) {
+      if (Number.isSafeInteger(item.dripIndex) && item.dripIndex >= 0 && !byIndex.has(item.dripIndex)) {
+        byIndex.set(item.dripIndex, item)
+      }
+    }
+    for (let i = 0; byIndex.has(i); i++) {
+      live.add(byIndex.get(i) as T)
+    }
+  }
+  return items.filter((item) => live.has(item))
+}

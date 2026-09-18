@@ -4,7 +4,7 @@ import { and, eq } from '@arkiv-network/sdk/query'
 import { normalizeCid } from '@/lib/ipfs'
 import { createArkivClient, parseEntityPayload } from '@/lib/arkiv'
 import { toAttributeRecord } from '@/lib/arkiv-attrs'
-import { parseDripInfo, type DripSeriesMeta } from '@/lib/parse-arkiv-video'
+import { parseDripInfo, selectLiveStages, type DripSeriesMeta } from '@/lib/parse-arkiv-video'
 import { toNetworkKey } from '@/lib/gate-chains'
 import { formatUsdCompact } from '@/lib/v4/drip-plan'
 
@@ -163,7 +163,10 @@ export function UpcomingDrops() {
             creatorHandle: series?.creator,
           }
         }).filter((d: DropItem) => d.marketCapTargetUsd > 0)
-        if (!cancelled) setDrops(items.length ? items : DEMO_DROPS)
+        // Reader-side launch death: a launch with an expired middle stage
+        // shows only its live prefix (nothing past the gap).
+        const live = selectLiveStages(items)
+        if (!cancelled) setDrops(live.length ? live : DEMO_DROPS)
       } catch {
         if (!cancelled) setDrops(DEMO_DROPS)
       }
