@@ -12,6 +12,8 @@
 import {
   createPublicClient,
   type Entity,
+  type EntitySelection,
+  type SelectArg,
   type PublicArkivClient,
   NoEntityFoundError,
 } from '@arkiv-network/sdk'
@@ -150,7 +152,7 @@ export async function queryEntitiesByOwner(
   // Identity fields are always selected (cheap, and transformEntity needs
   // owner + creation block); payload/attributes honor the include flags so
   // list rows never over-fetch sealed bytes.
-  const selection: Record<string, boolean> = {
+  const selection: EntitySelection = {
     key: true,
     owner: true,
     creator: true,
@@ -161,8 +163,11 @@ export async function queryEntitiesByOwner(
   if (includePayload) selection.payload = true
 
   try {
+    // Upcast to SelectArg so overload resolution picks the dynamic-selection
+    // path (FullEntity rows) instead of distributing ProjectedEntity over the
+    // EntitySelection union. Safe: EntitySelection is a member of SelectArg.
     const builder = client
-      .select(selection)
+      .select(selection as SelectArg)
       .ownedBy(ownerAddress.toLowerCase() as Hex)
       .limit(maxResults)
     if (cursor) builder.cursor(cursor)
