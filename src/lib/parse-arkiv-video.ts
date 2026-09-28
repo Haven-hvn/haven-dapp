@@ -104,6 +104,19 @@ export function parseDripInfo(
 
 
 /**
+ * MIME string from the payload `ct` field (audio/generic groups carry the
+ * MIME type as a string because MP3 has no enum code). Fail-soft: only a
+ * well-formed `type/subtype` string is honored, so a mistyped payload can
+ * never smuggle a bogus content type into the playback pipeline.
+ */
+function audioMime(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim().toLowerCase()
+  if (!/^[a-z0-9][a-z0-9.+-]*\/[a-z0-9][a-z0-9.+-]*$/.test(trimmed)) return undefined
+  return trimmed
+}
+
+/**
  * Parse an Arkiv entity into a Video object.
  */
 export function parseArkivEntityToVideo(entity: ArkivEntity): Video {
@@ -170,7 +183,8 @@ export function parseArkivEntityToVideo(entity: ArkivEntity): Video {
       parseAnyGateMetadata(get('cid_gate')) ?? undefined,
 
 
-    contentMimeType: enumToMime(get('mime')),
+    contentMimeType: enumToMime(get('mime')) ?? audioMime(get('ct')),
+    mediaKind: get('grp') === 'haven.audio.full' ? 'audio' : 'video',
     originalHash: (get('pt_hash') as string) || undefined,
 
     hasAiData: Boolean(vlmJsonCid),

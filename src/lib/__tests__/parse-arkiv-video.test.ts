@@ -137,6 +137,72 @@ describe('parseArkivEntityToVideo — v3 dispatcher wiring', () => {
   })
 })
 
+describe('parseArkivEntityToVideo — haven.audio.full', () => {
+  // Shape mirrors a live single-file v3 album entity: payload carries
+  // name/ct/piece/gate, attributes carry grp/title/gate corpus — notably
+  // there is no `mime` enum and no `dur_s`.
+  const ALBUM_GATE = {
+    version: 3 as const,
+    cid: 'sha256:57568407',
+    chain: 'EthSepolia' as const,
+    tokenAddress: '0xF23a728b55BE576c75D98A8032982F85cBAD493E',
+    threshold: '1000000000000000000',
+    epoch: 690,
+    encryptedAesKey: 'dGVzdA==',
+  }
+
+  function audioEntity() {
+    return {
+      key: '0xe68e',
+      owner: '0xOWNER',
+      payload: {
+        name: 'test_band_test_album_1971.released.mp3.enc',
+        ct: 'audio/mpeg',
+        piece: 'bafkpiece',
+        gate: JSON.stringify(ALBUM_GATE),
+      },
+      attributes: {
+        grp: 'haven.audio.full',
+        title: 'Test Band - Test Album (1971) [DE] (MP3, full album, chapters, cover)',
+        gate_type: 3,
+        gate_token: '0xf23a728b55be576c75d98a8032982f85cbad493e',
+        gate_chain: 11155111,
+        gate_threshold: '1000000000000000000',
+        gate_epoch: 690,
+        sha256_ct: '57568407',
+      },
+    }
+  }
+
+  it('marks audio releases and resolves the payload ct MIME', () => {
+    const video = parseArkivEntityToVideo(audioEntity() as never)
+    expect(video.mediaKind).toBe('audio')
+    expect(video.contentMimeType).toBe('audio/mpeg')
+    expect(video.isEncrypted).toBe(true)
+    expect(video.encryptionMetadata).toEqual(ALBUM_GATE)
+    expect(video.pieceCid).toBe('bafkpiece')
+    expect(video.cidHash).toBe('57568407')
+    expect(video.title).toContain('Test Album')
+  })
+
+  it('marks video releases explicitly', () => {
+    const video = parseArkivEntityToVideo({
+      ...audioEntity(),
+      attributes: { ...audioEntity().attributes, grp: 'haven.video.full', mime: 1 },
+    } as never)
+    expect(video.mediaKind).toBe('video')
+  })
+
+  it('rejects a malformed ct instead of smuggling it into playback', () => {
+    const video = parseArkivEntityToVideo({
+      ...audioEntity(),
+      payload: { ...audioEntity().payload, ct: 'not a mime' },
+    } as never)
+    expect(video.mediaKind).toBe('audio')
+    expect(video.contentMimeType).toBeUndefined()
+  })
+})
+
 describe('parseArkivEntityToVideo — 2.0 canonical keys', () => {
   it('maps full-record keys (clear)', () => {
     const video = parseArkivEntityToVideo({

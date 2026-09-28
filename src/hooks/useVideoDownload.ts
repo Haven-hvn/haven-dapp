@@ -26,7 +26,8 @@ import {
 import { toPlaybackLoadError } from '@/lib/playback-errors'
 import type { WalletClientLike } from '@/lib/haven-aol'
 import { requirePieceCid } from '@/lib/download-cid'
-import { decryptChunkedFile, type ChunkedDecryptProgress } from '@/lib/chunked-decrypt'
+import { decryptToPlaintext } from '@/lib/blob-decrypt'
+import type { ChunkedDecryptProgress } from '@/lib/chunked-decrypt'
 import type { Video } from '@/types'
 
 // ============================================================================
@@ -112,15 +113,16 @@ const STAGE_MESSAGES: Record<DownloadStage, string> = {
 // ============================================================================
 
 /**
- * Generate a safe filename from video metadata.
+ * Generate a safe filename from media metadata (mp3 for audio releases).
  */
 function generateFilename(video: Video): string {
-  const sanitized = (video.title || 'video')
+  const fallback = video.mediaKind === 'audio' ? 'track' : 'video'
+  const sanitized = (video.title || fallback)
     .replace(/[^a-zA-Z0-9\s\-_.]/g, '')
     .replace(/\s+/g, '_')
     .slice(0, 100)
 
-  return `${sanitized}.mp4`
+  return video.mediaKind === 'audio' ? `${sanitized}.mp3` : `${sanitized}.mp4`
 }
 
 /**
@@ -313,10 +315,7 @@ export function useVideoDownload(): UseVideoDownloadReturn {
         }
       }
 
-      const plaintext = await decryptChunkedFile(encryptedData, aesKey, {
-        signal,
-        onProgress: onChunkProgress,
-      })
+      const plaintext = await decryptToPlaintext(encryptedData, aesKey, signal, onChunkProgress)
 
       if (signal.aborted) throw new Error('Download cancelled')
 

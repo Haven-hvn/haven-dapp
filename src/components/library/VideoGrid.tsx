@@ -40,6 +40,11 @@ const VideoCard = lazy(() =>
   import("./VideoCard").then((mod) => ({ default: mod.VideoCard }))
 );
 
+// Audio releases render their own card (record plate + audio badge).
+const AudioCard = lazy(() =>
+  import("./AudioCard").then((mod) => ({ default: mod.AudioCard }))
+);
+
 /**
  * Format bytes to human-readable string
  */
@@ -286,6 +291,16 @@ export function VideoGrid() {
           <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
             {paginatedVideos.map((video) => {
               const queueItem = queue.find((q) => q.video.id === video.id)
+              if (video.mediaKind === 'audio') {
+                return (
+                  <AudioCard
+                    key={video.id}
+                    video={video}
+                    onClick={handleVideoClick}
+                    isCached={cacheStatus.get(video.id) ?? false}
+                  />
+                )
+              }
               return (
                 <SelectableVideoCard
                   key={video.id}

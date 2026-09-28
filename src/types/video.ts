@@ -150,6 +150,14 @@ export interface Video {
   /** Original MIME type (attribute `mime` enum, resolved to string) */
   contentMimeType?: string
 
+  /**
+   * Media kind, derived from the entity `grp` (`haven.audio.full` →
+   * audio, everything else video). Audio releases share the Video
+   * record (same gate/piece/cache pipeline) but render the audio
+   * player with chapter navigation.
+   */
+  mediaKind?: 'video' | 'audio'
+
   /** SHA-256 of plaintext before encryption (payload `pt_hash`) */
   originalHash?: string
   

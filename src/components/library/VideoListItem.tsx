@@ -99,6 +99,11 @@ export function VideoListItem({ video, isCached = false }: VideoListItemProps) {
         {/* Info */}
         <div className="flex-1 min-w-0 py-0.5 sm:py-1">
           <div className="flex items-center gap-2">
+            {video.mediaKind === 'audio' && (
+              <span className="inline-flex items-center px-1.5 py-0.5 bg-seal-wash text-seal-text text-nano font-[family-name:var(--font-ledger)] uppercase tracking-[0.08em] border border-seal-edge shrink-0">
+                Audio
+              </span>
+            )}
             <h3
               className="font-medium text-small sm:text-base line-clamp-1 text-fg tracking-[-0.01em]"
               title={video.title}
