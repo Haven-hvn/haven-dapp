@@ -156,7 +156,8 @@ export async function ensureStorageRunway(
 ): Promise<void> {
   let prepared: Awaited<ReturnType<typeof synapse.storage.prepare>>
   try {
-    prepared = await synapse.storage.prepare({ dataSize: BigInt(bytes) })
+    // SDK 2.x prices explicit pieces; entries are raw payload bytes (not padded).
+    prepared = await synapse.storage.prepare({ pieceSizes: [BigInt(bytes)] })
   } catch (error) {
     throw new SynapseUploadError(
       `Failed to quote storage costs: ${errorMessage(error)}`,
