@@ -216,7 +216,7 @@ function FeatureCell({
  */
 const LEDGER_ENTRIES = [
   ['ARKIV', 'entity registry · 0x44…0044', 'net-arkiv'],
-  ['ICP', 'vetkd gating · dciac-…qlzuq', 'net-icp'],
+  ['ICP', 'vetkd gating · gny6k-…ag3ra', 'net-icp'],
   ['EVM', 'holder gates · eip-712', 'net-evm'],
   ['FILECOIN', 'archival pin · ipfs cids', 'net-filecoin'],
 ] as const
