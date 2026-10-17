@@ -11,7 +11,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAppKitAccount } from '@reown/appkit/react'
 import type { Video } from '../types/video'
 import {
-  fetchAllVideos,
   fetchLibraryVideos,
   pickMostRecentVideos,
 } from '../services/videoService'
@@ -91,7 +90,10 @@ export function useVideos(options: UseVideosOptions = {}): UseVideosReturn {
     queryKey: [...videoKeys.list(address), latestOnly ? 'latest' : 'all'] as const,
     queryFn: async () => {
       if (!address) throw new Error('Wallet not connected')
-      return latestOnly ? fetchLibraryVideos(address) : fetchAllVideos(address)
+      // Library = own uploads + community content this wallet's holdings
+      // unlock (fetchLibraryVideos merges both); latestOnly only affects
+      // cached placeholder shaping, not the Arkiv query.
+      return fetchLibraryVideos(address)
     },
     enabled: isConnected && !!address,
     staleTime: latestOnly ? 30_000 : 5 * 60 * 1000,

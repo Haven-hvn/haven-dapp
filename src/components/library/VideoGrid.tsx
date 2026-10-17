@@ -20,6 +20,7 @@ import {
 } from "@/lib/pagination";
 import { LibraryPagination } from "./LibraryPagination";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useVideoSearch } from "@/hooks/useVideoSearch";
 import { useCacheStatus } from "@/hooks/useCacheStatus";
 import { useLibraryQueryState } from "@/hooks/useLibraryQueryState";
@@ -400,11 +401,20 @@ function EmptyState() {
       <div className="mx-auto mb-4 w-16 h-16 flex items-center justify-center border border-line-strong text-fg-4">
         <VideoIcon className="w-8 h-8 text-muted-foreground" />
       </div>
-      <h3 className="text-lg font-semibold mb-2">No videos yet</h3>
+      <h3 className="text-lg font-semibold mb-2">Your library is empty</h3>
       <p className="text-muted-foreground max-w-sm mx-auto">
-        Videos you upload from the Haven desktop app/Haven CLI will appear here. Make sure
-        Arkiv sync is enabled.
+        This library holds everything your wallet can open: videos you upload, and
+        community content unlocked by tokens or NFTs you hold. You don&apos;t hold any
+        gating tokens yet, and you haven&apos;t uploaded anything.
       </p>
+      <div className="mt-6 flex flex-wrap justify-center gap-3">
+        <Link href="/community" className="action action-sealed py-2">
+          Find a community
+        </Link>
+        <Link href="/publish" className="action action-keyline py-2">
+          Publish your first video
+        </Link>
+      </div>
     </div>
   );
 }

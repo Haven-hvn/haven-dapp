@@ -1,7 +1,8 @@
 'use client'
 
-import { Info, ExternalLink } from 'lucide-react'
+import { Info, ExternalLink, CheckCircle2, RefreshCw } from 'lucide-react'
 import type { TokenGate } from '@/types/attestation'
+import { toNetworkKey } from '@/lib/gate-chains'
 
 export interface CommunityAccessNoticeProps {
   /** The token gate the visitor is trying to view. May be partial (chain
@@ -10,10 +11,14 @@ export interface CommunityAccessNoticeProps {
   gate: TokenGate | null
   /** Raw `?c=` value from the URL — used as a fallback when `gate` is null. */
   gateTokenAddress: string
-  /** True if this user is a recognized member of the community (i.e. they've
-   *  uploaded into it themselves). When true, we hide the notice — they
-   *  already know what's going on. */
+  /** True when the connected wallet's live balance satisfies the gate
+   *  (checked via `useGateAccess`). Holders get a confirmation, not the
+   *  insufficient-balance warning. */
   isMember: boolean
+  /** Re-run the live balance check (after acquiring the token). */
+  onCheckAccess?: () => void
+  /** True while the balance re-check is in flight. */
+  isCheckingAccess?: boolean
   /** True once the verified-feed query has at least one entry. Some
    *  non-holders may still be able to *see* community videos (titles), but
    *  they won't be able to play them. We surface that explicitly. */
@@ -42,9 +47,9 @@ export function CommunityAccessNotice({
   gateTokenAddress,
   isMember,
   hasFeedContent,
+  onCheckAccess,
+  isCheckingAccess,
 }: CommunityAccessNoticeProps) {
-  if (isMember) return null
-
   const tokenAddress = gate?.tokenAddress ?? gateTokenAddress
   const chain = gate?.chain
   const threshold = gate?.threshold
@@ -53,6 +58,32 @@ export function CommunityAccessNotice({
   // chain. For unknown chains we still show the address; the user can copy
   // it manually.
   const explorerHref = chain ? buildExplorerUrl(chain, tokenAddress) : null
+  const networkKey = chain ? toNetworkKey(chain) : undefined
+  const acquireHref = networkKey
+    ? `https://mint.club/token/${networkKey}/${tokenAddress}`
+    : null
+
+  if (isMember) {
+    return (
+      <div className="mb-6 border border-line bg-accent p-4 sm:p-5" role="status">
+        <div className="flex items-start gap-3">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-medium text-fg mb-1">You hold this token — playback is unlocked</h3>
+            <p className="text-sm text-fg-3 leading-relaxed">
+              Your connected wallet satisfies this community&apos;s gate, so its videos will play and appear in your Library.
+            </p>
+            {onCheckAccess && (
+              <button onClick={onCheckAccess} disabled={isCheckingAccess} className="action action-keyline py-2 mt-3 inline-flex items-center gap-1.5 disabled:opacity-50">
+                <RefreshCw className={`w-3.5 h-3.5 ${isCheckingAccess ? 'animate-spin' : ''}`} />
+                {isCheckingAccess ? 'Checking…' : 'Re-check balance'}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="mb-6 border border-seal-edge bg-accent p-4 sm:p-5">
@@ -117,9 +148,28 @@ export function CommunityAccessNotice({
           <p className="mt-3 text-xs text-amber-100/40 leading-relaxed">
             Don&apos;t hold the token? You can still browse titles, but
             playback will fail with an &quot;insufficient balance&quot;
-            message. Acquire the token on its native chain to unlock the
-            content.
+            message until your wallet holds it.
           </p>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            {acquireHref && (
+              <a
+                href={acquireHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="action action-sealed py-2 inline-flex items-center gap-1.5"
+              >
+                Get this token
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
+            {onCheckAccess && (
+              <button onClick={onCheckAccess} disabled={isCheckingAccess} className="action action-keyline py-2 inline-flex items-center gap-1.5 disabled:opacity-50">
+                <RefreshCw className={`w-3.5 h-3.5 ${isCheckingAccess ? 'animate-spin' : ''}`} />
+                {isCheckingAccess ? 'Checking…' : 'I hold it — check my balance'}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

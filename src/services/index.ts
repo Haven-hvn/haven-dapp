@@ -15,6 +15,8 @@ export {
 // Video Service
 export {
   fetchAllVideos,
+  fetchAccessibleVideos,
+  mergeLibraryVideos,
   fetchLibraryVideos,
   fetchVideos,
   fetchVideoById,

@@ -19,6 +19,9 @@ import {
 } from '@arkiv-network/sdk'
 import { http, type Hex, type Transport, type Chain } from 'viem'
 import { tiramisu } from '@arkiv-network/sdk/chains'
+import { eq } from '@arkiv-network/sdk/query'
+import { toChainId } from './gate-chains'
+import type { TokenGate } from '@/types/attestation'
 import { toAttributeRecord } from './arkiv-attrs'
 import {
   parseCreatedAtBlock,
@@ -178,6 +181,33 @@ export async function queryEntitiesByOwner(
   } catch (error) {
     throw new ArkivError(
       error instanceof Error ? error.message : 'Failed to query entities',
+      'QUERY_ERROR',
+      error instanceof Error ? error : undefined
+    )
+  }
+}
+
+/**
+ * Query entities gated by a token, whoever owns them — the community /
+ * consumer-library counterpart to queryEntitiesByOwner.
+ */
+export async function queryEntitiesByGate(
+  client: PublicArkivClient<Transport, Chain | undefined, undefined>,
+  gate: TokenGate,
+  options: ArkivQueryOptions = {}
+): Promise<ArkivEntity[]> {
+  const { maxResults = 50, cursor } = options
+  const chainId = toChainId(gate.chain)
+  const where = [eq('grp', 'haven.video.full'), eq('gate_token', gate.tokenAddress)]
+  if (chainId !== undefined) where.push(eq('gate_chain', chainId))
+  try {
+    const builder = client.select().where(where).limit(maxResults)
+    if (cursor) builder.cursor(cursor)
+    const result = await builder.fetch()
+    return result.entities.map(transformEntity)
+  } catch (error) {
+    throw new ArkivError(
+      error instanceof Error ? error.message : 'Failed to query entities by gate',
       'QUERY_ERROR',
       error instanceof Error ? error : undefined
     )

@@ -15,8 +15,15 @@ import {
   createArkivClient,
   getAllEntitiesByOwner as arkivGetAllEntitiesByOwner,
   queryEntitiesByOwner as arkivQueryEntitiesByOwner,
+  queryEntitiesByGate as arkivQueryEntitiesByGate,
   getEntity as arkivGetEntity,
 } from '../lib/arkiv'
+import {
+  discoverGates,
+  satisfiedGateKeys,
+  gateKey,
+  type GateBalanceReader,
+} from '../lib/gate-access'
 
 // ── Arkiv Client Singleton ──────────────────────────────────────────
 
@@ -39,11 +46,56 @@ export function pickMostRecentVideos(videos: Video[], limit?: number): Video[] {
   return limit === undefined ? sorted : sorted.slice(0, limit)
 }
 
+/** Merge own uploads with accessible community videos, deduped by id (own wins). */
+export function mergeLibraryVideos(own: Video[], accessible: Video[]): Video[] {
+  const byId = new Map<string, Video>()
+  for (const video of accessible) byId.set(video.id, video)
+  for (const video of own) byId.set(video.id, video)
+  return [...byId.values()]
+}
+
+/**
+ * Videos this wallet can open but did not upload: every gate recorded on
+ * Arkiv that the wallet's balances satisfy, whoever published under it.
+ * Fail-soft by gate — one unreachable chain/gate costs only its videos.
+ */
+export async function fetchAccessibleVideos(
+  walletAddress: string,
+  reader?: GateBalanceReader
+): Promise<Video[]> {
+  const client = getClient()
+  const gates = await discoverGates(client)
+  const satisfied = await satisfiedGateKeys(walletAddress, gates, reader)
+  const open = gates.filter((g) => satisfied.has(gateKey(g)))
+  const perGate = await Promise.all(
+    open.map(async (gate) => {
+      try {
+        const entities = await arkivQueryEntitiesByGate(client, gate, { maxResults: 50 })
+        return entities.map((entity) => parseArkivEntityToVideo(entity))
+      } catch {
+        return []
+      }
+    })
+  )
+  return perGate.flat().filter((v) => v.owner.toLowerCase() !== walletAddress.toLowerCase())
+}
+
 /**
  * Fetch all videos for the library (Arkiv + cached expired entries).
+ *
+ * The library is everything the wallet can open: its own uploads plus
+ * community content unlocked by tokens/NFTs it holds. Accessible-fetch
+ * failure degrades to own uploads only — never to an empty library.
  */
 export async function fetchLibraryVideos(ownerAddress: string): Promise<Video[]> {
-  return fetchAllVideos(ownerAddress)
+  const own = await fetchAllVideos(ownerAddress)
+  try {
+    const accessible = await fetchAccessibleVideos(ownerAddress)
+    return mergeLibraryVideos(own, accessible)
+  } catch (err) {
+    console.warn('[VideoService] Accessible videos fetch failed:', err)
+    return own
+  }
 }
 
 /**

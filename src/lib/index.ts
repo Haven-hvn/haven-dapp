@@ -62,6 +62,7 @@ export type { Account, Transport, Chain } from 'viem'
 export {
   createArkivClient,
   queryEntitiesByOwner,
+  queryEntitiesByGate,
   getEntity,
   checkArkivConnection,
   getAllEntitiesByOwner,

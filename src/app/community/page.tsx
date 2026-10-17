@@ -2,7 +2,7 @@
 
 import { Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { useUserCommunities, useCommunityFeedForGate } from '@/hooks/useCommunityFeed'
+import { useUserCommunities, useCommunityFeedForGate, useGateAccess } from '@/hooks/useCommunityFeed'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { LibraryLayout } from '@/components/layout/LibraryLayout'
 import { CommunityCard } from '@/components/community/CommunityCard'
@@ -72,8 +72,10 @@ function CommunityListContent() {
           <p className="folio mb-4">—</p>
           <h3 className="statement-subtitle mb-3">No communities yet</h3>
           <p className="text-small text-fg-3 leading-relaxed">
-            Upload token-gated content to discover your communities.
-            Communities are formed around shared token gates.
+            Communities form around shared token gates. Hold a community&apos;s
+            token or NFT and it will appear here — no upload required. If you
+            just acquired a token, give the chain a moment and refresh; or
+            publish token-gated content to start your own.
           </p>
         </div>
       </div>
@@ -135,19 +137,11 @@ function CommunityFeedContent() {
       ) ?? null
     : null
 
-  // A user is a "member" of this community (in the loose Haven sense) when
-  // they have uploaded a video gated by this token themselves — that's the
-  // only way `useUserCommunities` surfaces a gate. Anyone else (a visitor
-  // following a shared link, or a holder who hasn't uploaded yet) gets the
-  // access notice so they understand what they're looking at and why
-  // playback may fail.
-  const isMember = gate !== null
-
-  // When the visitor isn't a known member we don't have a `TokenGate` from
-  // `useUserCommunities` (since that hook only looks at the viewer's own
-  // entities). Synthesize one from the first feed video — the community-feed
-  // query carries the entity's own `gate_chain` / `gate_threshold` attrs, so
-  // we get a complete picture to show in the access notice.
+  // Membership is a live balance check, not authorship: a user belongs
+  // when their wallet holds enough of the gate token, whether or not
+  // they ever uploaded here. `useUserCommunities` now also surfaces
+  // held gates, but a shared-link visitor's gate may only be known from
+  // the feed — synthesize it from the first video's own gate attrs.
   const displayGate: TokenGate | null =
     gate ??
     (gateToken && videos.length > 0
@@ -157,6 +151,9 @@ function CommunityFeedContent() {
           threshold: videos[0].gateThreshold,
         }
       : null)
+
+  const gateAccess = useGateAccess(displayGate)
+  const isMember = gateAccess.holds
 
   if (!gateToken) {
     return <CommunityListContent />
@@ -197,6 +194,8 @@ function CommunityFeedContent() {
         gateTokenAddress={gateToken}
         isMember={isMember}
         hasFeedContent={videos.length > 0}
+        onCheckAccess={gateAccess.refetch}
+        isCheckingAccess={gateAccess.isLoading}
       />
 
       {videos.length === 0 ? (

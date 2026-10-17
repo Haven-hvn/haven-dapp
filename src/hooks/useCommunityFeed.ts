@@ -18,6 +18,12 @@ import {
   fetchCommunityFeedForToken,
   verifyFeed,
 } from '@/lib/community-feed'
+import {
+  discoverGates,
+  satisfiedGateKeys,
+  checkGateAccess,
+  gateKey,
+} from '@/lib/gate-access'
 import type { CommunityVideo, TokenGate } from '@/types/attestation'
 
 // ============================================================================
@@ -64,7 +70,12 @@ export interface UseCommunityFeedForGateReturn {
 
 /**
  * Discover which token communities the user belongs to.
- * Queries the user's own Arkiv entities for unique gate_token values.
+ *
+ * Two sources, merged: gates on the user's own uploads (creator view),
+ * and every gate recorded on Arkiv that the wallet's balances satisfy
+ * (consumer view — a holder who never uploaded belongs here). The
+ * holdings half fails soft: an RPC outage must not hide communities
+ * the user created.
  *
  * @returns TokenGate list, loading state, and refetch function
  */
@@ -74,7 +85,19 @@ export function useUserCommunities(): UseUserCommunitiesReturn {
 
   const query = useQuery({
     queryKey: communityKeys.communities(address),
-    queryFn: () => discoverUserCommunities(client, address!),
+    queryFn: async () => {
+      const own = await discoverUserCommunities(client, address!)
+      try {
+        const discovered = await discoverGates(client)
+        const satisfied = await satisfiedGateKeys(address!, discovered)
+        const held = discovered.filter((g) => satisfied.has(gateKey(g)))
+        const byKey = new Map<string, TokenGate>()
+        for (const gate of [...own, ...held]) byKey.set(gateKey(gate), gate)
+        return [...byKey.values()]
+      } catch {
+        return own
+      }
+    },
     enabled: isConnected && !!address,
     staleTime: 5 * 60 * 1000,
   })
@@ -131,6 +154,39 @@ export function useCommunityFeedForGate(
     videos: query.data || [],
     isLoading: query.isLoading,
     error: (query.error || null) as Error | null,
+    refetch: () => { query.refetch() },
+  }
+}
+
+export interface UseGateAccessReturn {
+  /** True when the connected wallet's live balance satisfies the gate. */
+  holds: boolean
+  /** Raw base-unit balance, or null when unread / not yet loaded. */
+  balance: bigint | null
+  isLoading: boolean
+  /** Re-read balances (e.g. after acquiring the token). */
+  refetch: () => void
+}
+
+/**
+ * Live membership check for one gate: `balanceOf` vs threshold, read
+ * fresh from chain. This — not "has uploaded here" — is what makes a
+ * user a member of a token-gated community.
+ */
+export function useGateAccess(gate: TokenGate | null): UseGateAccessReturn {
+  const { address, isConnected } = useAppKitAccount()
+
+  const query = useQuery({
+    queryKey: [...communityKeys.all, 'gate-access', address, gate ? gateKey(gate) : undefined, gate?.threshold],
+    queryFn: () => checkGateAccess(address!, gate!),
+    enabled: isConnected && !!address && !!gate && !!gate.chain,
+    staleTime: 30 * 1000,
+  })
+
+  return {
+    holds: query.data?.holds ?? false,
+    balance: query.data?.balance ?? null,
+    isLoading: query.isLoading,
     refetch: () => { query.refetch() },
   }
 }

@@ -4,7 +4,7 @@
 
 import 'fake-indexeddb/auto'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { fetchLibraryVideos, pickMostRecentVideos } from '../videoService'
+import { fetchLibraryVideos, mergeLibraryVideos, pickMostRecentVideos } from '../videoService'
 import { getVideoCacheService, clearServiceInstances } from '../cacheService'
 import { deleteDatabase } from '../../lib/cache'
 import { createMockVideo } from '../../lib/cache/__tests__/fixtures'
@@ -83,6 +83,26 @@ describe('pickMostRecentVideos', () => {
     )
 
     expect(pickMostRecentVideos(videos, 2)).toHaveLength(2)
+  })
+})
+
+describe('mergeLibraryVideos — holder-not-uploader persona', () => {
+  const CREATOR = '0x9999999999999999999999999999999999999999'
+
+  it('a holder with no uploads still gets a library', () => {
+    const accessible = [
+      createMockVideo({ id: '0xa', owner: CREATOR, title: 'Community video' }),
+      createMockVideo({ id: '0xb', owner: CREATOR, title: 'Another' }),
+    ]
+    expect(mergeLibraryVideos([], accessible).map((v) => v.id)).toEqual(['0xa', '0xb'])
+  })
+
+  it('dedupes by id with the own copy winning', () => {
+    const own = [createMockVideo({ id: '0xa', title: 'Mine' })]
+    const accessible = [createMockVideo({ id: '0xa', owner: CREATOR, title: 'Theirs' })]
+    const merged = mergeLibraryVideos(own, accessible)
+    expect(merged).toHaveLength(1)
+    expect(merged[0].title).toBe('Mine')
   })
 })
 
