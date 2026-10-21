@@ -104,25 +104,18 @@ describe('ipfsService', () => {
       expect(downloadFromSynapse).toHaveBeenCalledTimes(3)
     })
 
-    it('retries extra times on PieceCID verification failure', async () => {
+    it('gives PieceCID verification failures no extra attempts', async () => {
       const verifyError = new SynapseError(
         'PieceCID verification failed. Expected: a, Got: b',
         'PIECE_VERIFICATION_FAILED',
         PIECE
       )
-      vi.mocked(downloadFromSynapse)
-        .mockRejectedValueOnce(verifyError)
-        .mockRejectedValueOnce(verifyError)
-        .mockRejectedValueOnce(verifyError)
-        .mockResolvedValueOnce(mockData)
+      vi.mocked(downloadFromSynapse).mockRejectedValue(verifyError)
 
-      const result = await fetchPieceFromSynapse(PIECE, {
-        retries: 3,
-        retryDelayMs: 0,
-      })
-
-      expect(result.data).toEqual(mockData)
-      expect(downloadFromSynapse).toHaveBeenCalledTimes(4)
+      await expect(
+        fetchPieceFromSynapse(PIECE, { retries: 3, retryDelayMs: 0 })
+      ).rejects.toThrow()
+      expect(downloadFromSynapse).toHaveBeenCalledTimes(3)
     })
 
     it('should throw after all retries fail', async () => {

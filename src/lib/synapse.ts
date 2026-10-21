@@ -22,7 +22,7 @@ import {
 import {
   isPieceCidVerificationFailure,
   PieceDownloadError,
-  streamDownloadAndValidatePiece,
+  streamDownloadPiece,
 } from './piece-download'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import {
@@ -184,7 +184,7 @@ async function downloadForCatalogOwner(
     throw new SynapseError('Download aborted', 'ABORTED', pieceCid)
   }
 
-  return streamDownloadAndValidatePiece({
+  return streamDownloadPiece({
     expectedPieceCid: pieceCid,
     url,
     signal: options?.signal,

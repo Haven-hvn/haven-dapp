@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   PieceDownloadError,
   resolveExpectedPieceByteLength,
-  streamDownloadAndValidatePiece,
+  streamDownloadPiece,
 } from '../piece-download'
 
 const PIECE =
@@ -33,7 +33,7 @@ describe('resolveExpectedPieceByteLength', () => {
   })
 })
 
-describe('streamDownloadAndValidatePiece', () => {
+describe('streamDownloadPiece', () => {
   const originalFetch = global.fetch
 
   beforeEach(() => {
@@ -46,7 +46,7 @@ describe('streamDownloadAndValidatePiece', () => {
 
   it('throws on invalid piece CID', async () => {
     await expect(
-      streamDownloadAndValidatePiece({
+      streamDownloadPiece({
         url: 'https://example.com/x',
         expectedPieceCid: 'not-a-piece',
       })
@@ -57,7 +57,7 @@ describe('streamDownloadAndValidatePiece', () => {
     const controller = new AbortController()
     controller.abort()
     await expect(
-      streamDownloadAndValidatePiece({
+      streamDownloadPiece({
         url: 'https://example.com/x',
         expectedPieceCid: PIECE,
         signal: controller.signal,
@@ -71,17 +71,17 @@ describe('streamDownloadAndValidatePiece', () => {
     )
 
     await expect(
-      streamDownloadAndValidatePiece({
+      streamDownloadPiece({
         url: 'https://example.com/missing',
         expectedPieceCid: PIECE,
       })
     ).rejects.toThrow(/HTTP 404/)
   })
 
-  it('downloads with progress and validates matching PieceCID', async () => {
+  it('downloads with progress', async () => {
     const payload = new Uint8Array([9, 8, 7, 6, 5])
     const { calculate } = await import('@filoz/synapse-core/piece')
-    const pieceCid = calculate(payload).toString()
+    const pieceCid = (await calculate(payload)).toString()
 
     const progressCalls: number[] = []
     global.fetch = vi.fn().mockResolvedValue(
@@ -91,7 +91,7 @@ describe('streamDownloadAndValidatePiece', () => {
       })
     )
 
-    const data = await streamDownloadAndValidatePiece({
+    const data = await streamDownloadPiece({
       url: 'https://example.com/ok',
       expectedPieceCid: pieceCid,
       onProgress: (downloaded) => {
@@ -104,7 +104,7 @@ describe('streamDownloadAndValidatePiece', () => {
     expect(progressCalls[progressCalls.length - 1]).toBe(payload.byteLength)
   })
 
-  it('rejects PieceCID mismatch', async () => {
+  it('returns served bytes without re-hashing against the PieceCID', async () => {
     global.fetch = vi.fn().mockResolvedValue(
       new Response(makeStream([new Uint8Array([1, 2, 3])]), {
         status: 200,
@@ -112,14 +112,13 @@ describe('streamDownloadAndValidatePiece', () => {
       })
     )
 
+    // Content is trusted by CID addressing (sealed bytes are authenticated
+    // by the AES-GCM open); the download itself does not re-verify.
     await expect(
-      streamDownloadAndValidatePiece({
+      streamDownloadPiece({
         url: 'https://example.com/wrong',
         expectedPieceCid: PIECE,
       })
-    ).rejects.toMatchObject({
-      name: 'PieceDownloadError',
-      code: 'VERIFICATION_FAILED',
-    })
+    ).resolves.toEqual(new Uint8Array([1, 2, 3]))
   })
 })

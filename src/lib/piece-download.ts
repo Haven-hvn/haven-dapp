@@ -1,17 +1,17 @@
 /**
- * Browser-friendly Filecoin piece download with abort, progress, and PieceCID validation.
+ * Browser-friendly Filecoin piece download with abort and progress.
  *
- * Synapse-core's `downloadAndValidate` uses iso-web `request.get` without AbortSignal or
- * progress callbacks. This module uses `fetch` + `createPieceCIDStream` for the same
- * validation semantics with better UX on large CAR pieces.
+ * Bytes are trusted by content addressing: the piece CID is the address,
+ * and sealed content is authenticated by the AES-GCM open that follows.
+ * No PieceCID re-computation happens here — Synapse-core's validating
+ * download lacks AbortSignal/progress, and re-hashing large pieces on
+ * every fetch costs a full extra pass for a check the address (and, for
+ * sealed content, GCM) already provides.
  *
  * @module lib/piece-download
  */
 
-import {
-  tryFrom as pieceCIDTryFrom,
-  transformStream,
-} from '@filoz/synapse-core/piece'
+import { tryFrom as pieceCIDTryFrom } from '@filoz/synapse-core/piece'
 
 export type PieceDownloadProgressFn = (downloaded: number, total: number) => void
 
@@ -36,11 +36,8 @@ export class PieceDownloadError extends Error {
   }
 }
 
-/** True when downloaded bytes did not match the expected Filecoin piece CID. */
+/** True when an error (e.g. from the SDK's own validating download) reports a PieceCID mismatch. */
 export function isPieceCidVerificationFailure(error: unknown): boolean {
-  if (error instanceof PieceDownloadError) {
-    return error.code === 'VERIFICATION_FAILED'
-  }
   const message = error instanceof Error ? error.message : String(error)
   return message.toLowerCase().includes('piececid verification failed')
 }
@@ -68,9 +65,10 @@ export function resolveExpectedPieceByteLength(
 }
 
 /**
- * Download a piece from a resolved URL, validate PieceCID while streaming, return bytes.
+ * Download a piece from a resolved URL, streaming with progress, return bytes.
+ * The CID is parsed only to size progress expectations; bytes are not re-hashed.
  */
-export async function streamDownloadAndValidatePiece(
+export async function streamDownloadPiece(
   options: StreamDownloadAndValidateOptions
 ): Promise<Uint8Array> {
   const { url, expectedPieceCid, signal, onProgress } = options
@@ -108,31 +106,20 @@ export async function streamDownloadAndValidatePiece(
   )
   onProgress?.(0, expectedTotal)
 
-  const { transform: pieceCidTransform, result: pieceCidResult } = transformStream()
   const chunks: Uint8Array[] = []
   let downloaded = 0
 
-  const collectStream = new TransformStream<Uint8Array, Uint8Array>({
-    transform(chunk: Uint8Array, controller: TransformStreamDefaultController<Uint8Array>) {
-      chunks.push(chunk)
-      downloaded += chunk.byteLength
-      onProgress?.(downloaded, expectedTotal)
-      controller.enqueue(chunk)
-    },
-  })
-
-  const pipelineStream = response.body
-    .pipeThrough(pieceCidTransform)
-    .pipeThrough(collectStream)
-
-  const reader = pipelineStream.getReader()
+  const reader = response.body.getReader()
   try {
     while (true) {
       if (signal?.aborted) {
         throw new PieceDownloadError('Download aborted')
       }
-      const { done } = await reader.read()
+      const { done, value } = await reader.read()
       if (done) break
+      chunks.push(value)
+      downloaded += value.byteLength
+      onProgress?.(downloaded, expectedTotal)
     }
   } finally {
     reader.releaseLock()
@@ -140,18 +127,6 @@ export async function streamDownloadAndValidatePiece(
 
   if (chunks.length === 0) {
     throw new PieceDownloadError('Response body is empty')
-  }
-
-  const calculatedPieceCid = await pieceCidResult
-  if (calculatedPieceCid == null) {
-    throw new PieceDownloadError('Failed to calculate PieceCID from stream')
-  }
-
-  if (calculatedPieceCid.toString() !== parsedPieceCid.toString()) {
-    throw new PieceDownloadError(
-      `PieceCID verification failed. Expected: ${String(parsedPieceCid)}, Got: ${String(calculatedPieceCid)}`,
-      'VERIFICATION_FAILED'
-    )
   }
 
   const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0)

@@ -14,7 +14,6 @@ import {
 } from '@/lib/ipfs'
 import { isFilecoinPieceCid, requirePieceCid } from '@/lib/download-cid'
 import { linkAbortSignal } from '@/lib/abort-signal'
-import { isPieceCidVerificationFailure } from '@/lib/piece-download'
 import { downloadFromSynapse, SynapseError } from '@/lib/synapse'
 import type { Video } from '@/types/video'
 
@@ -23,9 +22,6 @@ export const DEFAULT_PIECE_DOWNLOAD_TIMEOUT_MS = 15 * 60 * 1000
 
 /** Default Synapse download attempts (exponential backoff between tries). */
 export const DEFAULT_SYNAPSE_FETCH_RETRIES = 3
-
-/** Extra attempts when the body fails PieceCID verification (often transient). */
-export const PIECE_VERIFICATION_EXTRA_RETRIES = 2
 
 // ============================================================================
 // Types
@@ -151,7 +147,7 @@ export async function fetchPieceFromSynapse(
   }
 
   let lastError: Error | null = null
-  let maxRetries = baseRetries
+  const maxRetries = baseRetries
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
@@ -189,13 +185,6 @@ export async function fetchPieceFromSynapse(
 
       lastError = error instanceof Error ? error : new Error(String(error))
 
-      if (isPieceCidVerificationFailure(lastError)) {
-        maxRetries = Math.max(
-          maxRetries,
-          baseRetries + PIECE_VERIFICATION_EXTRA_RETRIES
-        )
-      }
-
       console.warn(
         `[ipfsService] Synapse attempt ${attempt + 1}/${maxRetries} failed:`,
         lastError.message,
@@ -207,9 +196,7 @@ export async function fetchPieceFromSynapse(
       }
 
       if (attempt < maxRetries - 1) {
-        const verifyBackoff =
-          isPieceCidVerificationFailure(lastError) ? 750 : 0
-        await sleep(retryDelayMs * Math.pow(2, attempt) + verifyBackoff)
+        await sleep(retryDelayMs * Math.pow(2, attempt))
       }
     }
   }

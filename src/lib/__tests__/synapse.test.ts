@@ -11,19 +11,19 @@ const {
   mockDownload,
   mockClient,
   resolvePieceUrl,
-  streamDownloadAndValidatePiece,
+  streamDownloadPiece,
 } = vi.hoisted(() => ({
   mockDownload: vi.fn(),
   mockClient: { account: { address: '0xdead000000000000000000000000000000000001' } },
   resolvePieceUrl: vi.fn(),
-  streamDownloadAndValidatePiece: vi.fn(),
+  streamDownloadPiece: vi.fn(),
 }))
 
 vi.mock('@/lib/piece-download', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../piece-download')>()
   return {
     ...actual,
-    streamDownloadAndValidatePiece,
+    streamDownloadPiece,
   }
 })
 
@@ -61,7 +61,7 @@ describe('downloadFromSynapse', () => {
     vi.clearAllMocks()
     mockDownload.mockResolvedValue(new Uint8Array([1, 2, 3]))
     resolvePieceUrl.mockResolvedValue('https://pdp.example/piece')
-    streamDownloadAndValidatePiece.mockResolvedValue(new Uint8Array([7, 8, 9]))
+    streamDownloadPiece.mockResolvedValue(new Uint8Array([7, 8, 9]))
   })
 
   afterEach(() => {
@@ -85,7 +85,7 @@ describe('downloadFromSynapse', () => {
     )
     const resolvers = resolvePieceUrl.mock.calls[0]?.[0]?.resolvers ?? []
     expect(resolvers).toHaveLength(2)
-    expect(streamDownloadAndValidatePiece).toHaveBeenCalledWith(
+    expect(streamDownloadPiece).toHaveBeenCalledWith(
       expect.objectContaining({
         url: 'https://pdp.example/piece',
         expectedPieceCid: PIECE,
@@ -122,7 +122,7 @@ describe('downloadFromSynapse', () => {
       signal,
       onProgress,
     })
-    expect(streamDownloadAndValidatePiece).toHaveBeenCalledWith(
+    expect(streamDownloadPiece).toHaveBeenCalledWith(
       expect.objectContaining({ signal, onProgress })
     )
   })
@@ -147,7 +147,7 @@ describe('downloadFromSynapse', () => {
   })
 
   it('maps PieceCID verification failures to PIECE_VERIFICATION_FAILED', async () => {
-    vi.mocked(streamDownloadAndValidatePiece).mockRejectedValueOnce(
+    vi.mocked(streamDownloadPiece).mockRejectedValueOnce(
       new PieceDownloadError(
         'PieceCID verification failed. Expected: a, Got: b',
         'VERIFICATION_FAILED'
