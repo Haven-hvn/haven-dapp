@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import { League_Spartan, Figtree } from "next/font/google";
 import "./globals.css";
 import ContextProvider from '@/context';
 import { AuthProvider } from "@/components/providers/AuthProvider";
@@ -37,6 +38,20 @@ const newsreader = localFont({
     },
   ],
   variable: "--font-newsreader",
+});
+
+// Landing art direction (taste-skill, direction: product-performs)
+const leagueSpartan = League_Spartan({
+  subsets: ["latin"],
+  weight: ["700", "800"],
+  variable: "--font-league",
+  display: "swap",
+});
+const figtree = Figtree({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-figtree",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -155,7 +170,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${newsreader.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${newsreader.variable} ${leagueSpartan.variable} ${figtree.variable} antialiased`}
       >
         <ThemeProvider defaultTheme="light" enableSystem>
           <ThemeScript />

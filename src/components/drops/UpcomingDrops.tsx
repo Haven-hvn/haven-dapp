@@ -34,6 +34,10 @@ function mintClubUrl(item: DropItem): string {
   return `https://mint.club/token/${chain}/${item.gateToken}`
 }
 
+function shortAddr(addr: string): string {
+  return addr.length > 12 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr
+}
+
 function trustwalletLogo(gateToken: string, chain: string): string {
   return `https://cdn.jsdelivr.net/gh/trustwallet/assets@master/blockchains/${chain}/assets/${gateToken}/logo.png`
 }
@@ -181,7 +185,7 @@ export function UpcomingDrops() {
   return (
     <div data-testid="upcoming-drops">
       {isDemo && drops !== null && (
-        <p className="label text-fg-5 px-1 pb-2">Demo preview — Arkiv L3 (tiramisu) is indexing haven drips</p>
+        <p className="label text-fg-5 px-1 pb-2 whitespace-normal leading-relaxed">Demo preview — Arkiv L3 (tiramisu) is indexing haven drips</p>
       )}
       <div className="grid gap-3 max-h-[520px] overflow-y-auto pr-1">
         {items.map((item) => (
@@ -199,14 +203,14 @@ export function UpcomingDrops() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-fg break-words whitespace-normal line-clamp-2 group-hover:underline" title={item.title}>{item.title}</p>
-              <p className="label text-fg-5 mt-0.5">Stage {item.dripIndex + 1}/{item.dripTotal} · unlocks at {formatUsdCompact(item.marketCapTargetUsd)}</p>
-              <p className="label text-fg-5 break-all whitespace-normal text-[11px] leading-snug" title={item.gateToken}>{item.gateToken} · {item.gateChain}</p>
+              <p className="label text-fg-5 mt-0.5 whitespace-normal">Stage {item.dripIndex + 1}/{item.dripTotal} · unlocks at {formatUsdCompact(item.marketCapTargetUsd)}</p>
+              <p className="label text-fg-5 break-words whitespace-normal text-[11px] leading-snug" title={item.gateToken}>{shortAddr(item.gateToken)} · {item.gateChain}</p>
             </div>
             <span className="label text-fg-4 self-center shrink-0">Trade →</span>
           </a>
         ))}
       </div>
-      <p className="label text-fg-5 mt-3">Tokens are mint.club bonding-curve tokens launched via Haven drip (gate_type 4).</p>
+      <p className="label text-fg-5 mt-3 whitespace-normal leading-relaxed">Tokens are mint.club bonding-curve tokens launched via Haven drip (gate_type 4).</p>
     </div>
   )
 }

@@ -13,9 +13,14 @@ import { ConnectButton } from '@/components/auth/ConnectButton'
 import { MobileNav } from './MobileNav'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { Mark } from '@/components/mark/Mark'
 
 export function Header() {
+  // The app's desktop chrome carries the wordmark in its sidebar; the landing
+  // has no sidebar, so its masthead shows the lockup at every width.
+  const pathname = usePathname()
+  const isLanding = pathname === '/'
   return (
     <header className="masthead h-[4.25rem] flex items-center justify-between px-4 md:px-6 safe-area-x">
       <div className="flex items-center gap-2">
@@ -23,7 +28,7 @@ export function Header() {
         {/* Lockup for mobile - hidden on desktop where the spine carries it */}
         <Link
           href="/library"
-          className="md:hidden flex items-center gap-2 touch-manipulation"
+          className={`${isLanding ? 'flex' : 'md:hidden flex'} items-center gap-2 touch-manipulation`}
           aria-label="Haven — Library"
         >
           <Mark size={20} />

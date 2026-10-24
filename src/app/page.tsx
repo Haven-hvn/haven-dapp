@@ -1,245 +1,245 @@
-import Link from 'next/link'
-import { ConnectButton } from '@/components/auth/ConnectButton'
-import { ThemeToggle } from '@/components/ui/ThemeToggle'
-import { ArrowRight } from 'lucide-react'
-import { UpcomingDrops } from '@/components/drops/UpcomingDrops'
-import { Mark } from '@/components/mark/Mark'
+"use client";
 
-/**
- * Landing Page — the front sheet of the Record.
- *
- * An institutional document, not a product page: statement headline with an
- * editorial clause, sealed actions, numbered feature register, and the
- * upcoming drops set as a plate. The four public networks run as a continuous
- * ledger strip beneath the fold.
- *
- * Two-column layout:
- * - Left: hero content with CTA and feature register
- * - Right: "Upcoming Video Drops" — embedded token-gated events widget
- *   filtered to Pepe ERC20 (0x6982508145454ce325ddbe47a25d4ec3d2311933)
+import ContextProvider from "@/context";
+import { HavenAolProvider } from "@/components/providers/HavenAolProvider";
+import { Header } from "@/components/layout/Header";
+import Link from "next/link";
+import { UpcomingDrops } from "@/components/drops/UpcomingDrops";
+import { Mark } from "@/components/mark/Mark";
+import { Check, Play } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { useEffect } from "react";
+
+/*
+ * Landing — taste-skill direction "product-performs" (seed 7h8x-3k46-dqz8-nznp).
+ * Idea: Haven's own live drops feed becomes the working fragment the page is
+ * built around; the features prove their claims with cropped pieces of the
+ * product's real interface.
+ * Type: League Spartan (display) + Figtree (text). Palette: Haven's ember on
+ * a low-chroma bone ground (dealt proportions, subject's colours).
  */
-export default function LandingPage() {
-  return (
-    <div className="min-h-dvh bg-surface text-fg">
-      {/* Masthead */}
-      <nav className="masthead">
-        <div className="mx-auto max-w-[1200px] px-6 h-16 flex items-center justify-between gap-6 safe-area-x">
-          <div className="lockup min-w-0">
-            <Mark size={20} />
-            <span className="wordmark">Haven</span>
-            <span className="lockup-rule hidden sm:block" aria-hidden="true" />
-            <span className="lockup-descriptor hidden sm:grid">
-              <span className="label">Sovereign Media</span>
-              <span className="label text-fg-5 text-[0.625rem]">Protocol</span>
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            <ThemeToggle />
-            <ConnectButton />
-          </div>
+
+const FEATURES = [
+  {
+    id: "encrypt",
+    title: "Encrypted, end to end",
+    paragraphs: [
+      "Every video is sealed before it leaves your device. Haven-AOL derives the gate key inside an ICP VetKD enclave, and only your wallet's signature can release it.",
+      "Not even Haven can read your library.",
+    ],
+    fragment: (
+      <div className="lp-frag-video" data-testid="fragment-decrypt">
+        <div className="lp-frag-thumb" aria-hidden="true">
+          <span className="lp-frag-lock">E2E</span>
         </div>
-      </nav>
-
-      {/* Act I — the argument */}
-      <main className="relative">
-        <section className="act border-b border-line">
-          <div className="mx-auto max-w-[1200px] px-6 pt-16 pb-14 md:pt-24 md:pb-20">
-            <div className="flex flex-col lg:flex-row gap-12 lg:gap-16 items-start">
-
-              {/* Left column — hero + feature register */}
-              <div className="flex-1 min-w-0">
-                <p className="seal-mark mb-8">
-                  <span className="pip net-haven" aria-hidden="true" />
-                  Decentralized Video Library
-                </p>
-
-                <h1 className="statement-display mb-7 [font-size:clamp(2.5rem,1rem+4.6vw,5.25rem)]">
-                  Your Videos,{' '}
-                  <em className="voice-editorial overprint">Decentralized</em>
-                </h1>
-
-                <p className="lede max-w-xl mb-10">
-                  Access your encrypted video library from anywhere using your
-                  Web3 wallet. No centralized servers. Just your content,
-                  secured by blockchain.
-                </p>
-
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 mb-16">
-                  <Link href="/library" className="action action-sealed group">
-                    Open Library
-                    <ArrowRight className="w-3.5 h-3.5 transition-transform duration-300 group-hover:translate-x-1" />
-                  </Link>
-                  <Link href="/publish" className="action action-keyline">
-                    Publish a Drip
-                  </Link>
-                  <a
-                    href="https://haven-hvn.github.io/docs/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="label link-rule self-center py-2 sm:py-0"
-                  >
-                    Learn More
-                  </a>
-                </div>
-
-                {/* Feature register */}
-                <div className="grid xs:grid-cols-3 gap-px bg-line border border-line crop-marks">
-                  <FeatureCell
-                    folio="01"
-                    title="Encrypted Storage"
-                    description="Your videos are encrypted end-to-end. Only your wallet can decrypt them."
-                  />
-                  <FeatureCell
-                    folio="02"
-                    title="Universal Access"
-                    description="Stream your videos from IPFS anywhere in the world, on any device."
-                  />
-                  <FeatureCell
-                    folio="03"
-                    title="Own Your Data"
-                    description="No accounts, no passwords. Your wallet is your identity and key."
-                  />
-                </div>
-              </div>
-
-              {/* Right column — Upcoming Video Drops (Events Widget) */}
-              <div className="w-full lg:w-[400px] xl:w-[440px] shrink-0">
-                <div className="lg:sticky lg:top-24 panel-double">
-                  {/* Plate head */}
-                  <div className="px-5 py-4 border-b border-line flex items-baseline gap-3">
-                    <span className="folio">IV</span>
-                    <div className="min-w-0 flex-1">
-                      <h2 className="statement-subtitle text-fg">
-                        Upcoming Video Drops
-                      </h2>
-                      <p className="label mt-2 text-fg-4 normal-case tracking-[0.04em] whitespace-normal">
-                        Mint.club tokens launched via Haven drip (Arkiv L3)
-                      </p>
-                    </div>
-                    <span className="pip net-haven self-center" aria-hidden="true" />
-                  </div>
-
-                  {/* Drip drops via Arkiv L3 */}
-                  <div className="bg-surface-raised/60 p-3">
-                    <UpcomingDrops />
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </section>
-
-        {/* Protocol ledger strip */}
-        <section className="border-b border-line py-5 overflow-hidden" aria-hidden="true">
-          <Marquee />
-        </section>
-      </main>
-
-      {/* Colophon */}
-      <footer className="border-line">
-        <div className="mx-auto max-w-[1200px] px-6 py-10 safe-area-x">
-          <div className="rule-engraved mb-8" aria-hidden="true" />
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
-            <div className="lockup">
-              <Mark size={16} />
-              <span className="wordmark text-small">Haven</span>
-            </div>
-            <div className="flex items-center gap-8">
-              <a
-                href="https://github.com/Haven-hvn"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Haven on GitHub"
-                className="text-fg-4 hover:text-seal-text transition-colors"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  className="w-5 h-5"
-                >
-                  <path d="M12 .297a12 12 0 0 0-3.794 23.39c.6.111.82-.261.82-.577v-2.02c-3.338.726-4.043-1.416-4.043-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.09-.745.083-.73.083-.73 1.205.085 1.84 1.237 1.84 1.237 1.07 1.834 2.807 1.304 3.492.997.108-.775.418-1.304.762-1.604-2.665-.303-5.467-1.333-5.467-5.932 0-1.311.469-2.382 1.236-3.221-.124-.304-.536-1.524.117-3.176 0 0 1.008-.323 3.3 1.23a11.47 11.47 0 0 1 6.006 0c2.291-1.553 3.297-1.23 3.297-1.23.655 1.652.243 2.872.12 3.176.77.839 1.235 1.91 1.235 3.221 0 4.61-2.807 5.625-5.48 5.921.43.372.814 1.102.814 2.222v3.293c0 .319.216.694.825.576A12.003 12.003 0 0 0 12 .297z" />
-                </svg>
-              </a>
-              <a
-                href="https://x.com/havenplay3r"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Haven on X"
-                className="text-fg-4 hover:text-seal-text transition-colors"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  className="w-5 h-5"
-                >
-                  <path d="M18.901 1H22.58l-8.04 9.19L24 23h-7.406l-5.8-7.584L4.15 23H.47l8.6-9.832L0 1h7.594l5.243 6.926L18.901 1zM17.61 20.8h2.04L6.48 3.09H4.29L17.61 20.8z" />
-                </svg>
-              </a>
-            </div>
-            <p className="label text-fg-5">
-              Arkiv · ICP · EVM · Filecoin — no private backend
-            </p>
-          </div>
+        <div className="lp-frag-body">
+          <p className="lp-frag-title">POLYCAT — Genesis Drop</p>
+          <p className="lp-frag-meta">
+            bafybeigdyrztg…q6a · 412 MB · sealed
+          </p>
+          <button type="button" className="lp-frag-action lp-frag-action-accent">
+            Decrypt with wallet
+          </button>
         </div>
-      </footer>
-    </div>
-  )
-}
-
-/**
- * A numbered cell of the feature register. Hairline-divided, not carded.
- */
-function FeatureCell({
-  folio,
-  title,
-  description,
-}: {
-  folio: string
-  title: string
-  description: string
-}) {
-  return (
-    <div className="group bg-surface p-5 transition-colors duration-300 hover:bg-seal-wash">
-      <p className="folio mb-4">{folio}</p>
-      <h3 className="statement-subtitle text-fg mb-2">{title}</h3>
-      <p className="text-small leading-relaxed text-fg-3">{description}</p>
-    </div>
-  )
-}
-
-/**
- * The four public networks as a continuous ledger strip. Duplicated track,
- * translated exactly -50% — never shows a seam.
- */
-const LEDGER_ENTRIES = [
-  ['ARKIV', 'entity registry · 0x44…0044', 'net-arkiv'],
-  ['ICP', 'vetkd gating · gny6k-…ag3ra', 'net-icp'],
-  ['EVM', 'holder gates · eip-712', 'net-evm'],
-  ['FILECOIN', 'archival pin · ipfs cids', 'net-filecoin'],
-] as const
-
-function Marquee() {
-  const entries = [...LEDGER_ENTRIES, ...LEDGER_ENTRIES]
-  return (
-    <div className="marquee">
-      <div className="marquee-track">
-        {entries.map(([name, detail, hue], i) => (
-          <span
-            key={i}
-            className="flex items-baseline gap-3 px-8 whitespace-nowrap"
-          >
-            <span className={`net-dot ${hue}`} style={{ marginTop: '-2px' }} />
-            <span className="label label-ink">{name}</span>
-            <span className="label text-fg-5">{detail}</span>
-            <span className="text-seal pl-6 select-none" aria-hidden="true">
-              ·
-            </span>
-          </span>
-        ))}
       </div>
-    </div>
-  )
+    ),
+  },
+  {
+    id: "stream",
+    title: "Streams from anywhere",
+    paragraphs: [
+      "Videos live on IPFS, pinned by Filecoin deals, and gate on EVM contracts. The player streams pieces as they arrive and caches them locally.",
+      "Open the same library on desktop, phone, or a fresh browser — the network is the backend.",
+    ],
+    fragment: (
+      <div className="lp-frag-player" data-testid="fragment-stream">
+        <div className="lp-frag-player-bar">
+          <span className="lp-frag-dot" aria-hidden="true" />
+          <span className="lp-frag-play" aria-hidden="true"><Play className="lp-frag-ic" strokeWidth={2.2} /></span>
+          <div className="lp-frag-progress" aria-hidden="true">
+            <div className="lp-frag-progress-fill" />
+          </div>
+          <span className="lp-frag-time">18:04</span>
+        </div>
+        <div className="lp-frag-player-meta">
+          <p className="lp-frag-title">Neon Nights — Act II</p>
+          <p className="lp-frag-meta">
+            streaming · ipfs://bafy…k3m · gate 4 · base
+          </p>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "identity",
+    title: "You are the account",
+    paragraphs: [
+      "No email, no password, no profile. Connect a wallet and Haven mints your access from an EIP-712 signature.",
+      "Publish a drip and its gate tokens launch on a mint.club bonding curve — holders stream, everyone else waits.",
+    ],
+    fragment: (
+      <div className="lp-frag-id" data-testid="fragment-identity">
+        <div className="lp-frag-id-row">
+          <span className="lp-frag-avatar" aria-hidden="true">0x</span>
+          <div>
+            <p className="lp-frag-title">0x44f2…0044</p>
+            <p className="lp-frag-meta">entity registry · Arkiv L3</p>
+          </div>
+          <span className="lp-frag-check" aria-hidden="true"><Check className="lp-frag-ic" strokeWidth={2.6} /></span>
+        </div>
+        <div className="lp-frag-id-gate">
+          <p className="lp-frag-meta">EIP-712 holder gate</p>
+          <p className="lp-frag-state">verified · no account created</p>
+        </div>
+      </div>
+    ),
+  },
+];
+
+export default function LandingPage() {
+  const pathname = usePathname();
+
+  /*
+   * The landing runs with html.lp-page (landing-scoped CSS hooks). Because
+   * Next.js client navigation does not re-run inline scripts, the classes
+   * are managed by this effect: added when the landing is mounted, removed
+   * on unmount so they never leak onto app routes.
+   */
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add("lp-js", "lp-page");
+    return () => {
+      root.classList.remove("lp-js", "lp-page");
+    };
+  }, []);
+
+  /* Scroll reveals — re-observed on every pathname change so navigating
+     back to the landing re-arms them for the freshly mounted elements. */
+  useEffect(() => {
+    if (pathname !== "/") return;
+    if (!("IntersectionObserver" in window)) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            e.target.classList.add("lp-in");
+            io.unobserve(e.target);
+          }
+        }
+      },
+      { threshold: 0.15 },
+    );
+    document.querySelectorAll(".lp-reveal").forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [pathname]);
+
+  return (
+    <ContextProvider>
+      <HavenAolProvider>
+        <Header />
+        <main id="main" className="lp">
+          {/* ── Hero: the claim, and the product performing it ─────────── */}
+          <section className="lp-hero">
+            <div className="lp-container">
+              <div className="lp-hero-grid">
+                <div className="lp-hero-copy">
+                  <h1 className="lp-h1">Your videos, on your keys.</h1>
+                  <p className="lp-lede">
+                    Haven stores your videos sealed across IPFS and Filecoin.
+                    Your wallet is the only key — no accounts, no servers, no
+                    platform between you and your library.
+                  </p>
+                  <div className="lp-actions">
+                    <Link href="/library" className="lp-btn lp-btn-primary">
+                      Open Library
+                    </Link>
+                    <Link href="/publish" className="lp-btn lp-btn-ghost">
+                      Publish a Drip
+                    </Link>
+                  </div>
+                </div>
+                <div className="lp-hero-frag" data-ui aria-label="Live upcoming drops from the Haven network">
+                  <div className="lp-frag-head">
+                    <span className="lp-frag-live" aria-hidden="true" />
+                    Live drops
+                    <span className="lp-frag-head-meta">Arkiv L3 · gate 4</span>
+                  </div>
+                  <UpcomingDrops />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* ── Features: each claim proved by a piece of the product ──── */}
+          <section className="lp-features" aria-labelledby="lp-features-title">
+            <div className="lp-container">
+              <h2 id="lp-features-title" className="lp-h2">
+                What Haven does
+              </h2>
+              <div className="lp-feature-list">
+                {FEATURES.map((f) => (
+                  <article key={f.id} className="lp-feature">
+                    <div className="lp-feature-frag lp-reveal" data-ui aria-label={`${f.title} interface fragment`}>
+                      {f.fragment}
+                    </div>
+                    <div className="lp-feature-copy lp-reveal">
+                      <h3 className="lp-h3">{f.title}</h3>
+                      {f.paragraphs.map((p, i) => (
+                        <p key={i} className="lp-body">
+                          {p}
+                        </p>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ── CTA: the plain offer ────────────────────────────────────── */}
+          <section className="lp-cta" aria-labelledby="lp-cta-title">
+            <div className="lp-container">
+              <p className="lp-statement">Publish your first drip.</p>
+              <p className="lp-cta-sub">
+                Gate it with any ERC-20, mint it on a bonding curve, and keep
+                every key. Your library opens with the wallet you already own.
+              </p>
+              <div className="lp-actions lp-actions-center">
+                <Link href="/publish" className="lp-btn lp-btn-primary">
+                  Publish a Drip
+                </Link>
+                <Link href="/settings" className="lp-btn lp-btn-ghost">
+                  Connect a Wallet
+                </Link>
+              </div>
+            </div>
+          </section>
+        </main>
+        <footer className="lp-footer">
+          <div className="lp-container lp-footer-grid">
+            <div className="lp-footer-brand">
+              <span className="lp-footer-mark" aria-hidden="true">
+                <Mark size={22} />
+              </span>
+              <p className="lp-body">
+                Haven is a sovereign video library. No accounts, no servers,
+                no platform. Your keys.
+              </p>
+            </div>
+            <nav className="lp-footer-nav" aria-label="Site">
+              <Link href="/library">Library</Link>
+              <Link href="/publish">Publish</Link>
+              <Link href="/community">Community</Link>
+              <Link href="/settings">Settings</Link>
+              <a href="https://github.com/Haven-hvn/haven-dapp">GitHub</a>
+            </nav>
+            <div className="lp-footer-proto">
+              <p className="lp-footer-line">Arkiv · ICP · EVM · Filecoin</p>
+              <p className="lp-footer-line">no private backend</p>
+            </div>
+          </div>
+        </footer>
+      </HavenAolProvider>
+    </ContextProvider>
+  );
 }
