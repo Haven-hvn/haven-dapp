@@ -54,13 +54,14 @@ export function MobileNav() {
         />
       )}
 
-      {/* Slide-out drawer */}
+      {/* Slide-out drawer — mounted only while open, so a closed drawer
+          contributes no off-screen layout, borders or labels to the page. */}
+      {isOpen && (
       <div
         className={cn(
           'fixed top-0 left-0 bottom-0 w-72 bg-surface z-50 safe-area-inset border-r border-line',
-          'transform transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-[var(--lift-3)]',
-          'flex flex-col',
-          isOpen ? 'translate-x-0' : '-translate-x-full'
+          'shadow-[var(--lift-3)]',
+          'flex flex-col'
         )}
         role="dialog"
         aria-modal="true"
@@ -129,6 +130,7 @@ export function MobileNav() {
           Haven v1.0 — Arkiv · ICP · EVM · Filecoin
         </div>
       </div>
+      )}
     </div>
   )
 }
