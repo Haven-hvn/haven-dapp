@@ -294,7 +294,7 @@ export async function createArkivWriteClient(
   try {
     await (provider as { request: (args: unknown) => Promise<unknown> }).request({
       method: 'wallet_switchEthereumChain',
-      params: [{ chainId: '0x' + rabdi({ accessKey: '' }).id.toString(16) }],
+      params: [{ chainId: '0x' + rabdi({ accessKey: process.env.NEXT_PUBLIC_ARKIV_API_KEY?.trim() ?? '' }).id.toString(16) }],
     })
   } catch {
     // User rejected the switch or the network needs adding — proceed and let
@@ -303,7 +303,7 @@ export async function createArkivWriteClient(
 
   return createViemWalletClient({
     account: wallet.account.address as `0x${string}`,
-    chain: rabdi({ accessKey: '' }),
+    chain: rabdi({ accessKey: process.env.NEXT_PUBLIC_ARKIV_API_KEY?.trim() ?? '' }),
     transport: custom(provider as never),
   })
 }
@@ -424,7 +424,7 @@ export async function publishDripStage(
     throw new DripPublishError('Wallet provider unavailable for Arkiv writes', plan.dripIndex, 'indexing')
   }
   const arkivClient = createArkivWalletClient({
-    chain: rabdi({ accessKey: '' }),
+    chain: rabdi({ accessKey: process.env.NEXT_PUBLIC_ARKIV_API_KEY?.trim() ?? '' }),
     transport: custom(provider as never),
     account: wallet.account.address as `0x${string}`,
   })
@@ -555,7 +555,7 @@ export async function publishDripChunks(args: PublishDripArgs): Promise<string[]
     throw new DripPublishError('Wallet provider unavailable for Arkiv writes', -1, 'indexing')
   }
   const arkivClient = createArkivWalletClient({
-    chain: rabdi({ accessKey: '' }),
+    chain: rabdi({ accessKey: process.env.NEXT_PUBLIC_ARKIV_API_KEY?.trim() ?? '' }),
     transport: custom(provider as never),
     account: wallet.account.address as `0x${string}`,
   })
