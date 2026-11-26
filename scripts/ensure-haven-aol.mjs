@@ -13,4 +13,4 @@ if (!existsSync(join(sdkDir, 'package.json'))) {
   process.exit(0);
 }
 
-execSync('npm ci', { cwd: sdkDir, stdio: 'inherit' });
+execSync('npm install', { cwd: sdkDir, stdio: 'inherit' });
