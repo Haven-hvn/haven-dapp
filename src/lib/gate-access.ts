@@ -60,16 +60,12 @@ export function gateKey(gate: Pick<TokenGate, 'chain' | 'tokenAddress'>): string
 }
 
 /**
- * Threshold in base units, mobile parity: ERC-20 thresholds are whole
- * tokens, so scale by `decimals()`; a contract with no `decimals()`
- * (ERC-721) is read as a count of items. Unknown decimals scale up
- * (fail closed) rather than letting dust clear a large gate.
+ * Threshold in base units, mobile parity: `gate_threshold` is already
+ * stored in base units (e.g. `1_000_000` for 1 USDC with 6 decimals, or
+ * an item count for ERC-721), matching `balanceOf` directly.
  */
-export function requiredUnits(threshold: number, decimals: number | null): bigint {
-  const whole = BigInt(Math.max(0, Math.trunc(threshold)))
-  if (decimals === null) return whole * 10n ** 18n
-  if (decimals === 0) return whole
-  return whole * 10n ** BigInt(decimals)
+export function requiredUnits(threshold: number, _decimals: number | null): bigint {
+  return BigInt(Math.max(0, Math.trunc(threshold)))
 }
 
 /** Lowest threshold per (chain, contract) — satisfying it opens the gate. */

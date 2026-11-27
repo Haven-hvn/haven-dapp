@@ -41,14 +41,14 @@ describe('gatesFromAttributes', () => {
 })
 
 describe('requiredUnits', () => {
-  it('scales ERC-20 thresholds by decimals', () => {
-    expect(requiredUnits(25, 18)).toBe(25n * 10n ** 18n)
+  it('treats ERC-20 thresholds as base units without rescaling by decimals', () => {
+    expect(requiredUnits(1_000_000, 6)).toBe(1_000_000n)
   })
   it('reads NFT thresholds as item counts (no decimals)', () => {
     expect(requiredUnits(1, 0)).toBe(1n)
   })
-  it('fails closed when decimals are unknown', () => {
-    expect(requiredUnits(1, null)).toBe(10n ** 18n)
+  it('keeps base-unit threshold when decimals are unknown', () => {
+    expect(requiredUnits(1_000_000, null)).toBe(1_000_000n)
   })
 })
 
